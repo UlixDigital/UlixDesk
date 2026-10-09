@@ -26,6 +26,7 @@ export function ProjectForm({
   badge,
   banner,
   autoFocusName = false,
+  after,
 }: {
   action: SaveAction;
   initialState: ProjectFormState;
@@ -38,6 +39,7 @@ export function ProjectForm({
   badge?: "Active" | "Archived";
   banner?: ReactNode;
   autoFocusName?: boolean;
+  after?: ReactNode;
 }) {
   const [state, formAction] = useActionState(action, initialState);
   const serverKey = JSON.stringify(state.values);
@@ -243,6 +245,7 @@ export function ProjectForm({
           <SubmitButton label={submitLabel} />
         </div>
       </form>
+      {after ? <div className="mt-8">{after}</div> : null}
     </div>
   );
 }

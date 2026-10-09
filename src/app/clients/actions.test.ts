@@ -13,6 +13,7 @@ vi.mock("next/navigation", () => ({
 import { archiveClientAction, restoreClientAction, saveClientAction } from "@/app/clients/actions";
 import { listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db";
+import { resetTestDatabase } from "@/lib/reset-test-db";
 import { emptyClientFormValues, type ClientFormState } from "@/lib/validation";
 
 const initialState: ClientFormState = {
@@ -33,9 +34,7 @@ function form(entries: Record<string, string | string[]>) {
 }
 
 async function resetDatabase() {
-  await prisma.project.deleteMany();
-  await prisma.clientEmail.deleteMany();
-  await prisma.client.deleteMany();
+  await resetTestDatabase();
 }
 
 beforeEach(resetDatabase);

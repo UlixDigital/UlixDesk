@@ -1,0 +1,284 @@
+import { countLabel } from "@/lib/client-display";
+import { timeCopy } from "@/lib/time-copy";
+import {
+  addCalendarDays,
+  formatCivilDate,
+  formatZonedTime,
+  startOfWeekDate,
+  weekDates,
+  weekdayShort,
+  zonedDayEnd,
+  zonedDayStart,
+} from "@/lib/time-zone";
+
+export type TimesheetView = "day" | "week";
+
+export type TimesheetEntry = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  projectArchived: boolean;
+  clientId: string | null;
+  clientName: string | null;
+  startedAt: Date;
+  endedAt: Date;
+  billable: boolean;
+  note: string | null;
+  source: "manual" | "timer";
+};
+
+export type DailyRow = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  projectArchived: boolean;
+  clientName: string | null;
+  startLabel: string;
+  endLabel: string;
+  durationMs: number;
+  billable: boolean;
+  note: string | null;
+  source: "manual" | "timer";
+  continuesFromPrevious: boolean;
+  continuesToNext: boolean;
+};
+
+export type WeeklyRow = {
+  projectId: string;
+  projectName: string;
+  projectArchived: boolean;
+  clientName: string | null;
+  dayMs: number[];
+  totalMs: number;
+};
+
+export function parseTimesheetView(value: string | undefined): TimesheetView {
+  return value === "week" ? "week" : "day";
+}
+
+export function parseNotice(value: string | undefined): "overlap" | null {
+  return value === "overlap" ? "overlap" : null;
+}
+
+export function timesheetsHref(input: {
+  view?: TimesheetView;
+  date?: string;
+  projectId?: string;
+  clientId?: string;
+  notice?: "overlap" | null;
+} = {}) {
+  const params = new URLSearchParams();
+  if (input.view === "week") params.set("view", "week");
+  if (input.date) params.set("date", input.date);
+  if (input.projectId) params.set("project", input.projectId);
+  if (input.clientId) params.set("client", input.clientId);
+  if (input.notice === "overlap") params.set("notice", "overlap");
+  const query = params.toString();
+  return query ? `/timesheets?${query}` : "/timesheets";
+}
+
+export function newTimeEntryHref(date: string, projectId = "") {
+  const params = new URLSearchParams();
+  if (date) params.set("date", date);
+  if (projectId) params.set("project", projectId);
+  const query = params.toString();
+  return query ? `/timesheets/new?${query}` : "/timesheets/new";
+}
+
+export function portionMs(
+  startedAt: Date,
+  endedAt: Date,
+  rangeStart: Date,
+  rangeEnd: Date,
+) {
+  const start = Math.max(startedAt.getTime(), rangeStart.getTime());
+  const end = Math.min(endedAt.getTime(), rangeEnd.getTime());
+  return Math.max(0, end - start);
+}
+
+export function formatTrackedDuration(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0m";
+  const totalSeconds = Math.floor(ms / 1000);
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+  const totalMinutes = Math.floor(totalSeconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  if (hours === 0) return `${minutes}m`;
+  if (minutes === 0) return `${hours}h`;
+  return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+export function formatElapsed(ms: number) {
+  const safe = Math.max(0, Math.floor(ms / 1000));
+  const hours = Math.floor(safe / 3600);
+  const minutes = Math.floor((safe % 3600) / 60);
+  const seconds = safe % 60;
+  return [hours, minutes, seconds]
+    .map((part) => String(part).padStart(2, "0"))
+    .join(":");
+}
+
+export function entryCountLabel(count: number) {
+  return countLabel(count, "entry", "entries");
+}
+
+export function timesheetEmptyCopy(input: {
+  view: TimesheetView;
+  filtered: boolean;
+}) {
+  if (input.filtered) {
+    return {
+      title: timeCopy.filterEmptyTitle,
+      body:
+        input.view === "week" ? timeCopy.weeklyFilterBody : timeCopy.dailyFilterBody,
+      clearLabel: timeCopy.clearFilters,
+    };
+  }
+  if (input.view === "week") {
+    return {
+      title: timeCopy.weeklyEmptyTitle,
+      body: timeCopy.weeklyEmptyBody,
+      clearLabel: null,
+    };
+  }
+  return {
+    title: timeCopy.dailyEmptyTitle,
+    body: timeCopy.dailyEmptyBody,
+    clearLabel: null,
+  };
+}
+
+export function formatDayHeading(date: string) {
+  return formatCivilDate(date, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+export function formatWeekHeading(date: string) {
+  const dates = weekDates(date);
+  const start = formatCivilDate(dates[0], { month: "short", day: "numeric" });
+  const end = formatCivilDate(dates[6], {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+  return `${start} – ${end}`;
+}
+
+export function formatWeekdayLabel(date: string) {
+  return {
+    weekday: weekdayShort(date),
+    day: formatCivilDate(date, { month: "short", day: "numeric" }),
+  };
+}
+
+export function buildDailyTimesheet(input: {
+  date: string;
+  timeZone: string;
+  entries: TimesheetEntry[];
+}) {
+  const dayStart = zonedDayStart(input.date, input.timeZone);
+  const dayEnd = zonedDayEnd(input.date, input.timeZone);
+  const rows: DailyRow[] = [];
+
+  for (const entry of input.entries) {
+    const durationMs = portionMs(entry.startedAt, entry.endedAt, dayStart, dayEnd);
+    if (durationMs <= 0) continue;
+    const segmentStart = new Date(
+      Math.max(entry.startedAt.getTime(), dayStart.getTime()),
+    );
+    const segmentEnd = new Date(
+      Math.min(entry.endedAt.getTime(), dayEnd.getTime()),
+    );
+    rows.push({
+      id: entry.id,
+      projectId: entry.projectId,
+      projectName: entry.projectName,
+      projectArchived: entry.projectArchived,
+      clientName: entry.clientName,
+      startLabel: formatZonedTime(segmentStart, input.timeZone),
+      endLabel: formatZonedTime(segmentEnd, input.timeZone),
+      durationMs,
+      billable: entry.billable,
+      note: entry.note,
+      source: entry.source,
+      continuesFromPrevious: entry.startedAt < dayStart,
+      continuesToNext: entry.endedAt > dayEnd,
+    });
+  }
+
+  rows.sort((a, b) => {
+    const aStart = input.entries.find((entry) => entry.id === a.id);
+    const bStart = input.entries.find((entry) => entry.id === b.id);
+    const byTime =
+      (aStart?.startedAt.getTime() ?? 0) - (bStart?.startedAt.getTime() ?? 0);
+    if (byTime !== 0) return byTime;
+    return a.id.localeCompare(b.id);
+  });
+
+  return {
+    totalMs: rows.reduce((sum, row) => sum + row.durationMs, 0),
+    rows,
+  };
+}
+
+export function buildWeeklyTimesheet(input: {
+  date: string;
+  timeZone: string;
+  entries: TimesheetEntry[];
+}) {
+  const dates = weekDates(input.date);
+  const ranges = dates.map((day) => ({
+    start: zonedDayStart(day, input.timeZone),
+    end: zonedDayEnd(day, input.timeZone),
+  }));
+  const grouped = new Map<string, WeeklyRow>();
+
+  for (const entry of input.entries) {
+    const dayMs = ranges.map((range) =>
+      portionMs(entry.startedAt, entry.endedAt, range.start, range.end),
+    );
+    const added = dayMs.reduce((sum, value) => sum + value, 0);
+    if (added <= 0) continue;
+    const existing = grouped.get(entry.projectId);
+    if (!existing) {
+      grouped.set(entry.projectId, {
+        projectId: entry.projectId,
+        projectName: entry.projectName,
+        projectArchived: entry.projectArchived,
+        clientName: entry.clientName,
+        dayMs,
+        totalMs: added,
+      });
+      continue;
+    }
+    existing.dayMs = existing.dayMs.map((value, index) => value + dayMs[index]);
+    existing.totalMs += added;
+  }
+
+  const rows = [...grouped.values()].sort((a, b) => {
+    const byName = a.projectName.localeCompare(b.projectName, "en", {
+      sensitivity: "base",
+    });
+    if (byName !== 0) return byName;
+    return a.projectId.localeCompare(b.projectId);
+  });
+  const columnTotals = dates.map((_, index) =>
+    rows.reduce((sum, row) => sum + row.dayMs[index], 0),
+  );
+
+  return {
+    dates,
+    weekStart: startOfWeekDate(input.date),
+    rows,
+    columnTotals,
+    totalMs: columnTotals.reduce((sum, value) => sum + value, 0),
+  };
+}
+
+export function shiftTimesheetDate(date: string, view: TimesheetView, by: number) {
+  return addCalendarDays(date, view === "week" ? by * 7 : by);
+}

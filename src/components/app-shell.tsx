@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { AppNav } from "@/components/app-nav";
+import { TimerBar } from "@/components/timer-bar";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -27,6 +28,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <AppNav />
         </aside>
         <div className="min-w-0">
+          <TimerBar />
           <main
             id="main-content"
             className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8"

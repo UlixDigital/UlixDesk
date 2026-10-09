@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, FolderIcon } from "@/components/icons";
+import { BuildingIcon, ClockIcon, FolderIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 const items = [
   { href: "/clients", label: "Clients", icon: BuildingIcon },
   { href: "/projects", label: "Projects", icon: FolderIcon },
+  { href: "/timesheets", label: "Timesheets", icon: ClockIcon },
 ];
 
 export function AppNav() {

@@ -2,6 +2,8 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { ui } from "@/lib/ui";
 
+export const dynamic = "force-dynamic";
+
 export default function NotFound() {
   return (
     <AppShell>
