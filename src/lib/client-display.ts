@@ -10,8 +10,17 @@ export function parseClientStatus(value: string | undefined): ClientStatus {
   return value === "archived" ? "archived" : "active";
 }
 
+/** Singular when the count is one. Projects uses this same helper. */
+export function countLabel(
+  count: number,
+  singular: string,
+  plural = `${singular}s`,
+) {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
 export function clientCountLabel(count: number) {
-  return `${count} ${count === 1 ? "client" : "clients"}`;
+  return countLabel(count, "client");
 }
 
 export function matchingClientsLabel(count: number, query: string) {

@@ -35,14 +35,19 @@ model ClientEmail {
   @@index([clientId])
 }
 
-/// Schema stub for the Projects slice. Slice 1 has no Projects UI.
+/// Work tracked for an optional client. Archive sets archivedAt; rows are not deleted.
 model Project {
-  id        String   @id @default(cuid())
-  name      String
-  clientId  String?
-  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id          String    @id @default(cuid())
+  name        String
+  description String?
+  billable    Boolean   @default(true)
+  clientId    String?
+  client      Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
 
   @@index([clientId])
+  @@index([archivedAt])
+  @@index([name])
 }

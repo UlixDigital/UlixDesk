@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { BuildingIcon } from "@/components/icons";
+import { AppNav } from "@/components/app-nav";
 
 export function AppShell({ children }: { children: ReactNode }) {
   return (
@@ -24,16 +24,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="block text-xs text-white/60">Ulix Digital</span>
             </span>
           </Link>
-          <nav aria-label="Primary" className="px-3 pb-4">
-            <Link
-              href="/clients"
-              aria-current="page"
-              className="flex items-center gap-2 rounded-lg bg-white/10 px-3 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400"
-            >
-              <BuildingIcon className="h-4 w-4" />
-              Clients
-            </Link>
-          </nav>
+          <AppNav />
         </aside>
         <div className="min-w-0">
           <main

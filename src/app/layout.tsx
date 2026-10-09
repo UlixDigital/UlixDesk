@@ -12,7 +12,7 @@ export const metadata: Metadata = {
     default: "UlixDesk",
     template: "%s · UlixDesk",
   },
-  description: "Internal client directory for UlixDesk time tracking.",
+  description: "Internal client and project directory for UlixDesk time tracking.",
   robots: { index: false, follow: false },
 };
 

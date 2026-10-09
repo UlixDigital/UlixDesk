@@ -22,6 +22,7 @@ export function ClientForm({
   clientId,
   badge,
   banner,
+  after,
   autoFocusName = false,
 }: {
   action: SaveAction;
@@ -33,6 +34,7 @@ export function ClientForm({
   clientId?: string;
   badge?: "Active" | "Archived";
   banner?: ReactNode;
+  after?: ReactNode;
   autoFocusName?: boolean;
 }) {
   const [state, formAction] = useActionState(action, initialState);
@@ -175,6 +177,7 @@ export function ClientForm({
           <SubmitButton label={submitLabel} />
         </div>
       </form>
+      {after ? <div className="mt-8">{after}</div> : null}
     </div>
   );
 }

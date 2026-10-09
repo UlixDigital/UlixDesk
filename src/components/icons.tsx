@@ -33,6 +33,18 @@ export function PlusIcon(props: IconProps) {
   );
 }
 
+export function FolderIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3.75 7.75A1.75 1.75 0 0 1 5.5 6h3.9c.4 0 .79.16 1.07.45l1.16 1.2c.28.29.67.45 1.07.45h5.8A1.75 1.75 0 0 1 20.25 9.85v7.4a1.75 1.75 0 0 1-1.75 1.75h-13A1.75 1.75 0 0 1 3.75 17.25v-9.5Z"
+      />
+    </svg>
+  );
+}
+
 export function SearchIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
