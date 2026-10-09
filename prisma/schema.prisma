@@ -1,0 +1,48 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+/// A company or contact UlixDesk will track time for.
+model Client {
+  id         String        @id @default(cuid())
+  name       String
+  address    String?
+  phone      String?
+  emails     ClientEmail[]
+  archivedAt DateTime?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  projects   Project[]
+
+  @@index([archivedAt])
+  @@index([name])
+}
+
+/// Related rows because SQLite does not support Prisma scalar lists.
+model ClientEmail {
+  id       String @id @default(cuid())
+  email    String
+  position Int    @default(0)
+  clientId String
+  client   Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, email])
+  @@index([clientId])
+}
+
+/// Schema stub for the Projects slice. Slice 1 has no Projects UI.
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([clientId])
+}
