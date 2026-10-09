@@ -5,14 +5,16 @@ import { useEffect, useState } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
-  idleTimerState,
   startTimerAction,
   stopTimerAction,
+  type TimerActionState,
 } from "@/app/timesheets/actions";
 import { ClockIcon } from "@/components/icons";
 import { MAX_ENTRY_MS, timeCopy } from "@/lib/time-copy";
 import { formatElapsed } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
+
+const idleTimerState: TimerActionState = { error: null, warnings: [] };
 
 type TimerSnapshot = {
   projectName: string;
@@ -41,7 +43,7 @@ export function TimerControls({
 
   const elapsed = timer ? now - new Date(timer.startedAt).getTime() : 0;
   const overLong = Boolean(timer && elapsed > MAX_ENTRY_MS);
-  const warnings = timer ? [] : stopState.warnings;
+  const warnings = timer ? [] : (stopState.warnings ?? []);
 
   return (
     <div>

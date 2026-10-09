@@ -24,8 +24,6 @@ export type TimerActionState = {
   warnings: string[];
 };
 
-export const idleTimerState: TimerActionState = { error: null, warnings: [] };
-
 function revalidateTimeViews(clientId: string | null) {
   revalidatePath("/timesheets", "layout");
   revalidatePath("/projects", "layout");
@@ -109,10 +107,15 @@ export async function startTimerAction(
     return { error: timerFailureMessage(result.code), warnings: [] };
   }
   revalidateTimeViews(result.timer.project.client?.id ?? null);
-  return idleTimerState;
+  return { error: null, warnings: [] };
 }
 
-export async function stopTimerAction(): Promise<TimerActionState> {
+export async function stopTimerAction(
+  _previous: TimerActionState,
+  formData: FormData,
+): Promise<TimerActionState> {
+  // useActionState always passes the form body. Stopping does not read it.
+  void formData;
   const result = await stopTimer(new Date());
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };
