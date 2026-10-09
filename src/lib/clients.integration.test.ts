@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import {
   archiveClient,
+  countClientsByStatus,
   createClient,
   getClient,
   listClients,
@@ -128,6 +129,35 @@ describe("client records", () => {
     expect(
       (await listClients("active", "other")).map((client) => client.name),
     ).toEqual(["Other Co"]);
+  });
+
+  it("keeps active and archived totals stable while search filters the list", async () => {
+    await createClient({
+      name: "Acme Active",
+      address: null,
+      phone: null,
+      emails: [],
+    });
+    await createClient({
+      name: "Other Co",
+      address: null,
+      phone: null,
+      emails: [],
+    });
+    const archived = await createClient({
+      name: "Acme Archived",
+      address: null,
+      phone: null,
+      emails: [],
+    });
+    await archiveClient(archived.id);
+
+    expect(await countClientsByStatus()).toEqual({ active: 2, archived: 1 });
+    expect(
+      (await listClients("active", "acme")).map((client) => client.name),
+    ).toEqual(["Acme Active"]);
+    expect(await listClients("archived", "acme")).toHaveLength(1);
+    expect(await countClientsByStatus()).toEqual({ active: 2, archived: 1 });
   });
 
   it("returns null when the client id does not exist", async () => {

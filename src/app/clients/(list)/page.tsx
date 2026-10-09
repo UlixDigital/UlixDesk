@@ -5,11 +5,13 @@ import { ClientsList } from "@/components/clients-list";
 import { EmptyState } from "@/components/empty-state";
 import { PlusIcon } from "@/components/icons";
 import {
+  clientCountLabel,
   clientsHref,
   emptyStateKind,
+  matchingClientsLabel,
   parseClientStatus,
 } from "@/lib/client-display";
-import { loadClientLists } from "@/lib/clients";
+import { countClientsByStatus, loadClientLists } from "@/lib/clients";
 import { cn } from "@/lib/cn";
 import { ui } from "@/lib/ui";
 
@@ -25,13 +27,16 @@ export default async function ClientsPage({
   const params = await searchParams;
   const status = parseClientStatus(params.status);
   const query = (params.q ?? "").trim();
-  const lists = await loadClientLists(query);
+  const [lists, totals] = await Promise.all([
+    loadClientLists(query),
+    countClientsByStatus(),
+  ]);
   const clients = lists[status];
   const empty = emptyStateKind({
     status,
     query,
     visibleCount: clients.length,
-    otherCount: status === "active" ? lists.archived.length : lists.active.length,
+    otherCount: status === "active" ? totals.archived : totals.active,
   });
 
   return (
@@ -58,13 +63,13 @@ export default async function ClientsPage({
           <StatusTab
             href={clientsHref("active", query)}
             label="Active"
-            count={lists.active.length}
+            count={totals.active}
             current={status === "active"}
           />
           <StatusTab
             href={clientsHref("archived", query)}
             label="Archived"
-            count={lists.archived.length}
+            count={totals.archived}
             current={status === "archived"}
           />
         </nav>
@@ -72,9 +77,7 @@ export default async function ClientsPage({
 
       {query && clients.length > 0 ? (
         <p role="status" className="mt-4 text-sm text-slate-600">
-          {clients.length === 1
-            ? `1 client matching “${query}”`
-            : `${clients.length} clients matching “${query}”`}
+          {matchingClientsLabel(clients.length, query)}
         </p>
       ) : null}
 
@@ -110,7 +113,7 @@ function StatusTab({
       )}
     >
       {label}
-      <span className="sr-only">, {count} clients</span>
+      <span className="sr-only">, {clientCountLabel(count)}</span>
       <span
         aria-hidden="true"
         className={cn(

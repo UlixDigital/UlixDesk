@@ -10,6 +10,14 @@ export function parseClientStatus(value: string | undefined): ClientStatus {
   return value === "archived" ? "archived" : "active";
 }
 
+export function clientCountLabel(count: number) {
+  return `${count} ${count === 1 ? "client" : "clients"}`;
+}
+
+export function matchingClientsLabel(count: number, query: string) {
+  return `${clientCountLabel(count)} matching “${query}”`;
+}
+
 export function clientsHref(status: ClientStatus, query = "") {
   const params = new URLSearchParams();
   if (status === "archived") params.set("status", "archived");

@@ -69,6 +69,15 @@ export async function listClients(status: ClientStatus, query: string) {
   return lists[status];
 }
 
+/** Unfiltered directory totals. Search must not change these. */
+export async function countClientsByStatus() {
+  const [active, archived] = await Promise.all([
+    prisma.client.count({ where: { archivedAt: null } }),
+    prisma.client.count({ where: { archivedAt: { not: null } } }),
+  ]);
+  return { active, archived };
+}
+
 export async function getClient(id: string) {
   const row = await prisma.client.findUnique({
     where: { id },

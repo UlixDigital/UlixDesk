@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  clientCountLabel,
   clientSummary,
   clientsHref,
   emptyStateKind,
+  matchingClientsLabel,
   parseClientStatus,
 } from "@/lib/client-display";
 
@@ -70,6 +72,21 @@ describe("emptyStateKind", () => {
         otherCount: 0,
       }),
     ).toBeNull();
+  });
+});
+
+describe("count labels", () => {
+  it("uses the singular when the count is one", () => {
+    expect(clientCountLabel(0)).toBe("0 clients");
+    expect(clientCountLabel(1)).toBe("1 client");
+    expect(clientCountLabel(2)).toBe("2 clients");
+  });
+
+  it("pluralizes the search summary the same way", () => {
+    expect(matchingClientsLabel(1, "acme")).toBe("1 client matching “acme”");
+    expect(matchingClientsLabel(3, "acme")).toBe(
+      "3 clients matching “acme”",
+    );
   });
 });
 
