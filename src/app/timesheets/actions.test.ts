@@ -43,7 +43,7 @@ afterAll(async () => {
 });
 
 describe("time entry actions", () => {
-  it("rejects a blank project and an end time that is not after the start", async () => {
+  it("rejects a blank project and an end date that is not after the start", async () => {
     const missing = await saveTimeEntryAction(
       initialState,
       form({
@@ -63,19 +63,45 @@ describe("time entry actions", () => {
       clientId: null,
       billable: true,
     });
-    const zero = await saveTimeEntryAction(
+    const backwards = await saveTimeEntryAction(
       initialState,
       form({
         projectId: project.id,
         date: "2026-01-15",
-        startTime: "09:00",
-        endTime: "09:00",
+        endDate: "2026-01-14",
+        startTime: "10:00",
+        endTime: "11:00",
         billable: "true",
         timeZone: "UTC",
       }),
     );
-    expect(zero.errors.endTime).toBe(timeCopy.endAfterStart);
+    expect(backwards.errors.endTime).toBe(timeCopy.endAfterStart);
     expect(await prisma.timeEntry.count()).toBe(0);
+  });
+
+  it("saves an overnight entry when To is not after From", async () => {
+    const project = await createProject({
+      name: "Website",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    await expect(
+      saveTimeEntryAction(
+        initialState,
+        form({
+          projectId: project.id,
+          date: "2026-01-15",
+          startTime: "23:00",
+          endTime: "00:30",
+          billable: "true",
+          timeZone: "UTC",
+        }),
+      ),
+    ).rejects.toThrow("REDIRECT:/timesheets?date=2026-01-15");
+    const saved = await prisma.timeEntry.findFirstOrThrow();
+    expect(saved.startedAt.toISOString()).toBe("2026-01-15T23:00:00.000Z");
+    expect(saved.endedAt?.toISOString()).toBe("2026-01-16T00:30:00.000Z");
   });
 
   it("saves a manual entry in the requested timezone and warns on overlap", async () => {
@@ -135,6 +161,19 @@ describe("time entry actions", () => {
       }),
     );
     expect(result.errors.projectId).toBe(timeCopy.projectInactive);
+
+    const missingProject = await saveTimeEntryAction(
+      initialState,
+      form({
+        projectId: "missing-project",
+        date: "2026-01-15",
+        startTime: "09:00",
+        endTime: "10:00",
+        billable: "true",
+        timeZone: "UTC",
+      }),
+    );
+    expect(missingProject.errors.projectId).toBe(timeCopy.projectMissing);
   });
 
   it("deletes a saved entry and leaves a running timer in place", async () => {
@@ -176,7 +215,10 @@ describe("time entry actions", () => {
     expect(again.error).toBe(timeCopy.timerAlready);
     const running = await getRunningTimer();
     expect(running).not.toBeNull();
-    await deleteTimeEntryAction(form({ id: running!.id, date: "2026-01-15" }));
+    await expect(
+      deleteTimeEntryAction(form({ id: running!.id, date: "2026-01-15" })),
+    ).rejects.toThrow("REDIRECT:/timesheets?date=2026-01-15&notice=running");
     expect(await getRunningTimer()).not.toBeNull();
+    expect(await prisma.timeEntry.count({ where: { endedAt: null } })).toBe(1);
   });
 });

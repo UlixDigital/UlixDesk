@@ -50,7 +50,10 @@ export async function saveTimeEntryAction(
     result.data.projectId,
     existing?.projectId ?? null,
   );
-  if (selection) {
+  if (selection === "missing") {
+    return { errors: { projectId: timeCopy.projectMissing }, values };
+  }
+  if (selection === "archived") {
     return { errors: { projectId: timeCopy.projectInactive }, values };
   }
 
@@ -89,8 +92,13 @@ export async function deleteTimeEntryAction(formData: FormData) {
   const date = String(formData.get("date") ?? "");
   if (!id) return;
   const deleted = await deleteTimeEntry(id);
-  if (!deleted) return;
-  revalidateTimeViews(deleted.project.client?.id ?? null);
+  if (!deleted.ok) {
+    if (deleted.reason === "running") {
+      redirect(timesheetsHref({ date: date || undefined, notice: "running" }));
+    }
+    return;
+  }
+  revalidateTimeViews(deleted.entry.project.client?.id ?? null);
   redirect(timesheetsHref({ date: date || undefined }));
 }
 

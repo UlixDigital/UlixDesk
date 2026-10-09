@@ -1,10 +1,14 @@
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { serializeStoppedEntry } from "@/lib/time-api";
 import { stopTimer } from "@/lib/time-entries";
+import { timerApiRefusal } from "@/lib/timer-api-guard";
 
 export const dynamic = "force-dynamic";
 
-export async function POST() {
+export async function POST(request: Request) {
+  const refused = timerApiRefusal(request);
+  if (refused) return refused;
+
   const result = await stopTimer(new Date());
   if (!result.ok) {
     const status = result.code === "too-short" ? 409 : 404;

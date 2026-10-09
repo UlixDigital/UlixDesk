@@ -9,10 +9,11 @@ import { cn } from "@/lib/cn";
 import { timeCopy } from "@/lib/time-copy";
 import { formatTrackedDuration } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
-import { zonedDateTimeToUtc } from "@/lib/time-zone";
+import { addCalendarDays, isRealCalendarDate, zonedDateTimeToUtc } from "@/lib/time-zone";
 import {
   billableDefault,
   intervalsOverlap,
+  resolveManualEndDate,
   type TimeEntryFormState,
 } from "@/lib/time-validation";
 
@@ -87,8 +88,14 @@ export function TimeEntryForm({
     }
   }, [state]);
 
-  const resolvedEndDate = endDate || date;
-  const crossesMidnight = Boolean(date && resolvedEndDate && resolvedEndDate !== date);
+  const resolvedEndDate = resolveManualEndDate({
+    date,
+    endDate,
+    startTime,
+    endTime,
+  });
+  const endsNextDay =
+    isRealCalendarDate(date) && resolvedEndDate === addCalendarDays(date, 1);
   const durationLabel = durationReadout(date, startTime, resolvedEndDate, endTime, timeZone);
   const overlap = hasLiveOverlap({
     date,
@@ -127,7 +134,7 @@ export function TimeEntryForm({
         <input type="hidden" name="timeZone" value={timeZone} readOnly />
         <input type="hidden" name="billable" value={billable ? "true" : "false"} readOnly />
         {mode === "create" ? (
-          <input type="hidden" name="endDate" value={date} readOnly />
+          <input type="hidden" name="endDate" value={resolvedEndDate} readOnly />
         ) : null}
         {hasErrors ? (
           <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
@@ -215,7 +222,7 @@ export function TimeEntryForm({
             />
           </Field>
         </div>
-        {mode === "edit" && (crossesMidnight || state.errors.endDate) ? (
+        {mode === "edit" && (resolvedEndDate !== date || state.errors.endDate) ? (
           <Field
             id="entry-end-date"
             label="End date"
@@ -243,6 +250,11 @@ export function TimeEntryForm({
           <p className="text-xs font-medium text-slate-500">Duration</p>
           <p className="mt-1 text-lg font-semibold text-slate-900" aria-live="polite">
             {durationLabel}
+            {endsNextDay ? (
+              <span className="ml-3 text-sm font-medium text-slate-600">
+                {timeCopy.endsNextDay}
+              </span>
+            ) : null}
           </p>
         </div>
         <div>

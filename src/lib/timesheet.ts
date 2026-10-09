@@ -49,15 +49,20 @@ export type WeeklyRow = {
   projectArchived: boolean;
   clientName: string | null;
   dayMs: number[];
+  continuesFromPrevious: boolean[];
+  continuesToNext: boolean[];
   totalMs: number;
 };
+
+export type TimesheetNotice = "overlap" | "running";
 
 export function parseTimesheetView(value: string | undefined): TimesheetView {
   return value === "week" ? "week" : "day";
 }
 
-export function parseNotice(value: string | undefined): "overlap" | null {
-  return value === "overlap" ? "overlap" : null;
+export function parseNotice(value: string | undefined): TimesheetNotice | null {
+  if (value === "overlap" || value === "running") return value;
+  return null;
 }
 
 export function timesheetsHref(input: {
@@ -65,14 +70,14 @@ export function timesheetsHref(input: {
   date?: string;
   projectId?: string;
   clientId?: string;
-  notice?: "overlap" | null;
+  notice?: TimesheetNotice | null;
 } = {}) {
   const params = new URLSearchParams();
   if (input.view === "week") params.set("view", "week");
   if (input.date) params.set("date", input.date);
   if (input.projectId) params.set("project", input.projectId);
   if (input.clientId) params.set("client", input.clientId);
-  if (input.notice === "overlap") params.set("notice", "overlap");
+  if (input.notice) params.set("notice", input.notice);
   const query = params.toString();
   return query ? `/timesheets?${query}` : "/timesheets";
 }
@@ -243,6 +248,12 @@ export function buildWeeklyTimesheet(input: {
     );
     const added = dayMs.reduce((sum, value) => sum + value, 0);
     if (added <= 0) continue;
+    const continuesFromPrevious = dayMs.map(
+      (value, index) => value > 0 && entry.startedAt < ranges[index].start,
+    );
+    const continuesToNext = dayMs.map(
+      (value, index) => value > 0 && entry.endedAt > ranges[index].end,
+    );
     const existing = grouped.get(entry.projectId);
     if (!existing) {
       grouped.set(entry.projectId, {
@@ -251,11 +262,19 @@ export function buildWeeklyTimesheet(input: {
         projectArchived: entry.projectArchived,
         clientName: entry.clientName,
         dayMs,
+        continuesFromPrevious,
+        continuesToNext,
         totalMs: added,
       });
       continue;
     }
     existing.dayMs = existing.dayMs.map((value, index) => value + dayMs[index]);
+    existing.continuesFromPrevious = existing.continuesFromPrevious.map(
+      (value, index) => value || continuesFromPrevious[index],
+    );
+    existing.continuesToNext = existing.continuesToNext.map(
+      (value, index) => value || continuesToNext[index],
+    );
     existing.totalMs += added;
   }
 

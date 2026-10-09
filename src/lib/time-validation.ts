@@ -4,6 +4,7 @@ import {
   timeCopy,
 } from "@/lib/time-copy";
 import {
+  addCalendarDays,
   isRealCalendarDate,
   isRealClockTime,
   isValidTimeZone,
@@ -71,6 +72,39 @@ export function billableDefault(
   return projects.find((project) => project.id === projectId)?.billable ?? true;
 }
 
+/** CRLF and lone CR become LF before the note is measured or stored. */
+export function normalizeNote(value: string) {
+  return value.replace(/\r\n/g, "\n").replace(/\r/g, "\n").trim();
+}
+
+/**
+ * From and To are one civil date unless To is earlier than or equal to From.
+ * In that case the end is the same clock time on the next day.
+ * An explicit end date that is not the start date is kept as entered.
+ */
+export function resolveManualEndDate(input: {
+  date: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+}) {
+  const date = input.date.trim();
+  const explicit = input.endDate.trim();
+  const startTime = input.startTime.trim();
+  const endTime = input.endTime.trim();
+  const sameCivilDay = !explicit || explicit === date;
+  if (
+    sameCivilDay &&
+    isRealCalendarDate(date) &&
+    isRealClockTime(startTime) &&
+    isRealClockTime(endTime) &&
+    endTime <= startTime
+  ) {
+    return addCalendarDays(date, 1);
+  }
+  return explicit || date;
+}
+
 export function parseTimeEntryFormData(formData: FormData): TimeEntryFormValues {
   const billable = formData.get("billable");
   const date = String(formData.get("date") ?? "");
@@ -134,7 +168,8 @@ export function validateTimeEntryInput(
   const projectId = input.projectId.trim();
   if (!projectId) errors.projectId = timeCopy.projectRequired;
 
-  const note = input.note.trim();
+  const note = normalizeNote(input.note);
+  values.note = note;
   if (note.length > NOTE_MAX) errors.note = timeCopy.noteTooLong;
 
   if (!isValidTimeZone(input.timeZone)) {
@@ -142,9 +177,15 @@ export function validateTimeEntryInput(
   }
 
   const date = input.date.trim();
-  const endDate = input.endDate.trim() || date;
   const startTime = input.startTime.trim();
   const endTime = input.endTime.trim();
+  const endDate = resolveManualEndDate({
+    date,
+    endDate: input.endDate,
+    startTime,
+    endTime,
+  });
+  values.endDate = endDate === date ? "" : endDate;
   if (!isRealCalendarDate(date)) errors.date = timeCopy.invalidDate;
   if (input.endDate.trim() && !isRealCalendarDate(endDate)) {
     errors.endDate = timeCopy.invalidDate;

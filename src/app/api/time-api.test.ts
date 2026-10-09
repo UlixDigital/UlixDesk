@@ -15,12 +15,18 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-function post(url: string, body: unknown) {
+function post(url: string, body: unknown, origin?: string) {
+  const headers = new Headers({ "content-type": "application/json" });
+  if (origin) headers.set("origin", origin);
   return new Request(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers,
     body: JSON.stringify(body),
   });
+}
+
+function stopRequest(origin?: string) {
+  return post("http://localhost/api/timer/stop", {}, origin);
 }
 
 describe("extension API", () => {
@@ -89,14 +95,30 @@ describe("extension API", () => {
   });
 
   it("rejects a bad body, an archived project, and stopping when nothing is running", async () => {
-    const bad = await startRoute(
+    const badType = await startRoute(
       new Request("http://localhost/api/timer/start", {
         method: "POST",
         body: "not-json",
       }),
     );
+    expect(badType.status).toBe(415);
+    expect((await badType.json()).error).toBe(timeCopy.jsonContentType);
+
+    const bad = await startRoute(
+      new Request("http://localhost/api/timer/start", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "not-json",
+      }),
+    );
     expect(bad.status).toBe(400);
     expect((await bad.json()).error).toBe(timeCopy.invalidJson);
+
+    const unknown = await startRoute(
+      post("http://localhost/api/timer/start", { projectId: "missing-project" }),
+    );
+    expect(unknown.status).toBe(404);
+    expect((await unknown.json()).error).toBe(timeCopy.projectMissing);
 
     const project = await createProject({
       name: "Old",
@@ -114,7 +136,7 @@ describe("extension API", () => {
     expect(archived.status).toBe(400);
     expect((await archived.json()).error).toBe(timeCopy.projectInactive);
 
-    const idle = await stopRoute();
+    const idle = await stopRoute(stopRequest());
     expect(idle.status).toBe(404);
     expect((await idle.json()).error).toBe(timeCopy.timerNone);
   });
@@ -145,7 +167,7 @@ describe("extension API", () => {
     const before = await getTimer();
     expect((await before.json()).timer.id).toBe(entry.id);
 
-    const stopped = await stopRoute();
+    const stopped = await stopRoute(stopRequest());
     expect(stopped.status).toBe(200);
     const body = await stopped.json();
     expect(body.entry.capped).toBe(true);
@@ -154,5 +176,55 @@ describe("extension API", () => {
     expect(body.warnings).toContain(timeCopy.timerCapped);
     expect((await getTimer()).status).toBe(200);
     expect(await (await getTimer()).json()).toEqual({ timer: null });
+  });
+
+  it("rejects another website and accepts the app origin or an allowlisted one", async () => {
+    const project = await createProject({
+      name: "Website",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    const foreign = await startRoute(
+      post("http://localhost/api/timer/start", { projectId: project.id }, "https://evil.test"),
+    );
+    expect(foreign.status).toBe(403);
+    expect((await foreign.json()).error).toBe(timeCopy.originForbidden);
+
+    const foreignStop = await stopRoute(
+      stopRequest("https://evil.test"),
+    );
+    expect(foreignStop.status).toBe(403);
+
+    const plainStop = await stopRoute(
+      new Request("http://localhost/api/timer/stop", { method: "POST" }),
+    );
+    expect(plainStop.status).toBe(415);
+    expect((await plainStop.json()).error).toBe(timeCopy.jsonContentType);
+
+    const sameOrigin = await startRoute(
+      post("http://localhost/api/timer/start", { projectId: project.id }, "http://localhost"),
+    );
+    expect(sameOrigin.status).toBe(201);
+    await prisma.timeEntry.updateMany({
+      where: { endedAt: null },
+      data: { startedAt: new Date(Date.now() - 2000) },
+    });
+    const stopped = await stopRoute(stopRequest("http://localhost"));
+    expect(stopped.status).toBe(200);
+
+    process.env.ULIXDESK_TIMER_ORIGINS = "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
+    try {
+      const extension = await startRoute(
+        post(
+          "http://localhost/api/timer/start",
+          { projectId: project.id },
+          "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef",
+        ),
+      );
+      expect(extension.status).toBe(201);
+    } finally {
+      delete process.env.ULIXDESK_TIMER_ORIGINS;
+    }
   });
 });

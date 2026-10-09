@@ -1,10 +1,14 @@
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { serializeTimer } from "@/lib/time-api";
 import { startTimer } from "@/lib/time-entries";
+import { timerApiRefusal } from "@/lib/timer-api-guard";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const refused = timerApiRefusal(request);
+  if (refused) return refused;
+
   let body: unknown;
   try {
     body = await request.json();
@@ -30,7 +34,8 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    const status = result.code === "already-running" ? 409 : 400;
+    const status =
+      result.code === "already-running" ? 409 : result.code === "project-missing" ? 404 : 400;
     return Response.json(
       {
         error: timerFailureMessage(result.code),

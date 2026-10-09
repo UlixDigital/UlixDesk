@@ -166,17 +166,29 @@ export function WeeklyTimesheet({
                   )}
                 >
                   {value > 0 ? (
-                    <Link
-                      href={timesheetsHref({
-                        view: "day",
-                        date: dates[index],
-                        projectId: projectId || row.projectId,
-                        clientId,
-                      })}
-                      className="hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
-                    >
-                      {formatTrackedDuration(value)}
-                    </Link>
+                    <>
+                      <Link
+                        href={timesheetsHref({
+                          view: "day",
+                          date: dates[index],
+                          projectId: projectId || row.projectId,
+                          clientId,
+                        })}
+                        className="hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                      >
+                        {formatTrackedDuration(value)}
+                      </Link>
+                      {row.continuesFromPrevious[index] ? (
+                        <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-500">
+                          {timeCopy.continuesPrevious}
+                        </span>
+                      ) : null}
+                      {row.continuesToNext[index] ? (
+                        <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-500">
+                          {timeCopy.continuesNext}
+                        </span>
+                      ) : null}
+                    </>
                   ) : (
                     <span className="text-slate-300">—</span>
                   )}

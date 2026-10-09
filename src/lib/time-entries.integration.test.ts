@@ -154,6 +154,15 @@ describe("timers", () => {
     if (inactive.ok) return;
     expect(timerFailureMessage(inactive.code)).toBe(timeCopy.projectInactive);
 
+    const missing = await startTimer({
+      projectId: "missing-project",
+      note: "",
+      now: new Date("2026-10-09T15:00:00.000Z"),
+    });
+    expect(missing.ok).toBe(false);
+    if (missing.ok) return;
+    expect(timerFailureMessage(missing.code)).toBe(timeCopy.projectMissing);
+
     const active = await makeProject("Support");
     const started = await startTimer({
       projectId: active.id,
@@ -192,6 +201,28 @@ describe("timers", () => {
     expect(onTheDot.ok).toBe(true);
     if (!onTheDot.ok) return;
     expect(onTheDot.capped).toBe(false);
+  });
+
+  it("lets only one of two concurrent stops save the entry", async () => {
+    const project = await makeProject("Website");
+    const started = await startTimer({
+      projectId: project.id,
+      note: "",
+      now: new Date("2026-10-09T12:00:00.000Z"),
+    });
+    expect(started.ok).toBe(true);
+    const now = new Date("2026-10-09T13:00:00.000Z");
+    const [first, second] = await Promise.all([stopTimer(now), stopTimer(now)]);
+    const results = [first, second];
+    const saved = results.filter((result) => result.ok);
+    const missed = results.filter((result) => !result.ok);
+    expect(saved).toHaveLength(1);
+    expect(missed).toHaveLength(1);
+    if (missed[0]?.ok) return;
+    expect(timerFailureMessage(missed[0].code)).toBe(timeCopy.timerNone);
+    expect(await prisma.timeEntry.count({ where: { endedAt: { not: null } } })).toBe(1);
+    expect(await prisma.runningTimer.count()).toBe(0);
+    expect(await getRunningTimer()).toBeNull();
   });
 
   it("warns when a stopped timer overlaps another entry", async () => {

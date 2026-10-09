@@ -2,6 +2,7 @@
 export const timeCopy = {
   projectRequired: "Choose a project.",
   projectInactive: "Choose an active project.",
+  projectMissing: "That project no longer exists.",
   invalidDate: "Enter a valid date.",
   invalidTime: "Enter a valid time.",
   invalidTimeZone: "Times need a valid timezone. Reload the page and try again.",
@@ -51,8 +52,12 @@ export const timeCopy = {
   stopTimerFirstBody: "Stop the timer before editing this entry.",
   continuesNext: "Continues into the next day",
   continuesPrevious: "Continues from the previous day",
+  endsNextDay: "Ends the next day",
   endDateHint: "This entry crosses midnight.",
+  stopBeforeDelete: "Stop the timer before deleting this entry.",
   invalidJson: "Send a JSON body with a project id.",
+  jsonContentType: "Content-Type must be application/json.",
+  originForbidden: "This origin can't control the timer.",
   previousDay: "Previous day",
   nextDay: "Next day",
   today: "Today",
@@ -74,6 +79,7 @@ export type TimerFailureCode =
   | "already-running"
   | "project-required"
   | "project-inactive"
+  | "project-missing"
   | "note-too-long"
   | "not-running"
   | "too-short";
@@ -86,6 +92,8 @@ export function timerFailureMessage(code: TimerFailureCode) {
       return timeCopy.projectRequired;
     case "project-inactive":
       return timeCopy.projectInactive;
+    case "project-missing":
+      return timeCopy.projectMissing;
     case "note-too-long":
       return timeCopy.noteTooLong;
     case "not-running":

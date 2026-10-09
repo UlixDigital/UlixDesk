@@ -6,7 +6,7 @@ import {
   type TimerFailureCode,
 } from "@/lib/time-copy";
 import type { TimesheetEntry } from "@/lib/timesheet";
-import { intervalsOverlap } from "@/lib/time-validation";
+import { intervalsOverlap, normalizeNote } from "@/lib/time-validation";
 
 /**
  * One running timer for the workspace until accounts exist.
@@ -315,9 +315,10 @@ export async function updateManualEntry(
 
 export async function deleteTimeEntry(id: string) {
   const existing = await getTimeEntry(id);
-  if (!existing || !existing.endedAt) return null;
+  if (!existing) return { ok: false as const, reason: "missing" as const };
+  if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
   await prisma.timeEntry.delete({ where: { id } });
-  return existing;
+  return { ok: true as const, entry: existing };
 }
 
 export async function getRunningTimer() {
@@ -343,7 +344,7 @@ export async function startTimer(input: {
 > {
   const projectId = input.projectId.trim();
   if (!projectId) return { ok: false, code: "project-required" };
-  const note = input.note.trim();
+  const note = normalizeNote(input.note);
   if (note.length > NOTE_MAX) return { ok: false, code: "note-too-long" };
 
   try {
@@ -363,7 +364,8 @@ export async function startTimer(input: {
         where: { id: projectId },
         select: { archivedAt: true, billable: true },
       });
-      if (!project || project.archivedAt) return { inactive: true as const };
+      if (!project) return { missing: true as const };
+      if (project.archivedAt) return { inactive: true as const };
 
       const created = await tx.timeEntry.create({
         data: {
@@ -386,6 +388,7 @@ export async function startTimer(input: {
     if ("conflict" in timer && timer.conflict) {
       return { ok: false, code: "already-running", timer: timer.conflict };
     }
+    if ("missing" in timer) return { ok: false, code: "project-missing" };
     if ("inactive" in timer) return { ok: false, code: "project-inactive" };
     return { ok: true, timer: timer.timer };
   } catch (error) {
@@ -399,35 +402,72 @@ export async function stopTimer(now: Date): Promise<
   | { ok: true; entry: TimeEntryRecord; capped: boolean; overlap: boolean }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
 > {
-  const running = await getRunningTimer();
-  if (!running) return { ok: false, code: "not-running" };
+  try {
+    const claimed = await prisma.$transaction(async (tx) => {
+      const row = await tx.runningTimer.findUnique({
+        where: { id: WORKSPACE_TIMER_ID },
+        include: { timeEntry: { include: entryInclude } },
+      });
+      if (!row || row.timeEntry.endedAt) {
+        if (row?.timeEntry.endedAt) {
+          await tx.runningTimer.delete({ where: { id: WORKSPACE_TIMER_ID } });
+        }
+        return { ok: false as const, code: "not-running" as const };
+      }
 
-  const elapsed = now.getTime() - running.startedAt.getTime();
-  if (elapsed < MIN_TIMER_MS) {
-    return { ok: false, code: "too-short", timer: running };
-  }
+      const elapsed = now.getTime() - row.timeEntry.startedAt.getTime();
+      if (elapsed < MIN_TIMER_MS) {
+        return {
+          ok: false as const,
+          code: "too-short" as const,
+          timer: toRecord(row.timeEntry),
+        };
+      }
 
-  const capped = elapsed > MAX_ENTRY_MS;
-  const endedAt = capped
-    ? new Date(running.startedAt.getTime() + MAX_ENTRY_MS)
-    : now;
-  const overlap = await hasOverlap({
-    startedAt: running.startedAt,
-    endedAt,
-    excludeId: running.id,
-    now,
-  });
-
-  const updated = await prisma.$transaction(async (tx) => {
-    await tx.runningTimer.deleteMany({ where: { timeEntryId: running.id } });
-    return tx.timeEntry.update({
-      where: { id: running.id },
-      data: { endedAt },
-      include: entryInclude,
+      const capped = elapsed > MAX_ENTRY_MS;
+      const endedAt = capped
+        ? new Date(row.timeEntry.startedAt.getTime() + MAX_ENTRY_MS)
+        : now;
+      const saved = await tx.timeEntry.updateMany({
+        where: { id: row.timeEntry.id, endedAt: null },
+        data: { endedAt },
+      });
+      if (saved.count !== 1) {
+        return { ok: false as const, code: "not-running" as const };
+      }
+      await tx.runningTimer.deleteMany({
+        where: { id: WORKSPACE_TIMER_ID, timeEntryId: row.timeEntry.id },
+      });
+      const updated = await tx.timeEntry.findUniqueOrThrow({
+        where: { id: row.timeEntry.id },
+        include: entryInclude,
+      });
+      return {
+        ok: true as const,
+        entry: toRecord(updated),
+        capped,
+        endedAt,
+      };
     });
-  });
 
-  return { ok: true, entry: toRecord(updated), capped, overlap };
+    if (!claimed.ok) return claimed;
+    const overlap = await hasOverlap({
+      startedAt: claimed.entry.startedAt,
+      endedAt: claimed.endedAt,
+      excludeId: claimed.entry.id,
+      now,
+    });
+    return {
+      ok: true,
+      entry: claimed.entry,
+      capped: claimed.capped,
+      overlap,
+    };
+  } catch (error) {
+    const running = await getRunningTimer();
+    if (!running) return { ok: false, code: "not-running" };
+    throw error;
+  }
 }
 
 export async function trackedMsForProject(projectId: string) {

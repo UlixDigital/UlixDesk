@@ -73,20 +73,22 @@ Emails are stored in a related table because SQLite does not support Prisma scal
 
 ## What shipped in Slice 3
 
-- Manual time entries. Project is required, and new entries can only use an active project. Date, From, and To are one local day. Billable starts from the project's billable setting and can be changed for that entry. Note is optional.
-- Validation: the end must be after the start (which also rejects a zero-length entry), the end cannot be in the future, and an entry cannot be longer than 24 hours. A same-day range on a fall-back daylight-saving day can exceed 24 hours and is rejected. A local time that does not exist during spring forward is rejected.
+- Manual time entries. Project is required, and new entries can only use an active project. Billable starts from the project's billable setting and can be changed for that entry. Note is optional. Line breaks in a note are stored as LF, so a 2000-character note can include Windows line breaks.
+- When To is earlier than or equal to From, the entry ends at that time on the next day. The duration readout says “Ends the next day.” An explicit end date on an existing entry is kept. The end still cannot be in the future, including an overnight end that has not happened yet, and an entry still cannot be longer than 24 hours. A fall-back day can cross that limit either as a same-day range or as a midnight-to-midnight rollover. A local time that does not exist during spring forward is rejected, including when the rolled end lands in the gap.
 - Overlapping entries show a warning and are still saved.
 - A header timer. The running entry is stored on the server, so a reload keeps it. Only one timer can run. Stopping saves a timer-sourced entry. Stopping in under a second leaves the timer running. A timer that runs longer than 24 hours is saved as exactly 24 hours from the start; the extra time is discarded.
-- Daily and weekly timesheets. The week is Monday through Sunday. Both views filter by project and client, and totals follow those filters. A timer that crosses local midnight is split across the two days for the totals. Edit any completed entry. Delete is permanent, after a confirmation.
+- Daily and weekly timesheets. The week is Monday through Sunday. Both views filter by project and client, and totals follow those filters. Time that crosses local midnight is split across the two days. Those days say “Continues into the next day” and “Continues from the previous day.” Edit any completed entry. Delete is permanent, after a confirmation. Deleting the running timer leaves it running and says “Stop the timer before deleting this entry.”
 - Times display in the browser's timezone and are stored in UTC. The browser writes that timezone into the `ulixdesk-timezone` cookie before the timesheet renders dates, so the server and the browser format the same zone.
 - Project and client edit pages show completed tracked time. A running timer is not included until it is stopped. Time stays on the project, so it follows the project if the client link changes.
 - `TimeEntry.userId` is null for every row today. `RunningTimer.id` is `"workspace"`. Adding accounts later means filling `userId` and using the user's id as the timer row id. The start, end, and duration columns stay as they are.
 
-Manual From and To times stay on the date you pick. A timer can still cross midnight; editing that entry shows an end date.
+A timer can still cross midnight. Editing an entry whose end is on another date shows that end date.
 
 ## Extension API
 
 No authentication yet. The Chrome extension should call these from its service worker. Responses are JSON. Times are UTC ISO-8601 strings.
+
+`POST /api/timer/start` and `POST /api/timer/stop` require `Content-Type: application/json` (`415` `{ "error": "Content-Type must be application/json." }` otherwise). A request with an `Origin` header is accepted when that origin is the app's own origin. Any other origin gets `403` `{ "error": "This origin can't control the timer." }`. Requests with no `Origin` header are still accepted, which covers the extension service worker and local tools. To allow the extension's origin later, add it to `TIMER_API_ORIGIN_ALLOWLIST` in `src/lib/timer-api-guard.ts`, or set `ULIXDESK_TIMER_ORIGINS` to a comma-separated list such as `chrome-extension://<extension-id>`.
 
 ### `GET /api/projects`
 
@@ -136,14 +138,15 @@ The running timer, or `{ "timer": null }`.
 
 - `201` `{ "timer": { ...same shape as GET /api/timer } }`
 - `400` `{ "error": "Choose a project." }` when `projectId` is blank
-- `400` `{ "error": "Choose an active project." }` when the project is missing or archived
+- `400` `{ "error": "Choose an active project." }` when the project is archived
+- `404` `{ "error": "That project no longer exists." }` when the project id is unknown
 - `400` `{ "error": "Note must be 2000 characters or fewer." }`
 - `400` `{ "error": "Send a JSON body with a project id." }` when the body is not a JSON object with a string `projectId`
 - `409` `{ "error": "A timer is already running. Stop it before starting another.", "timer": { ... } }`
 
 ### `POST /api/timer/stop`
 
-No body.
+No JSON fields. Send `Content-Type: application/json`. The same origin rule as start applies.
 
 - `200`
 

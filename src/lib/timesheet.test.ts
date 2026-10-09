@@ -95,6 +95,8 @@ describe("timesheet totals and day boundaries", () => {
       continuesToNext: true,
       continuesFromPrevious: false,
     });
+    expect(timeCopy.continuesNext).toBe("Continues into the next day");
+    expect(timeCopy.continuesPrevious).toBe("Continues from the previous day");
     expect(friday.totalMs).toBe(90 * 60 * 1000);
     expect(saturday.rows[0]).toMatchObject({
       id: "split",
@@ -112,6 +114,10 @@ describe("timesheet totals and day boundaries", () => {
     const api = week.rows.find((row) => row.projectId === "project-2");
     expect(website?.dayMs[4]).toBe(30 * 60 * 1000);
     expect(website?.dayMs[5]).toBe(30 * 60 * 1000);
+    expect(website?.continuesToNext[4]).toBe(true);
+    expect(website?.continuesFromPrevious[5]).toBe(true);
+    expect(website?.continuesFromPrevious[4]).toBe(false);
+    expect(website?.continuesToNext[5]).toBe(false);
     expect(website?.totalMs).toBe(60 * 60 * 1000);
     expect(api?.dayMs[4]).toBe(60 * 60 * 1000);
     expect(week.columnTotals[4]).toBe(90 * 60 * 1000);

@@ -41,20 +41,87 @@ describe("validateTimeEntryInput", () => {
     expect(result.errors.projectId).toBe(timeCopy.projectRequired);
   });
 
-  it("rejects a zero-length entry and an end time before the start", () => {
-    const zero = validateTimeEntryInput(
-      values({ startTime: "09:00", endTime: "09:00" }),
+  it("rolls an earlier or equal To onto the next day", () => {
+    const overnight = validateTimeEntryInput(
+      values({
+        date: "2026-10-08",
+        startTime: "23:00",
+        endTime: "00:30",
+      }),
       now,
     );
-    const backwards = validateTimeEntryInput(
-      values({ startTime: "11:00", endTime: "10:00" }),
+    const fullDay = validateTimeEntryInput(
+      values({
+        date: "2026-10-08",
+        startTime: "09:00",
+        endTime: "09:00",
+      }),
       now,
     );
-    expect(zero.ok).toBe(false);
-    expect(backwards.ok).toBe(false);
-    if (zero.ok || backwards.ok) return;
-    expect(zero.errors.endTime).toBe(timeCopy.endAfterStart);
-    expect(backwards.errors.endTime).toBe(timeCopy.endAfterStart);
+    expect(overnight.ok).toBe(true);
+    expect(fullDay.ok).toBe(true);
+    if (!overnight.ok || !fullDay.ok) return;
+    expect(overnight.data.startedAt.toISOString()).toBe("2026-10-08T23:00:00.000Z");
+    expect(overnight.data.endedAt.toISOString()).toBe("2026-10-09T00:30:00.000Z");
+    expect(fullDay.data.endedAt.getTime() - fullDay.data.startedAt.getTime()).toBe(
+      24 * 60 * 60 * 1000,
+    );
+  });
+
+  it("rejects an overnight end that is still in the future", () => {
+    const result = validateTimeEntryInput(
+      values({ startTime: "23:00", endTime: "00:30" }),
+      now,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.endTime).toBe(timeCopy.futureEnd);
+    expect(result.values.endDate).toBe("2026-10-10");
+  });
+
+  it("rejects an explicit end date that is not after the start", () => {
+    const result = validateTimeEntryInput(
+      values({
+        date: "2026-10-08",
+        endDate: "2026-10-07",
+        startTime: "10:00",
+        endTime: "11:00",
+      }),
+      now,
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.endTime).toBe(timeCopy.endAfterStart);
+  });
+
+  it("rejects a rolled fall-back midnight that runs longer than 24 hours", () => {
+    const result = validateTimeEntryInput(
+      values({
+        timeZone: "America/New_York",
+        date: "2026-11-01",
+        startTime: "00:00",
+        endTime: "00:00",
+      }),
+      new Date("2026-11-03T12:00:00.000Z"),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.endTime).toBe(timeCopy.tooLong);
+  });
+
+  it("rejects a rolled end that falls in a spring-forward gap", () => {
+    const result = validateTimeEntryInput(
+      values({
+        timeZone: "America/New_York",
+        date: "2026-03-07",
+        startTime: "03:00",
+        endTime: "02:30",
+      }),
+      new Date("2026-03-10T12:00:00.000Z"),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.endTime).toBe(timeCopy.invalidTime);
   });
 
   it("rejects an end time in the future and allows an end time equal to now", () => {
@@ -132,6 +199,24 @@ describe("validateTimeEntryInput", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.errors.startTime).toBe(timeCopy.invalidTime);
+  });
+
+  it("counts a 2000-character note after turning CRLF into LF", () => {
+    const note = "a\r\n".repeat(999) + "ab";
+    expect(note.length).toBe(2999);
+    const result = validateTimeEntryInput(values({ note }), now);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.note).toBe(`${"a\n".repeat(999)}ab`);
+    expect(result.data.note?.length).toBe(2000);
+
+    const over = validateTimeEntryInput(
+      values({ note: `${"a\n".repeat(1000)}b` }),
+      now,
+    );
+    expect(over.ok).toBe(false);
+    if (over.ok) return;
+    expect(over.errors.note).toBe(timeCopy.noteTooLong);
   });
 
   it("rejects an invalid date, an invalid time, and a note that is too long", () => {

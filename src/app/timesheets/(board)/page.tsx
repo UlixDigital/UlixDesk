@@ -145,6 +145,14 @@ export default async function TimesheetsPage({
           {timeCopy.overlap}
         </p>
       ) : null}
+      {notice === "running" ? (
+        <p
+          role="alert"
+          className="mt-4 rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+        >
+          {timeCopy.stopBeforeDelete}
+        </p>
+      ) : null}
 
       <TimesheetNav
         view={view}

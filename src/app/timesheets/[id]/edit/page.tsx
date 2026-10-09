@@ -8,7 +8,7 @@ import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { timeCopy } from "@/lib/time-copy";
 import { getTimeEntry, listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
 import { timesheetsHref } from "@/lib/timesheet";
-import { isRealCalendarDate, zonedParts } from "@/lib/time-zone";
+import { isRealCalendarDate, todayInTimeZone, zonedParts } from "@/lib/time-zone";
 import { ui } from "@/lib/ui";
 
 type EditPageProps = {
@@ -37,15 +37,26 @@ export default async function EditTimeEntryPage({
   if (!timeZone) return <TimezonePending />;
 
   if (!entry.endedAt) {
+    const requestedDate = (query.date ?? "").trim();
+    const returnDate = isRealCalendarDate(requestedDate)
+      ? requestedDate
+      : todayInTimeZone(timeZone);
     return (
       <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
         <h1 className="text-xl font-semibold text-slate-900">
           {timeCopy.stopTimerFirstTitle}
         </h1>
         <p className="mt-2 text-sm text-slate-600">{timeCopy.stopTimerFirstBody}</p>
-        <Link href="/timesheets" className={`${ui.primaryButton} mt-6`}>
-          Back to timesheets
-        </Link>
+        <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+          <Link href="/timesheets" className={ui.primaryButton}>
+            Back to timesheets
+          </Link>
+          <DeleteTimeEntryButton
+            id={entry.id}
+            date={returnDate}
+            label={entry.project.name}
+          />
+        </div>
       </div>
     );
   }
