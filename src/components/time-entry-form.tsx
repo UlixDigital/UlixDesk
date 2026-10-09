@@ -9,10 +9,11 @@ import { cn } from "@/lib/cn";
 import { timeCopy } from "@/lib/time-copy";
 import { formatTrackedDuration } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
-import { addCalendarDays, isRealCalendarDate, zonedDateTimeToUtc } from "@/lib/time-zone";
+import { zonedDateTimeToUtc } from "@/lib/time-zone";
 import {
   billableDefault,
   intervalsOverlap,
+  manualEntryEndsNextDay,
   resolveManualEndDate,
   type TimeEntryFormState,
 } from "@/lib/time-validation";
@@ -94,8 +95,12 @@ export function TimeEntryForm({
     startTime,
     endTime,
   });
-  const endsNextDay =
-    isRealCalendarDate(date) && resolvedEndDate === addCalendarDays(date, 1);
+  const endsNextDay = manualEntryEndsNextDay({
+    date,
+    endDate,
+    startTime,
+    endTime,
+  });
   const durationLabel = durationReadout(date, startTime, resolvedEndDate, endTime, timeZone);
   const overlap = hasLiveOverlap({
     date,

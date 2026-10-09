@@ -5,6 +5,7 @@ import {
   emptyTimeEntryFormValues,
   intervalError,
   intervalsOverlap,
+  manualEntryEndsNextDay,
   validateTimeEntryInput,
 } from "@/lib/time-validation";
 
@@ -41,7 +42,7 @@ describe("validateTimeEntryInput", () => {
     expect(result.errors.projectId).toBe(timeCopy.projectRequired);
   });
 
-  it("rolls an earlier or equal To onto the next day", () => {
+  it("rolls a strictly earlier To onto the next day and rejects equal times", () => {
     const overnight = validateTimeEntryInput(
       values({
         date: "2026-10-08",
@@ -50,7 +51,7 @@ describe("validateTimeEntryInput", () => {
       }),
       now,
     );
-    const fullDay = validateTimeEntryInput(
+    const equal = validateTimeEntryInput(
       values({
         date: "2026-10-08",
         startTime: "09:00",
@@ -59,13 +60,52 @@ describe("validateTimeEntryInput", () => {
       now,
     );
     expect(overnight.ok).toBe(true);
-    expect(fullDay.ok).toBe(true);
-    if (!overnight.ok || !fullDay.ok) return;
+    expect(equal.ok).toBe(false);
+    if (!overnight.ok || equal.ok) return;
     expect(overnight.data.startedAt.toISOString()).toBe("2026-10-08T23:00:00.000Z");
     expect(overnight.data.endedAt.toISOString()).toBe("2026-10-09T00:30:00.000Z");
-    expect(fullDay.data.endedAt.getTime() - fullDay.data.startedAt.getTime()).toBe(
-      24 * 60 * 60 * 1000,
+    expect(equal.errors.endTime).toBe(timeCopy.endAfterStart);
+    expect(equal.values.endDate).toBe("");
+    expect(
+      manualEntryEndsNextDay({
+        date: "2026-10-08",
+        endDate: "",
+        startTime: "23:00",
+        endTime: "00:30",
+      }),
+    ).toBe(true);
+    expect(
+      manualEntryEndsNextDay({
+        date: "2026-10-08",
+        endDate: "",
+        startTime: "09:00",
+        endTime: "09:00",
+      }),
+    ).toBe(false);
+  });
+
+  it("allows a deliberate 24-hour entry when the end date is the next day", () => {
+    const result = validateTimeEntryInput(
+      values({
+        date: "2026-10-08",
+        endDate: "2026-10-09",
+        startTime: "09:00",
+        endTime: "09:00",
+      }),
+      now,
     );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.startedAt.toISOString()).toBe("2026-10-08T09:00:00.000Z");
+    expect(result.data.endedAt.toISOString()).toBe("2026-10-09T09:00:00.000Z");
+    expect(
+      manualEntryEndsNextDay({
+        date: "2026-10-08",
+        endDate: "2026-10-09",
+        startTime: "09:00",
+        endTime: "09:00",
+      }),
+    ).toBe(false);
   });
 
   it("rejects an overnight end that is still in the future", () => {
@@ -94,8 +134,27 @@ describe("validateTimeEntryInput", () => {
     expect(result.errors.endTime).toBe(timeCopy.endAfterStart);
   });
 
-  it("rejects a rolled fall-back midnight that runs longer than 24 hours", () => {
-    const result = validateTimeEntryInput(
+  it("rejects a fall-back range that runs longer than 24 hours, including an explicit next midnight", () => {
+    const rolled = validateTimeEntryInput(
+      values({
+        timeZone: "America/New_York",
+        date: "2026-11-01",
+        startTime: "00:30",
+        endTime: "00:00",
+      }),
+      new Date("2026-11-03T12:00:00.000Z"),
+    );
+    const explicit = validateTimeEntryInput(
+      values({
+        timeZone: "America/New_York",
+        date: "2026-11-01",
+        endDate: "2026-11-02",
+        startTime: "00:00",
+        endTime: "00:00",
+      }),
+      new Date("2026-11-03T12:00:00.000Z"),
+    );
+    const equal = validateTimeEntryInput(
       values({
         timeZone: "America/New_York",
         date: "2026-11-01",
@@ -104,9 +163,13 @@ describe("validateTimeEntryInput", () => {
       }),
       new Date("2026-11-03T12:00:00.000Z"),
     );
-    expect(result.ok).toBe(false);
-    if (result.ok) return;
-    expect(result.errors.endTime).toBe(timeCopy.tooLong);
+    expect(rolled.ok).toBe(false);
+    expect(explicit.ok).toBe(false);
+    expect(equal.ok).toBe(false);
+    if (rolled.ok || explicit.ok || equal.ok) return;
+    expect(rolled.errors.endTime).toBe(timeCopy.tooLong);
+    expect(explicit.errors.endTime).toBe(timeCopy.tooLong);
+    expect(equal.errors.endTime).toBe(timeCopy.endAfterStart);
   });
 
   it("rejects a rolled end that falls in a spring-forward gap", () => {

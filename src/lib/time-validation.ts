@@ -78,9 +78,11 @@ export function normalizeNote(value: string) {
 }
 
 /**
- * From and To are one civil date unless To is earlier than or equal to From.
- * In that case the end is the same clock time on the next day.
- * An explicit end date that is not the start date is kept as entered.
+ * From and To are one civil date unless To is strictly earlier than From.
+ * In that case the end is that clock time on the next day.
+ * Equal times stay on the start date and fail validation.
+ * An explicit end date that is not the start date is kept as entered,
+ * which is how a deliberate 24-hour entry is written.
  */
 export function resolveManualEndDate(input: {
   date: string;
@@ -98,11 +100,28 @@ export function resolveManualEndDate(input: {
     isRealCalendarDate(date) &&
     isRealClockTime(startTime) &&
     isRealClockTime(endTime) &&
-    endTime <= startTime
+    endTime < startTime
   ) {
     return addCalendarDays(date, 1);
   }
   return explicit || date;
+}
+
+/** True only for the automatic next-day roll, when To is strictly earlier than From. */
+export function manualEntryEndsNextDay(input: {
+  date: string;
+  endDate: string;
+  startTime: string;
+  endTime: string;
+}) {
+  const date = input.date.trim();
+  const startTime = input.startTime.trim();
+  const endTime = input.endTime.trim();
+  if (!isRealCalendarDate(date) || !isRealClockTime(startTime) || !isRealClockTime(endTime)) {
+    return false;
+  }
+  if (endTime >= startTime) return false;
+  return resolveManualEndDate(input) === addCalendarDays(date, 1);
 }
 
 export function parseTimeEntryFormData(formData: FormData): TimeEntryFormValues {
