@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useActionState } from "react";
 import { useFormStatus } from "react-dom";
 import {
@@ -10,10 +10,13 @@ import {
   type TimerActionState,
 } from "@/app/timesheets/actions";
 import { ClockIcon } from "@/components/icons";
-import { keepControlledFormValues } from "@/components/keep-controlled-form";
+import { useSharedNow } from "@/components/shared-now";
+import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { MAX_ENTRY_MS, timeCopy } from "@/lib/time-copy";
 import { formatElapsed } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
+
+export const TIMER_PROJECT_KEY = "ulixdesk-timer-project";
 
 const idleTimerState: TimerActionState = { error: null, warnings: [] };
 
@@ -32,15 +35,41 @@ export function TimerControls({
   timer: TimerSnapshot | null;
   serverNow: number;
 }) {
-  const [startState, startAction] = useActionState(startTimerAction, idleTimerState);
+  const [startState, startAction, startPending] = useActionState(
+    startTimerAction,
+    idleTimerState,
+  );
   const [stopState, stopAction] = useActionState(stopTimerAction, idleTimerState);
-  const [now, setNow] = useState(serverNow);
+  const now = useSharedNow(serverNow);
+  const [projectId, setProjectId] = useState("");
+  const [rememberedProjectId, setRememberedProjectId] = useState("");
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
 
   useEffect(() => {
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+    const remembered = projectIdRef.current || readTimerProject();
+    const stillActive = Boolean(
+      remembered && projects.some((project) => project.id === remembered),
+    );
+    if (stillActive) {
+      setProjectId(remembered);
+      setRememberedProjectId(remembered);
+      return;
+    }
+    setProjectId("");
+    setRememberedProjectId(remembered);
+  }, [projects]);
+
+  useEffect(() => {
+    if (projectId) writeTimerProject(projectId);
+  }, [projectId]);
+
+  const projectNotice =
+    rememberedProjectId &&
+    !projectId &&
+    !projects.some((project) => project.id === rememberedProjectId)
+      ? timeCopy.timerProjectGone
+      : null;
 
   const elapsed = timer ? now - new Date(timer.startedAt).getTime() : 0;
   const overLong = Boolean(timer && elapsed > MAX_ENTRY_MS);
@@ -70,7 +99,18 @@ export function TimerControls({
           </Link>
         </div>
       ) : (
-        <IdleTimer projects={projects} action={startAction} />
+        <IdleTimer
+          projects={projects}
+          action={startAction}
+          pending={startPending}
+          projectId={projectId}
+          notice={projectNotice}
+          onProjectId={(next) => {
+            setProjectId(next);
+            setRememberedProjectId(next);
+            writeTimerProject(next);
+          }}
+        />
       )}
       <TimerMessages
         error={timer ? stopState.error ?? startState.error : startState.error}
@@ -139,16 +179,22 @@ function TimerMessages({
 function IdleTimer({
   projects,
   action,
+  pending,
+  projectId,
+  notice,
+  onProjectId,
 }: {
   projects: Array<{ id: string; name: string; clientName: string | null }>;
   action: (payload: FormData) => void;
+  pending: boolean;
+  projectId: string;
+  notice: string | null;
+  onProjectId: (projectId: string) => void;
 }) {
-  const [projectId, setProjectId] = useState("");
   return (
     <form
-      action={action}
       className="flex flex-col gap-3 sm:flex-row sm:items-center"
-      onReset={keepControlledFormValues}
+      onSubmit={(event) => submitWithoutFormReset(event, action)}
     >
       <label htmlFor="timer-project" className="sr-only">
         Project
@@ -157,7 +203,7 @@ function IdleTimer({
         id="timer-project"
         name="projectId"
         value={projectId}
-        onChange={(event) => setProjectId(event.target.value)}
+        onChange={(event) => onProjectId(event.target.value)}
         className={`${ui.input} sm:max-w-xs`}
       >
         <option value="">Project</option>
@@ -169,18 +215,37 @@ function IdleTimer({
           </option>
         ))}
       </select>
-      <p className="text-sm text-slate-600">
-        {projectId ? timeCopy.timerIdle : timeCopy.chooseProject}
+      <p
+        role={notice ? "status" : undefined}
+        className={notice ? "text-sm text-amber-800" : "text-sm text-slate-600"}
+      >
+        {notice ?? (projectId ? timeCopy.timerIdle : timeCopy.chooseProject)}
       </p>
       <div className="sm:ml-auto">
-        <StartButton disabled={!projectId} />
+        <StartButton disabled={!projectId} pending={pending} />
       </div>
     </form>
   );
 }
 
-function StartButton({ disabled }: { disabled: boolean }) {
-  const { pending } = useFormStatus();
+function readTimerProject() {
+  try {
+    return window.sessionStorage.getItem(TIMER_PROJECT_KEY) ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function writeTimerProject(projectId: string) {
+  try {
+    if (projectId) window.sessionStorage.setItem(TIMER_PROJECT_KEY, projectId);
+    else window.sessionStorage.removeItem(TIMER_PROJECT_KEY);
+  } catch {
+    // The select still works for this page load when storage is blocked.
+  }
+}
+
+function StartButton({ disabled, pending }: { disabled: boolean; pending: boolean }) {
   return (
     <button
       type="submit"

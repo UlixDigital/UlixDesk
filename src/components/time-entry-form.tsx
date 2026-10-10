@@ -2,9 +2,8 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
 import { saveTimeEntryAction } from "@/app/timesheets/actions";
-import { keepControlledFormValues } from "@/components/keep-controlled-form";
+import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import { timeCopy } from "@/lib/time-copy";
@@ -56,7 +55,7 @@ export function TimeEntryForm({
   timeZone: string;
   mode: "create" | "edit";
 }) {
-  const [state, formAction] = useActionState(saveTimeEntryAction, initialState);
+  const [state, formAction, isPending] = useActionState(saveTimeEntryAction, initialState);
   const serverKey = JSON.stringify(state.values);
   const [projectId, setProjectId] = useSyncedState(state.values.projectId, serverKey);
   const [date, setDate] = useSyncedState(state.values.date, serverKey);
@@ -138,10 +137,9 @@ export function TimeEntryForm({
       </h1>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       <form
-        action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
-        onReset={keepControlledFormValues}
+        onSubmit={(event) => submitWithoutFormReset(event, formAction)}
       >
         {entryId ? <input type="hidden" name="id" value={entryId} readOnly /> : null}
         <input type="hidden" name="timeZone" value={timeZone} readOnly />
@@ -324,7 +322,7 @@ export function TimeEntryForm({
           <Link href={cancelHref} className={ui.secondaryButton}>
             Cancel
           </Link>
-          <SubmitButton label={submitLabel} />
+          <SubmitButton label={submitLabel} pending={isPending} />
         </div>
       </form>
     </div>
@@ -434,8 +432,7 @@ function Field({
   );
 }
 
-function SubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
+function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
   return (
     <button type="submit" className={ui.primaryButton} disabled={pending}>
       {pending ? timeCopy.saving : label}

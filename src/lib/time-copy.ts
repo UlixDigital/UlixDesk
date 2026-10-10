@@ -27,6 +27,7 @@ export const timeCopy = {
     "This timer is over 24 hours. Stopping it will save a 24-hour entry.",
   timerIdle: "No timer running",
   chooseProject: "Choose a project to start the timer.",
+  timerProjectGone: "That project is no longer active. Choose another project.",
   noProjects: "Add an active project before tracking time.",
   noProjectsTitle: "No active projects",
   dailyEmptyTitle: "No time on this day",

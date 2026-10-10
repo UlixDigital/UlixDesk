@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useSharedNow } from "@/components/shared-now";
 import { StatusBadge } from "@/components/status-badge";
 import { timeCopy } from "@/lib/time-copy";
 import { formatElapsed, type RunningDailyEntry } from "@/lib/timesheet";
@@ -16,13 +16,7 @@ export function RunningEntryRow({
   date: string;
   serverNow: number;
 }) {
-  const [now, setNow] = useState(serverNow);
-
-  useEffect(() => {
-    setNow(Date.now());
-    const id = window.setInterval(() => setNow(Date.now()), 1000);
-    return () => window.clearInterval(id);
-  }, []);
+  const now = useSharedNow(serverNow);
 
   const elapsed = now - new Date(entry.startedAt).getTime();
 

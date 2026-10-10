@@ -41,6 +41,30 @@ describe("timer API origin", () => {
     expect(refused?.status).toBe(403);
   });
 
+  it("treats a bracketed [::1] host as loopback", () => {
+    const url = "http://[::1]:3000/api/timer/start";
+    expect(
+      timerApiRefusal(
+        request({ url, host: "[::1]:3000", origin: "http://127.0.0.1:3000" }),
+      ),
+    ).toBeNull();
+    expect(
+      timerApiRefusal(
+        request({ url, host: "[::1]:3000", origin: "http://localhost:3000" }),
+      ),
+    ).toBeNull();
+    expect(
+      [...appOriginsForRequest(request({ url, host: "[::1]:3000" }))].sort(),
+    ).toEqual(
+      ["http://127.0.0.1:3000", "http://[::1]:3000", "http://localhost:3000"].sort(),
+    );
+
+    const otherPort = timerApiRefusal(
+      request({ url, host: "[::1]:3000", origin: "http://[::1]:4000" }),
+    );
+    expect(otherPort?.status).toBe(403);
+  });
+
   it("derives the app origin from Host when request.url is an internal name", async () => {
     const allowed = timerApiRefusal(
       request({

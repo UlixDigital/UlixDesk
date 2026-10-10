@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useId, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
-import { keepControlledFormValues } from "@/components/keep-controlled-form";
+import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { cn } from "@/lib/cn";
 import { ui } from "@/lib/ui";
 import { isValidEmail, type ClientFormState } from "@/lib/validation";
@@ -38,7 +37,7 @@ export function ClientForm({
   after?: ReactNode;
   autoFocusName?: boolean;
 }) {
-  const [state, formAction] = useActionState(action, initialState);
+  const [state, formAction, isPending] = useActionState(action, initialState);
   const serverKey = JSON.stringify(state.values);
   const [name, setName] = useSyncedState(state.values.name, serverKey);
   const [phone, setPhone] = useSyncedState(state.values.phone, serverKey);
@@ -87,10 +86,9 @@ export function ClientForm({
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       {banner ? <div className="mt-4">{banner}</div> : null}
       <form
-        action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
-        onReset={keepControlledFormValues}
+        onSubmit={(event) => submitWithoutFormReset(event, formAction)}
       >
         {clientId ? (
           <input type="hidden" name="id" value={clientId} readOnly />
@@ -176,7 +174,7 @@ export function ClientForm({
           <Link href={cancelHref} className={ui.secondaryButton}>
             Cancel
           </Link>
-          <SubmitButton label={submitLabel} />
+          <SubmitButton label={submitLabel} pending={isPending} />
         </div>
       </form>
       {after ? <div className="mt-8">{after}</div> : null}
@@ -415,8 +413,7 @@ function EmailField({
   );
 }
 
-function SubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
+function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
   return (
     <button type="submit" className={ui.primaryButton} disabled={pending}>
       {pending ? "Saving…" : label}

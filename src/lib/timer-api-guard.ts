@@ -64,6 +64,13 @@ function originFromHost(protocol: string, host: string) {
   }
 }
 
+/** Node reports the IPv6 hostname as "[::1]", not "::1". */
+function bareHostname(hostname: string) {
+  return hostname.startsWith("[") && hostname.endsWith("]")
+    ? hostname.slice(1, -1)
+    : hostname;
+}
+
 function loopbackAliases(origin: string) {
   let url: URL;
   try {
@@ -71,7 +78,7 @@ function loopbackAliases(origin: string) {
   } catch {
     return [];
   }
-  if (!LOOPBACK_HOSTS.has(url.hostname)) return [];
+  if (!LOOPBACK_HOSTS.has(bareHostname(url.hostname))) return [];
   const port = url.port ? `:${url.port}` : "";
   return ["localhost", "127.0.0.1", "[::1]"].map(
     (host) => `${url.protocol}//${host}${port}`,

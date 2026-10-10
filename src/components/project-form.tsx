@@ -2,8 +2,7 @@
 
 import Link from "next/link";
 import { useActionState, useEffect, useState, type ReactNode } from "react";
-import { useFormStatus } from "react-dom";
-import { keepControlledFormValues } from "@/components/keep-controlled-form";
+import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import type { ClientOption } from "@/lib/project-display";
@@ -42,7 +41,7 @@ export function ProjectForm({
   autoFocusName?: boolean;
   after?: ReactNode;
 }) {
-  const [state, formAction] = useActionState(action, initialState);
+  const [state, formAction, isPending] = useActionState(action, initialState);
   const serverKey = JSON.stringify(state.values);
   const [name, setName] = useSyncedState(state.values.name, serverKey);
   const [details, setDetails] = useSyncedState(
@@ -101,10 +100,9 @@ export function ProjectForm({
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       {banner ? <div className="mt-4">{banner}</div> : null}
       <form
-        action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
-        onReset={keepControlledFormValues}
+        onSubmit={(event) => submitWithoutFormReset(event, formAction)}
       >
         {projectId ? (
           <input type="hidden" name="id" value={projectId} readOnly />
@@ -244,7 +242,7 @@ export function ProjectForm({
           <Link href={cancelHref} className={ui.secondaryButton}>
             Cancel
           </Link>
-          <SubmitButton label={submitLabel} />
+          <SubmitButton label={submitLabel} pending={isPending} />
         </div>
       </form>
       {after ? <div className="mt-8">{after}</div> : null}
@@ -316,8 +314,7 @@ function Field({
   );
 }
 
-function SubmitButton({ label }: { label: string }) {
-  const { pending } = useFormStatus();
+function SubmitButton({ label, pending }: { label: string; pending: boolean }) {
   return (
     <button type="submit" className={ui.primaryButton} disabled={pending}>
       {pending ? "Saving…" : label}
