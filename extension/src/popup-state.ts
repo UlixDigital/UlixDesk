@@ -57,6 +57,7 @@ export function derivePopup(input: {
   note: string;
   now: number;
   archivedNotice: boolean;
+  startedHere: boolean;
   alert: string | null;
   loading: boolean;
 }): PopupModel {
@@ -73,13 +74,13 @@ export function derivePopup(input: {
       clientName: input.timer.clientName,
       startedAt: input.timer.startedAt,
       elapsedLabel: formatElapsed(input.now - Date.parse(input.timer.startedAt)),
-      status: popupCopy.alreadyRunning,
+      status: input.startedHere ? popupCopy.timerRunning : popupCopy.alreadyRunning,
       alert: input.alert,
     };
   }
   if (input.failure) return failureModel(input.failure);
   if (!input.projects) return { kind: "loading" };
-  if (input.projects.length === 0 && !input.archivedNotice) return { kind: "no-projects" };
+  if (input.projects.length === 0) return { kind: "no-projects" };
 
   const known = input.projects.some((project) => project.id === input.projectId);
   return {

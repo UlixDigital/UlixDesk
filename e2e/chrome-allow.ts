@@ -118,7 +118,12 @@ function findButton(filePath: string, match: Rgb) {
 
 /** Chrome draws the optional-host Allow control as a tonal blue button, outside the page DOM. */
 export function acceptChromePermissionDialog() {
-  const display = process.env.DISPLAY || ":1";
+  const display = process.env.DISPLAY;
+  if (!display) {
+    throw new Error(
+      "DISPLAY is not set, so the extension test will not click Chrome's permission dialog.",
+    );
+  }
   const [width, height] = execFileSync("xdotool", ["getdisplaygeometry"], { encoding: "utf8" })
     .trim()
     .split(/\s+/)

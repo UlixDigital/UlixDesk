@@ -4,6 +4,7 @@ import { OPTIONS as timerOptions, GET as getTimer } from "@/app/api/timer/route"
 import { OPTIONS as startOptions, POST as startRoute } from "@/app/api/timer/start/route";
 import { OPTIONS as stopOptions, POST as stopRoute } from "@/app/api/timer/stop/route";
 import { createAccessToken, hashAccessToken, revokeAccessToken } from "@/lib/access-tokens";
+import { apiCodes } from "@/lib/api-errors";
 import { createProject } from "@/lib/projects";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
@@ -11,9 +12,18 @@ import { WORKSPACE_TIMER_ID } from "@/lib/time-entries";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 
-beforeEach(resetTestDatabase);
+const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+const extensionOrigin = `chrome-extension://${EXTENSION_ID}`;
+const previousExtensionIds = process.env.ULIXDESK_EXTENSION_IDS;
+
+beforeEach(() => {
+  process.env.ULIXDESK_EXTENSION_IDS = EXTENSION_ID;
+  return resetTestDatabase();
+});
 
 afterAll(async () => {
+  if (previousExtensionIds === undefined) delete process.env.ULIXDESK_EXTENSION_IDS;
+  else process.env.ULIXDESK_EXTENSION_IDS = previousExtensionIds;
   await prisma.$disconnect();
 });
 
@@ -281,7 +291,6 @@ describe("extension API", () => {
       (await prisma.accessToken.findUniqueOrThrow({ where: { id: created.record.id } })).lastUsedAt,
     ).toBeNull();
 
-    const extensionOrigin = "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
     const blocked = await startRoute(
       post(
         "http://localhost/api/timer/start",
@@ -327,7 +336,10 @@ describe("extension API", () => {
       }),
     );
     expect(malformed.status).toBe(401);
-    expect(await malformed.json()).toEqual({ error: tokenCopy.bearerRequired });
+    expect(await malformed.json()).toEqual({
+      error: tokenCopy.bearerRequired,
+      code: apiCodes.BEARER_REQUIRED,
+    });
 
     const basic = await getTimer(
       new Request("http://localhost/api/timer", {
@@ -335,7 +347,10 @@ describe("extension API", () => {
       }),
     );
     expect(basic.status).toBe(401);
-    expect(await basic.json()).toEqual({ error: tokenCopy.bearerRequired });
+    expect(await basic.json()).toEqual({
+      error: tokenCopy.bearerRequired,
+      code: apiCodes.BEARER_REQUIRED,
+    });
 
     const unknown = await startRoute(
       bearerPost(
@@ -346,7 +361,10 @@ describe("extension API", () => {
       ),
     );
     expect(unknown.status).toBe(401);
-    expect(await unknown.json()).toEqual({ error: tokenCopy.tokenRejected });
+    expect(await unknown.json()).toEqual({
+      error: tokenCopy.tokenRejected,
+      code: apiCodes.TOKEN_INVALID,
+    });
     expect(await prisma.runningTimer.count()).toBe(1);
 
     await revokeAccessToken(created.record.id);
@@ -359,12 +377,14 @@ describe("extension API", () => {
       }),
     );
     expect(revoked.status).toBe(401);
-    expect(await revoked.json()).toEqual({ error: tokenCopy.tokenRejected });
+    expect(await revoked.json()).toEqual({
+      error: tokenCopy.tokenRejected,
+      code: apiCodes.TOKEN_INVALID,
+    });
     expect(revoked.headers.get("access-control-allow-origin")).toBe(extensionOrigin);
   });
 
   it("answers extension preflight and withholds CORS from other websites", async () => {
-    const extensionOrigin = "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
     const preflight = await projectsOptions(
       new Request("http://localhost/api/projects", {
         method: "OPTIONS",
@@ -403,7 +423,19 @@ describe("extension API", () => {
     );
     expect(denied.status).toBe(403);
     expect(denied.headers.get("access-control-allow-origin")).toBeNull();
-    expect(await denied.json()).toEqual({ error: timeCopy.originForbidden });
+    expect(await denied.json()).toEqual({
+      error: timeCopy.originForbidden,
+      code: apiCodes.ORIGIN_FORBIDDEN,
+    });
+
+    const otherExtension = await projectsOptions(
+      new Request("http://localhost/api/projects", {
+        method: "OPTIONS",
+        headers: { origin: "chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb" },
+      }),
+    );
+    expect(otherExtension.status).toBe(403);
+    expect(otherExtension.headers.get("access-control-allow-origin")).toBeNull();
 
     const read = await listProjects(
       new Request("http://localhost/api/projects", {

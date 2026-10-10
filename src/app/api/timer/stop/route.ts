@@ -1,4 +1,5 @@
 import { authorizeApiRequest, jsonApi, optionsResponse } from "@/lib/api-auth";
+import { apiError, timerFailureApiCode } from "@/lib/api-errors";
 import { serializeStoppedEntry } from "@/lib/time-api";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { stopTimer } from "@/lib/time-entries";
@@ -16,7 +17,11 @@ export async function POST(request: Request) {
   const result = await stopTimer(new Date());
   if (!result.ok) {
     const status = result.code === "too-short" ? 409 : 404;
-    return jsonApi(request, { error: timerFailureMessage(result.code) }, status);
+    return jsonApi(
+      request,
+      apiError(timerFailureMessage(result.code), timerFailureApiCode(result.code)),
+      status,
+    );
   }
 
   const warnings: string[] = [];

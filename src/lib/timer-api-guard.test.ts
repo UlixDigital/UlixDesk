@@ -74,7 +74,7 @@ describe("timer API origin", () => {
       }),
     );
     expect(rebound?.status).toBe(403);
-    expect(await rebound?.json()).toEqual({ error: timeCopy.hostForbidden });
+    expect(await rebound?.json()).toEqual({ error: timeCopy.hostForbidden, code: "HOST_FORBIDDEN" });
 
     const fromUrl = timerApiRefusal(
       request({
@@ -83,7 +83,7 @@ describe("timer API origin", () => {
       }),
     );
     expect(fromUrl?.status).toBe(403);
-    expect(await fromUrl?.json()).toEqual({ error: timeCopy.hostForbidden });
+    expect(await fromUrl?.json()).toEqual({ error: timeCopy.hostForbidden, code: "HOST_FORBIDDEN" });
   });
 
   it("allows a configured host only when the origin matches it", async () => {
@@ -106,7 +106,10 @@ describe("timer API origin", () => {
         }),
       );
       expect(foreign?.status).toBe(403);
-      expect(await foreign?.json()).toEqual({ error: timeCopy.originForbidden });
+      expect(await foreign?.json()).toEqual({
+        error: timeCopy.originForbidden,
+        code: "ORIGIN_FORBIDDEN",
+      });
     } finally {
       delete process.env.ULIXDESK_APP_HOSTS;
     }

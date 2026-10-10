@@ -31,6 +31,7 @@ const base = {
   note: "",
   now: Date.parse("2026-10-10T05:01:02.000Z"),
   archivedNotice: false,
+  startedHere: false,
   alert: null,
   loading: false,
 };
@@ -63,6 +64,10 @@ describe("popup state", () => {
       elapsedLabel: "00:01:02",
       status: popupCopy.alreadyRunning,
     });
+    expect(derivePopup({ ...base, timer, startedHere: true })).toMatchObject({
+      kind: "running",
+      status: popupCopy.timerRunning,
+    });
   });
 
   it("keeps the last project and warns once that an archived choice is gone", () => {
@@ -90,9 +95,6 @@ describe("popup state", () => {
       projectId: "old",
       archivedNotice: true,
     });
-    expect(onlyChoice).toMatchObject({
-      kind: "idle",
-      notice: popupCopy.projectGone,
-    });
+    expect(onlyChoice.kind).toBe("no-projects");
   });
 });

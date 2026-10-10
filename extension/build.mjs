@@ -3,6 +3,7 @@ import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFi
 import path from "node:path";
 import { deflateRawSync, deflateSync } from "node:zlib";
 import * as esbuild from "esbuild";
+import { writeDosDateTime } from "./dos-date.mjs";
 
 const root = process.cwd();
 const dist = path.join(root, "extension", "dist");
@@ -144,7 +145,7 @@ function chunk(type, data) {
   return Buffer.concat([length, typeBuffer, data, crc]);
 }
 
-function zipDirectory(directory) {
+function zipDirectory(directory, builtAt = new Date()) {
   const files = [];
   collect(directory, directory, files);
   const parts = [];
@@ -160,6 +161,7 @@ function zipDirectory(directory) {
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(0, 6);
     local.writeUInt16LE(8, 8);
+    writeDosDateTime(local, 10, builtAt);
     local.writeUInt32LE(checksum, 14);
     local.writeUInt32LE(compressed.length, 18);
     local.writeUInt32LE(data.length, 22);
@@ -172,6 +174,7 @@ function zipDirectory(directory) {
     header.writeUInt16LE(20, 4);
     header.writeUInt16LE(20, 6);
     header.writeUInt16LE(8, 10);
+    writeDosDateTime(header, 12, builtAt);
     header.writeUInt32LE(checksum, 16);
     header.writeUInt32LE(compressed.length, 20);
     header.writeUInt32LE(data.length, 24);

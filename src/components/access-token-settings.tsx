@@ -130,8 +130,15 @@ export function AccessTokenSettings({
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
-            <table className="min-w-full text-left text-sm">
+          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
+            <table className="w-full table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[30%]" />
+                <col className="w-[22%]" />
+                <col className="w-[22%]" />
+                <col className="w-[12%]" />
+                <col className="w-[14%]" />
+              </colgroup>
               <thead className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 <tr>
                   <th scope="col" className="px-4 py-3">
@@ -146,7 +153,7 @@ export function AccessTokenSettings({
                   <th scope="col" className="px-4 py-3">
                     {tokenCopy.colStatus}
                   </th>
-                  <th scope="col" className="px-4 py-3">
+                  <th scope="col" className="px-2 py-3">
                     <span className="sr-only">Actions</span>
                   </th>
                 </tr>
@@ -154,13 +161,15 @@ export function AccessTokenSettings({
               <tbody className="divide-y divide-slate-100">
                 {tokens.map((token) => (
                   <tr key={token.id}>
-                    <th scope="row" className="px-4 py-3 font-medium break-words text-slate-900">
-                      {token.name}
+                    <th scope="row" className="max-w-0 px-4 py-3 font-medium text-slate-900">
+                      <span className="block truncate" title={token.name}>
+                        {token.name}
+                      </span>
                     </th>
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">
+                    <td className="px-4 py-3 text-slate-700">
                       {formatTokenTimestamp(new Date(token.createdAt), timeZone)}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-slate-700">
+                    <td className="px-4 py-3 text-slate-700">
                       {token.lastUsedAt
                         ? formatTokenTimestamp(new Date(token.lastUsedAt), timeZone)
                         : tokenCopy.notUsed}
@@ -168,7 +177,7 @@ export function AccessTokenSettings({
                     <td className="px-4 py-3">
                       <Status revoked={Boolean(token.revokedAt)} />
                     </td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-2 py-3 text-right whitespace-nowrap">
                       {token.revokedAt ? null : (
                         <RevokeButton id={token.id} name={token.name} />
                       )}
@@ -258,7 +267,7 @@ function RevokeButton({ id, name }: { id: string; name: string }) {
     <>
       <button
         type="button"
-        className={ui.secondaryButton}
+        className={cn(ui.secondaryButton, "whitespace-nowrap px-2.5")}
         onClick={() => dialogRef.current?.showModal()}
       >
         {tokenCopy.revoke}

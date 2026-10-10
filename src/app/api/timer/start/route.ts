@@ -1,4 +1,5 @@
 import { authorizeApiRequest, jsonApi, optionsResponse } from "@/lib/api-auth";
+import { apiError, timerFailureApiCode } from "@/lib/api-errors";
 import { serializeTimer } from "@/lib/time-api";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { startTimer } from "@/lib/time-entries";
@@ -17,18 +18,18 @@ export async function POST(request: Request) {
   try {
     body = await request.json();
   } catch {
-    return jsonApi(request, { error: timeCopy.invalidJson }, 400);
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return jsonApi(request, { error: timeCopy.invalidJson }, 400);
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
 
   const record = body as Record<string, unknown>;
   if (typeof record.projectId !== "string") {
-    return jsonApi(request, { error: timeCopy.invalidJson }, 400);
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
   if (record.note != null && typeof record.note !== "string") {
-    return jsonApi(request, { error: timeCopy.invalidJson }, 400);
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
 
   const result = await startTimer({
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     return jsonApi(
       request,
       {
-        error: timerFailureMessage(result.code),
+        ...apiError(timerFailureMessage(result.code), timerFailureApiCode(result.code)),
         ...(result.timer ? { timer: serializeTimer(result.timer) } : {}),
       },
       status,

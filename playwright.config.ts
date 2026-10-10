@@ -26,6 +26,8 @@ export default defineConfig({
     env: {
       ...process.env,
       DATABASE_URL: e2eDatabaseUrl,
+      ULIXDESK_APP_HOSTS: "desk.example.com",
+      ULIXDESK_EXTENSION_IDS: "cjlaoflbipaehclleojofopapalhiooe",
     },
   },
 });

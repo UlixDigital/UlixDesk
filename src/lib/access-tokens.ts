@@ -84,9 +84,16 @@ export async function findUsableAccessToken(token: string) {
   return row;
 }
 
+const LAST_USED_INTERVAL_MS = 60_000;
+
+/** Writes lastUsedAt at most once a minute. A first use, when it is null, always counts. */
 export async function markAccessTokenUsed(id: string, now = new Date()) {
-  await prisma.accessToken.update({
-    where: { id },
+  const cutoff = new Date(now.getTime() - LAST_USED_INTERVAL_MS);
+  await prisma.accessToken.updateMany({
+    where: {
+      id,
+      OR: [{ lastUsedAt: null }, { lastUsedAt: { lte: cutoff } }],
+    },
     data: { lastUsedAt: now },
   });
 }

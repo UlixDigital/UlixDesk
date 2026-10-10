@@ -1,3 +1,4 @@
+import { apiCodes, apiError } from "@/lib/api-errors";
 import { timeCopy } from "@/lib/time-copy";
 
 /**
@@ -14,8 +15,12 @@ type HeaderSource = {
   headers: { get(name: string): string | null };
 };
 
+function envValue(name: string) {
+  return process.env[name] ?? "";
+}
+
 export function timerOriginAllowlist() {
-  const fromEnv = (process.env.ULIXDESK_TIMER_ORIGINS ?? "")
+  const fromEnv = envValue("ULIXDESK_TIMER_ORIGINS")
     .split(",")
     .map((origin) => origin.trim())
     .filter(Boolean);
@@ -31,7 +36,7 @@ export function timerOriginAllowlist() {
  * lands on this server.
  */
 export function configuredAppHosts() {
-  return (process.env.ULIXDESK_APP_HOSTS ?? "")
+  return envValue("ULIXDESK_APP_HOSTS")
     .split(",")
     .map((entry) => normalizeAllowlistHost(entry))
     .filter((entry): entry is string => Boolean(entry));
@@ -129,7 +134,9 @@ function loopbackAliases(origin: string) {
 export function jsonContentTypeRefusal(request: HeaderSource): Response | null {
   const contentType = request.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase();
   if (contentType !== "application/json") {
-    return Response.json({ error: timeCopy.jsonContentType }, { status: 415 });
+    return Response.json(apiError(timeCopy.jsonContentType, apiCodes.UNSUPPORTED_MEDIA_TYPE), {
+      status: 415,
+    });
   }
   return null;
 }
@@ -140,12 +147,14 @@ export function unauthenticatedApiRefusal(request: HeaderSource): Response | nul
   const hostHeader = request.headers.get("host")?.trim();
   const host = hostHeader || page.host;
   if (!hostIsTrusted(host)) {
-    return Response.json({ error: timeCopy.hostForbidden }, { status: 403 });
+    return Response.json(apiError(timeCopy.hostForbidden, apiCodes.HOST_FORBIDDEN), { status: 403 });
   }
 
   const origin = request.headers.get("origin");
   if (origin !== null && !isAllowedTimerOrigin(origin, appOriginsForRequest(request))) {
-    return Response.json({ error: timeCopy.originForbidden }, { status: 403 });
+    return Response.json(apiError(timeCopy.originForbidden, apiCodes.ORIGIN_FORBIDDEN), {
+      status: 403,
+    });
   }
 
   return null;

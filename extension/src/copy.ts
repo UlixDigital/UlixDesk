@@ -1,7 +1,5 @@
 /** Exact UI copy for the extension. Tests and the popup share these strings. */
 
-export const API_PROJECT_INACTIVE = "Choose an active project.";
-
 export const popupCopy = {
   notConnectedTitle: "Not connected",
   notConnectedBody:
@@ -28,6 +26,7 @@ export const popupCopy = {
   chooseProject: "Choose a project to start the timer.",
   projectGone: "That project is no longer active. Choose another project.",
   alreadyRunning: "A timer is already running.",
+  timerRunning: "Timer running",
   projectLabel: "Project",
   projectPlaceholder: "Project",
   noteLabel: "Note",

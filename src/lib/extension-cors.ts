@@ -1,4 +1,17 @@
 const EXTENSION_PROTOCOL = "chrome-extension:";
+const EXTENSION_ID = /^[a-p]{32}$/;
+
+function envValue(name: string) {
+  return process.env[name] ?? "";
+}
+
+/** Extension ids allowed to receive CORS headers. Comma-separated, letters a–p. */
+export function configuredExtensionIds() {
+  return envValue("ULIXDESK_EXTENSION_IDS")
+    .split(",")
+    .map((id) => id.trim().toLowerCase())
+    .filter((id) => EXTENSION_ID.test(id));
+}
 
 export function isChromeExtensionOrigin(origin: string) {
   // chrome-extension is not a special URL scheme, so Node reports origin as "null".
@@ -19,11 +32,22 @@ export function isChromeExtensionOrigin(origin: string) {
   }
 }
 
-/** CORS headers for a chrome-extension origin. Empty when the origin is anything else. */
+export function isAllowedExtensionOrigin(origin: string) {
+  if (!isChromeExtensionOrigin(origin)) return false;
+  let id: string;
+  try {
+    id = new URL(origin).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return configuredExtensionIds().includes(id);
+}
+
+/** CORS headers for an allowlisted chrome-extension origin. Empty otherwise. */
 export function extensionCorsHeaders(request: { headers: { get(name: string): string | null } }) {
   const headers = new Headers();
   const origin = request.headers.get("origin");
-  if (!origin || !isChromeExtensionOrigin(origin)) return headers;
+  if (!origin || !isAllowedExtensionOrigin(origin)) return headers;
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Vary", "Origin");
   headers.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS");

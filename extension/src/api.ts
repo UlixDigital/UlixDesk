@@ -1,4 +1,3 @@
-import { API_PROJECT_INACTIVE } from "./copy";
 import { isConfigured, normalizeServerUrl } from "./server-url";
 
 export type ApiProject = {
@@ -59,6 +58,14 @@ type RequestJson =
   | { ok: true; status: number; body: unknown }
   | Exclude<ClientFailure, { reason: "http" }>
   | HttpFailure;
+
+function errorCode(body: unknown) {
+  if (body && typeof body === "object" && "code" in body && typeof body.code === "string") {
+    const code = body.code.trim();
+    if (code) return code;
+  }
+  return null;
+}
 
 function errorMessage(body: unknown) {
   if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
@@ -199,13 +206,13 @@ export async function startTimer(
     { method: "POST", body: JSON.stringify({ projectId, note }) },
     fetchImpl,
   );
-  if (!result.ok && result.reason === "http" && result.status === 409) {
+  if (!result.ok && result.reason === "http" && errorCode(result.body) === "ALREADY_RUNNING") {
     const timer = result.body && typeof result.body === "object" ? (result.body as { timer?: unknown }).timer : null;
     if (isTimer(timer)) {
       return { ok: false, reason: "already-running", timer, message: result.message };
     }
   }
-  if (!result.ok && result.reason === "http" && result.status === 400 && result.message === API_PROJECT_INACTIVE) {
+  if (!result.ok && result.reason === "http" && errorCode(result.body) === "PROJECT_ARCHIVED") {
     return { ok: false, reason: "archived", message: result.message };
   }
   if (!result.ok) return clientFailure(result);
@@ -225,10 +232,10 @@ export async function stopTimer(
     { method: "POST", body: "{}" },
     fetchImpl,
   );
-  if (!result.ok && result.reason === "http" && result.status === 409) {
+  if (!result.ok && result.reason === "http" && errorCode(result.body) === "TOO_SHORT") {
     return { ok: false, reason: "too-short", message: result.message };
   }
-  if (!result.ok && result.reason === "http" && result.status === 404) {
+  if (!result.ok && result.reason === "http" && errorCode(result.body) === "NOT_RUNNING") {
     return { ok: false, reason: "not-running", message: result.message };
   }
   if (!result.ok) return clientFailure(result);

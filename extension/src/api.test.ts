@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 import { fetchProjects, fetchTimer, startTimer, stopTimer, type FetchLike } from "./api";
-import { API_PROJECT_INACTIVE } from "./copy";
 
 const config = { serverUrl: "http://127.0.0.1:3000/", token: "ulixdesk_secret" };
 const timer = {
@@ -24,10 +23,6 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 describe("extension API client", () => {
-  it("keeps the API error strings it matches", () => {
-    expect(API_PROJECT_INACTIVE).toBe(timeCopy.projectInactive);
-  });
-
   it("sends the bearer token only to the server origin", async () => {
     const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
     const fetchImpl: FetchLike = async (url, init) => {
@@ -67,15 +62,23 @@ describe("extension API client", () => {
       reason: "unauthorized",
     });
 
-    const archived: FetchLike = async () => jsonResponse({ error: API_PROJECT_INACTIVE }, 400);
+    const archived: FetchLike = async () =>
+      jsonResponse({ error: timeCopy.projectInactive, code: "PROJECT_ARCHIVED" }, 400);
     expect(await startTimer(config, "old", "", archived)).toEqual({
       ok: false,
       reason: "archived",
-      message: API_PROJECT_INACTIVE,
+      message: timeCopy.projectInactive,
+    });
+
+    const archivedWithoutCode: FetchLike = async () =>
+      jsonResponse({ error: timeCopy.projectInactive }, 400);
+    expect(await startTimer(config, "old", "", archivedWithoutCode)).toMatchObject({
+      ok: false,
+      reason: "http",
     });
 
     const running: FetchLike = async () =>
-      jsonResponse({ error: timeCopy.timerAlready, timer }, 409);
+      jsonResponse({ error: timeCopy.timerAlready, code: "ALREADY_RUNNING", timer }, 409);
     expect(await startTimer(config, "website", "Note", running)).toEqual({
       ok: false,
       reason: "already-running",
@@ -95,11 +98,23 @@ describe("extension API client", () => {
       jsonResponse({ entry: { id: "timer-1" }, warnings: [timeCopy.overlap] });
     expect(await stopTimer(config, stopped)).toEqual({ ok: true, warnings: [timeCopy.overlap] });
 
-    const tooShort: FetchLike = async () => jsonResponse({ error: timeCopy.timerShort }, 409);
+    const tooShort: FetchLike = async () =>
+      jsonResponse({ error: timeCopy.timerShort, code: "TOO_SHORT" }, 409);
     expect(await stopTimer(config, tooShort)).toEqual({
       ok: false,
       reason: "too-short",
       message: timeCopy.timerShort,
     });
+
+    const notRunning: FetchLike = async () =>
+      jsonResponse({ error: timeCopy.timerNone, code: "NOT_RUNNING" }, 404);
+    expect(await stopTimer(config, notRunning)).toEqual({
+      ok: false,
+      reason: "not-running",
+      message: timeCopy.timerNone,
+    });
+
+    const statusOnly: FetchLike = async () => jsonResponse({ error: timeCopy.timerShort }, 409);
+    expect(await stopTimer(config, statusOnly)).toMatchObject({ ok: false, reason: "http" });
   });
 });

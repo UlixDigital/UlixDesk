@@ -1,5 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { extensionCorsHeaders, isChromeExtensionOrigin } from "@/lib/extension-cors";
+
+const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+const previousIds = process.env.ULIXDESK_EXTENSION_IDS;
+
+afterEach(() => {
+  if (previousIds === undefined) delete process.env.ULIXDESK_EXTENSION_IDS;
+  else process.env.ULIXDESK_EXTENSION_IDS = previousIds;
+});
 
 function headers(origin?: string) {
   return {
@@ -13,8 +21,9 @@ function headers(origin?: string) {
 }
 
 describe("extension CORS", () => {
-  it("reflects a chrome-extension origin and ignores every other origin", () => {
-    const origin = "chrome-extension://abcdefghijklmnopqrstuvwxyzabcdef";
+  it("reflects an allowlisted chrome-extension id and ignores every other origin", () => {
+    process.env.ULIXDESK_EXTENSION_IDS = `${EXTENSION_ID}, not-an-id`;
+    const origin = `chrome-extension://${EXTENSION_ID}`;
     expect(isChromeExtensionOrigin(origin)).toBe(true);
     expect(isChromeExtensionOrigin("https://evil.test")).toBe(false);
     expect(isChromeExtensionOrigin("chrome-extension://")).toBe(false);
@@ -29,5 +38,13 @@ describe("extension CORS", () => {
     expect(extensionCorsHeaders(headers("https://evil.test")).get("access-control-allow-origin")).toBeNull();
     expect(extensionCorsHeaders(headers()).get("access-control-allow-origin")).toBeNull();
     expect(extensionCorsHeaders(headers("http://localhost:3000")).get("access-control-allow-origin")).toBeNull();
+    expect(
+      extensionCorsHeaders(headers("chrome-extension://bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")).get(
+        "access-control-allow-origin",
+      ),
+    ).toBeNull();
+
+    process.env.ULIXDESK_EXTENSION_IDS = "";
+    expect(extensionCorsHeaders(headers(origin)).get("access-control-allow-origin")).toBeNull();
   });
 });

@@ -1,4 +1,5 @@
 import { findUsableAccessToken, markAccessTokenUsed, parseBearerToken } from "@/lib/access-tokens";
+import { apiCodes, apiError } from "@/lib/api-errors";
 import { extensionCorsHeaders, withExtensionCors } from "@/lib/extension-cors";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
@@ -13,7 +14,7 @@ export function jsonApi(request: Request, body: unknown, status = 200) {
 export function optionsResponse(request: Request) {
   const headers = extensionCorsHeaders(request);
   if (!headers.has("Access-Control-Allow-Origin")) {
-    return Response.json({ error: timeCopy.originForbidden }, { status: 403 });
+    return Response.json(apiError(timeCopy.originForbidden, apiCodes.ORIGIN_FORBIDDEN), { status: 403 });
   }
   headers.set("cache-control", "no-store");
   return new Response(null, { status: 204, headers });
@@ -33,9 +34,9 @@ export async function authorizeApiRequest(request: Request, options: { requireJs
   const header = request.headers.get("authorization");
   if (header !== null) {
     const token = parseBearerToken(header);
-    if (!token) return jsonApi(request, { error: tokenCopy.bearerRequired }, 401);
+    if (!token) return jsonApi(request, apiError(tokenCopy.bearerRequired, apiCodes.BEARER_REQUIRED), 401);
     const row = await findUsableAccessToken(token);
-    if (!row) return jsonApi(request, { error: tokenCopy.tokenRejected }, 401);
+    if (!row) return jsonApi(request, apiError(tokenCopy.tokenRejected, apiCodes.TOKEN_INVALID), 401);
     await markAccessTokenUsed(row.id);
     return null;
   }

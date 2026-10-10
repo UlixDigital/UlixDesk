@@ -15,6 +15,7 @@ let failure: ClientFailure | null = null;
 let projectId = "";
 let note = "";
 let archivedNotice = false;
+let startedHere = false;
 let alertMessage: string | null = null;
 let loading = true;
 let busy = false;
@@ -29,6 +30,8 @@ function requestBadgeRefresh() {
 
 async function load() {
   loading = true;
+  startedHere = false;
+  archivedNotice = false;
   render();
   const settings = await readSettings();
   serverUrl = settings.serverUrl;
@@ -61,7 +64,7 @@ async function load() {
     projects &&
     !projects.some((project) => project.id === settings.lastProjectId)
   ) {
-    archivedNotice = true;
+    archivedNotice = projects.length > 0;
     projectId = "";
     await writeSettings({ lastProjectId: "" });
   }
@@ -82,6 +85,7 @@ function render() {
     note,
     now: Date.now(),
     archivedNotice,
+    startedHere,
     alert: alertMessage,
     loading,
   });
@@ -264,10 +268,12 @@ async function onStart() {
     timer = result.timer;
     note = "";
     archivedNotice = false;
+    startedHere = true;
     alertMessage = null;
     failure = null;
   } else if (result.reason === "already-running") {
     timer = result.timer;
+    startedHere = false;
     alertMessage = null;
     failure = null;
   } else if (result.reason === "archived") {

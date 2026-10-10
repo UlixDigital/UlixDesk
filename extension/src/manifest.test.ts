@@ -1,9 +1,19 @@
+import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { settingsFromStored } from "./storage";
 
 const extensionRoot = path.resolve("extension");
+
+function chromeExtensionId(key: string) {
+  const digest = createHash("sha256").update(Buffer.from(key, "base64")).digest();
+  return Buffer.from(digest.subarray(0, 16))
+    .toString("hex")
+    .split("")
+    .map((nibble) => String.fromCharCode(97 + Number.parseInt(nibble, 16)))
+    .join("");
+}
 
 describe("extension manifest and storage", () => {
   it("requests host access only as an optional permission, never all urls", () => {
@@ -15,6 +25,7 @@ describe("extension manifest and storage", () => {
     expect(JSON.stringify(manifest)).not.toContain("<all_urls>");
     expect(manifest.background.service_worker).toBe("background.js");
     expect(manifest.action.default_popup).toBe("popup.html");
+    expect(chromeExtensionId(manifest.key)).toBe("cjlaoflbipaehclleojofopapalhiooe");
   });
 
   it("reads settings from local storage values and never sync storage or logs", () => {

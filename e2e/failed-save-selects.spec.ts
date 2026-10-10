@@ -212,3 +212,28 @@ test("renders extension access before a token exists", async ({ page }) => {
   await expect(page.getByText("No access tokens")).toBeVisible();
   await expect(page.getByRole("button", { name: "Create token" })).toBeEnabled();
 });
+
+test("keeps a long token name inside the table and leaves Revoke on screen", async ({ page }) => {
+  const name = "n".repeat(80);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/settings");
+  await page.locator("#token-name").fill(name);
+  await page.getByRole("button", { name: "Create token" }).click();
+  const nameCell = page.locator("table").getByTitle(name);
+  await expect(nameCell).toBeVisible();
+  await expect(nameCell).toHaveText(name);
+  const revoke = page.getByRole("button", { name: `Revoke ${name}` });
+  await expect(revoke).toBeVisible();
+  const fits = await page.locator("table").evaluate((table) => {
+    const wrapper = table.parentElement;
+    if (!wrapper) return false;
+    return wrapper.scrollWidth <= wrapper.clientWidth + 1 && table.scrollWidth <= wrapper.clientWidth + 1;
+  });
+  expect(fits).toBe(true);
+  const revokeBox = await revoke.boundingBox();
+  const viewport = page.viewportSize();
+  expect(revokeBox).not.toBeNull();
+  if (!revokeBox) return;
+  expect(revokeBox.x + revokeBox.width).toBeLessThanOrEqual((viewport?.width ?? 768) + 1);
+  await prisma.accessToken.deleteMany({ where: { name } });
+});

@@ -46,6 +46,18 @@ describe("access tokens", () => {
     const used = await prisma.accessToken.findUniqueOrThrow({ where: { id: created.record.id } });
     expect(used.lastUsedAt?.toISOString()).toBe(usedAt.toISOString());
 
+    const heldAt = new Date(usedAt.getTime() + 59_999);
+    await markAccessTokenUsed(created.record.id, heldAt);
+    const held = await prisma.accessToken.findUniqueOrThrow({ where: { id: created.record.id } });
+    expect(held.lastUsedAt?.toISOString()).toBe(usedAt.toISOString());
+
+    const later = new Date(usedAt.getTime() + 60_000);
+    await markAccessTokenUsed(created.record.id, later);
+    const refreshed = await prisma.accessToken.findUniqueOrThrow({
+      where: { id: created.record.id },
+    });
+    expect(refreshed.lastUsedAt?.toISOString()).toBe(later.toISOString());
+
     const revoked = await revokeAccessToken(created.record.id);
     expect(revoked).toEqual({ ok: true, already: false });
     expect(await revokeAccessToken(created.record.id)).toEqual({ ok: true, already: true });
