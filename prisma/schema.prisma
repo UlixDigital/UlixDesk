@@ -46,8 +46,40 @@ model Project {
   archivedAt  DateTime?
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
+  timeEntries TimeEntry[]
 
   @@index([clientId])
   @@index([archivedAt])
   @@index([name])
+}
+
+/// One block of tracked time. `endedAt` is null only while its timer is running.
+/// `userId` stays null until authentication exists. Every current row belongs to
+/// the single workspace. Adding accounts later means filling `userId` and using
+/// that id as `RunningTimer.id` — the time columns do not need to change.
+model TimeEntry {
+  id           String        @id @default(cuid())
+  projectId    String
+  project      Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
+  userId       String?
+  startedAt    DateTime
+  endedAt      DateTime?
+  billable     Boolean
+  note         String?
+  source       String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  runningTimer RunningTimer?
+
+  @@index([projectId])
+  @@index([userId, startedAt])
+  @@index([startedAt])
+  @@index([endedAt])
+}
+
+/// At most one running timer. The id is "workspace" until each user has an account.
+model RunningTimer {
+  id          String    @id
+  timeEntryId String    @unique
+  timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
 }

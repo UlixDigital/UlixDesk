@@ -9,11 +9,10 @@ import {
   updateClient,
 } from "@/lib/clients";
 import { prisma } from "@/lib/db";
+import { resetTestDatabase } from "@/lib/reset-test-db";
 
 async function resetDatabase() {
-  await prisma.project.deleteMany();
-  await prisma.clientEmail.deleteMany();
-  await prisma.client.deleteMany();
+  await resetTestDatabase();
 }
 
 beforeEach(resetDatabase);

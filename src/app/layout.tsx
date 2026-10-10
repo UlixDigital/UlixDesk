@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { TimezoneSync } from "@/components/timezone-sync";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -12,7 +13,7 @@ export const metadata: Metadata = {
     default: "UlixDesk",
     template: "%s · UlixDesk",
   },
-  description: "Internal client and project directory for UlixDesk time tracking.",
+  description: "Internal time tracking for UlixDesk.",
   robots: { index: false, follow: false },
 };
 
@@ -23,7 +24,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${geistSans.className} antialiased`}>{children}</body>
+      <body className={`${geistSans.className} antialiased`}>
+        <TimezoneSync />
+        {children}
+      </body>
     </html>
   );
 }

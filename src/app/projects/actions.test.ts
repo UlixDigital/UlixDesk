@@ -17,6 +17,7 @@ import {
 } from "@/app/projects/actions";
 import { archiveClient, createClient } from "@/lib/clients";
 import { prisma } from "@/lib/db";
+import { resetTestDatabase } from "@/lib/reset-test-db";
 import { listProjects } from "@/lib/projects";
 import {
   emptyProjectFormValues,
@@ -37,9 +38,7 @@ function form(entries: Record<string, string>) {
 }
 
 async function resetDatabase() {
-  await prisma.project.deleteMany();
-  await prisma.clientEmail.deleteMany();
-  await prisma.client.deleteMany();
+  await resetTestDatabase();
 }
 
 async function makeClient(name: string) {

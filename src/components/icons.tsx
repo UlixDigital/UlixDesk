@@ -53,3 +53,12 @@ export function SearchIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function ClockIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="12" cy="12" r="8.25" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 7.75V12l2.75 2" />
+    </svg>
+  );
+}

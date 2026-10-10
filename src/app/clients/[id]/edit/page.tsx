@@ -4,9 +4,11 @@ import { saveClientAction } from "@/app/clients/actions";
 import { ClientForm } from "@/components/client-form";
 import { RestoreButton } from "@/components/client-row-actions";
 import { ClientProjects } from "@/components/client-projects";
+import { TrackedTime } from "@/components/tracked-time";
 import { clientsHref } from "@/lib/client-display";
 import { getClient } from "@/lib/clients";
 import { listProjectsForClient } from "@/lib/projects";
+import { trackedMsForClient } from "@/lib/time-entries";
 
 type EditPageProps = {
   params: Promise<{ id: string }>;
@@ -24,7 +26,10 @@ export default async function EditClientPage({ params }: EditPageProps) {
   const { id } = await params;
   const client = await getClient(id);
   if (!client) notFound();
-  const projects = await listProjectsForClient(client.id);
+  const [projects, trackedMs] = await Promise.all([
+    listProjectsForClient(client.id),
+    trackedMsForClient(client.id),
+  ]);
 
   const archived = client.archivedAt !== null;
 
@@ -59,7 +64,12 @@ export default async function EditClientPage({ params }: EditPageProps) {
           </div>
         ) : null
       }
-      after={<ClientProjects clientName={client.name} projects={projects} />}
+      after={
+        <div className="space-y-8">
+          <TrackedTime milliseconds={trackedMs} />
+          <ClientProjects clientName={client.name} projects={projects} />
+        </div>
+      }
     />
   );
 }

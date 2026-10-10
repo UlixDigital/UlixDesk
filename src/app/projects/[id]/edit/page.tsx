@@ -3,8 +3,10 @@ import { notFound } from "next/navigation";
 import { saveProjectAction } from "@/app/projects/actions";
 import { ProjectForm } from "@/components/project-form";
 import { RestoreButton } from "@/components/project-row-actions";
+import { TrackedTime } from "@/components/tracked-time";
 import { projectsHref, type ClientOption } from "@/lib/project-display";
 import { getProject, listClientChoices } from "@/lib/projects";
+import { trackedMsForProject } from "@/lib/time-entries";
 
 type EditPageProps = {
   params: Promise<{ id: string }>;
@@ -23,7 +25,10 @@ export default async function EditProjectPage({ params }: EditPageProps) {
   const project = await getProject(id);
   if (!project) notFound();
 
-  const choices = await listClientChoices(project.clientId);
+  const [choices, trackedMs] = await Promise.all([
+    listClientChoices(project.clientId),
+    trackedMsForProject(project.id),
+  ]);
   const clients: ClientOption[] = choices.map((client) => ({
     id: client.id,
     name: client.name,
@@ -62,6 +67,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
           </div>
         ) : null
       }
+      after={<TrackedTime milliseconds={trackedMs} />}
     />
   );
 }
