@@ -32,7 +32,7 @@ test("submits before JavaScript with POST instead of putting fields in the URL",
   await page.getByRole("button", { name: "Create project" }).click();
   expect(new URL(page.url()).search).toBe("");
   await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-  await expect(page.getByRole("link", { name })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(`^${name}\\b`) }).first()).toBeVisible();
 
   await context.addCookies([
     { name: "ulixdesk-timezone", value: "UTC", url: e2eOrigin },

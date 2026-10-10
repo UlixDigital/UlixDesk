@@ -52,7 +52,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs the Vitest unit tests against `prisma/test.db`. `npm run test:e2e` runs Playwright in Chromium. It covers failed saves on Add time and Add project, the header timer after start, stop, and an archived project, a submit before JavaScript, and the unpacked Chrome extension. Playwright starts its own `npm run dev` on [http://127.0.0.1:3100](http://127.0.0.1:3100) and does not reuse a server that is already running. That server uses `DATABASE_URL=file:./e2e.db` (`prisma/e2e.db`), which the run deletes and migrates before the tests. It does not read or write `prisma/dev.db`, so it cannot stop a timer you started with `npm run dev`.
+`npm test` runs the Vitest unit tests against `prisma/test.db`. `npm run test:e2e` runs Playwright in Chromium. It covers failed saves on Add time and Add project, the header timer after start, stop, and an archived project, a submit before JavaScript, and the unpacked Chrome extension. Playwright starts its own `npm run dev` on [http://127.0.0.1:3100](http://127.0.0.1:3100) and does not reuse a server that is already running. That server uses `DATABASE_URL=file:./e2e.db` (`prisma/e2e.db`), which the run deletes and migrates before Next starts. It does not read or write `prisma/dev.db`, so it cannot stop a timer you started with `npm run dev`. The extension test loads the unpacked build in headed Chromium. Chrome's permission dialog is outside the page, so that test needs a display plus `xdotool` and `ffmpeg` to click Allow.
 
 ## What shipped in Slice 1
 

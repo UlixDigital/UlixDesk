@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { chromium, expect, test } from "@playwright/test";
+import { acceptChromePermissionDialog } from "./chrome-allow";
 import { e2eDatabaseUrl, e2eOrigin } from "./env";
 
 if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
@@ -51,6 +52,7 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Grant permission" }).click();
+    acceptChromePermissionDialog();
     await expect(page.getByText("Chrome can reach this server.")).toBeVisible();
     await page.getByRole("button", { name: "Test connection" }).click();
     await expect(
