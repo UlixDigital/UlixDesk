@@ -204,5 +204,47 @@ describe("controlled selects after a failed save", () => {
     const project = document.getElementById("timer-project") as HTMLSelectElement;
     expect(project.value).toBe("");
     expect(document.body.textContent).toContain(timeCopy.timerProjectGone);
+    expect(window.sessionStorage.getItem("ulixdesk-timer-project")).toBeNull();
+
+    await act(async () => {
+      root?.unmount();
+    });
+    root = null;
+    await render(
+      createElement(TimerControls, {
+        projects: [{ id: "other", name: "Other", clientName: null }],
+        timer: null,
+        serverNow,
+      }),
+    );
+    expect(document.body.textContent).not.toContain(timeCopy.timerProjectGone);
+    expect(document.body.textContent).toContain(timeCopy.chooseProject);
+  });
+
+  it("posts the project form so a click before hydration is not a GET", async () => {
+    let calls = 0;
+    const initial: ProjectFormState = { errors: {}, values: emptyProjectFormValues };
+    await render(
+      createElement(ProjectForm, {
+        action: async () => {
+          calls += 1;
+          return {
+            errors: { name: "Name is required." },
+            values: emptyProjectFormValues,
+          };
+        },
+        initialState: initial,
+        title: "Add project",
+        description: "Create a project",
+        submitLabel: "Create project",
+        cancelHref: "/projects",
+        clients: [],
+      }),
+    );
+    const form = document.querySelector("form");
+    expect(form?.getAttribute("action")).not.toBeNull();
+    await submit(form!);
+    expect(calls).toBe(1);
+    expect(document.body.textContent).toContain("Name is required.");
   });
 });

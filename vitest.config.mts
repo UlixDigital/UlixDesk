@@ -17,7 +17,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: "file:./test.db",
     },
-    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx", "extension/**/*.test.ts"],
   },
   resolve: {
     alias: {

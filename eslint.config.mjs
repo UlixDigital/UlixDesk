@@ -21,7 +21,16 @@ const eslintConfig = [
       "playwright-report/**",
       "test-results/**",
       "blob-report/**",
+      "extension/dist/**",
     ],
+  },
+  {
+    files: ["extension/**/*.ts", "extension/**/*.mjs"],
+    languageOptions: {
+      globals: {
+        chrome: "readonly",
+      },
+    },
   },
 ];
 

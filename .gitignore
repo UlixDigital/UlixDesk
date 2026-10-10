@@ -39,6 +39,12 @@ yarn-error.log*
 # sqlite databases
 *.db
 *.db-journal
+*.db-wal
+*.db-shm
+
+# unpacked Chrome extension build
+/extension/dist/
+/extension/ulixdesk-extension.zip
 
 # vercel
 .vercel

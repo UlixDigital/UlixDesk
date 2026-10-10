@@ -2,11 +2,9 @@
 
 UlixDesk is Ulix Digital's internal time-tracking app. The product follows the same shape as Hubstaff: a directory of clients, then projects, then time tracked against that work.
 
-This repository contains **Slice 1: Clients**, **Slice 2: Projects**, and **Slice 3: Timesheets**. The team can keep a directory of clients and projects, then track time against active projects with a manual entry or a timer in the app header.
+This repository contains **Slice 1: Clients**, **Slice 2: Projects**, **Slice 3: Timesheets**, and **Slice 4: the Chrome extension timer**. The team can keep a directory of clients and projects, track time in the app, and start or stop the same timer from Chrome.
 
-There is no login yet. Authentication comes later. The app is an internal MVP backed by a local database.
-
-The next time-tracking client is a Chrome extension, not a desktop app. The extension itself is not in this slice. The JSON API it will call is.
+There is no login yet. The Chrome extension authenticates with an access token created on the Extension access page. That token is not a user account. The app is an internal MVP backed by a local database.
 
 ## Stack
 
@@ -24,19 +22,20 @@ npx prisma migrate deploy
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). The home page redirects to [http://localhost:3000/clients](http://localhost:3000/clients). Projects live at [http://localhost:3000/projects](http://localhost:3000/projects). Timesheets live at [http://localhost:3000/timesheets](http://localhost:3000/timesheets).
+`npm run dev` listens on `127.0.0.1` only, so the app is not reachable from other machines on the network. Open [http://127.0.0.1:3000](http://127.0.0.1:3000). `localhost` still works, because it resolves to that address. The home page redirects to [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients). Projects live at [http://127.0.0.1:3000/projects](http://127.0.0.1:3000/projects). Timesheets live at [http://127.0.0.1:3000/timesheets](http://127.0.0.1:3000/timesheets). Extension access tokens live at [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings).
 
 `npm install` generates the Prisma client. `npx prisma migrate deploy` creates the local SQLite database at `prisma/dev.db` and applies every migration, including the Slice 3 time-entry migration (`20261009150000_time_entries`). That file is gitignored.
 
 If you already have a Slice 1 or Slice 2 database, run `npx prisma migrate deploy` again before starting the app. That adds the `TimeEntry` and `RunningTimer` tables. It does not delete clients or projects.
 
-`.env` only contains:
+`.env` contains:
 
 ```bash
 DATABASE_URL="file:./dev.db"
+ULIXDESK_EXTENSION_IDS="cjlaoflbipaehclleojofopapalhiooe"
 ```
 
-That value is a local file path, not a credential. Do not point this app at a production database.
+`DATABASE_URL` is a local file path, not a credential. Do not point this app at a production database. `ULIXDESK_EXTENSION_IDS` is the unpacked extension's public id, also not a secret. On OVH, set `ULIXDESK_APP_HOSTS` to that environment's public hostname before starting the app. See Extension API below.
 
 To wipe local data and reapply migrations:
 
@@ -54,7 +53,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs the Vitest unit tests. `npm run test:e2e` runs Playwright in Chromium against the app. It covers failed saves on Add time and Add project, and the header timer after start, stop, and an archived project. Playwright starts `npm run dev` on port 3000 when that port is free, and reuses a server that is already running. The e2e run uses the local SQLite database from `.env`.
+`npm test` runs the Vitest unit tests against `prisma/test.db`. `npm run test:e2e` runs Playwright in Chromium. It covers failed saves on Add time and Add project, the header timer after start, stop, and an archived project, a submit before JavaScript, and the unpacked Chrome extension. Playwright starts its own `npm run dev` on [http://127.0.0.1:3100](http://127.0.0.1:3100) and does not reuse a server that is already running. That server uses `DATABASE_URL=file:./e2e.db` (`prisma/e2e.db`), which the run deletes and migrates before Next starts. It does not read or write `prisma/dev.db`, so it cannot stop a timer you started with `npm run dev`. The extension test loads the unpacked build in headed Chromium. Chrome's permission dialog is outside the page, so that test needs a display plus `xdotool` and `ffmpeg` to click Allow.
 
 ## What shipped in Slice 1
 
@@ -88,11 +87,50 @@ Emails are stored in a related table because SQLite does not support Prisma scal
 
 A timer can still cross midnight. Editing an entry whose end is on another date shows that end date.
 
+## Chrome extension
+
+The extension is Manifest V3 and lives in `extension/`. It talks to whatever server URL you save (http or https), so the same build can point at localhost today and at dev, staging, or prod later. It is not published to the Chrome Web Store.
+
+Build the unpacked folder and the zip:
+
+```bash
+npm run build:extension
+```
+
+That writes `extension/dist` and `extension/ulixdesk-extension.zip`. Neither is committed.
+
+Load it in Chrome:
+
+1. Open `chrome://extensions`.
+2. Turn on Developer mode.
+3. Choose Load unpacked and select the `extension/dist` folder.
+
+Connect it:
+
+1. In the app, open Settings and create a token on Extension access. Copy the token. UlixDesk shows it once and stores only a hash.
+2. Open the extension options (right-click the toolbar button, then Options).
+3. Enter the server URL, for example `http://127.0.0.1:3000`, and paste the token.
+4. Choose Save. The token is stored in `chrome.storage.local` on that computer. It is not stored in Chrome sync, and the extension does not write it to the console.
+5. Choose Grant permission and allow that server. The extension requests only that origin.
+6. Choose Test connection. A success says the token can read projects.
+
+The unpacked manifest includes a public `key`, so Chrome assigns the same extension id on every computer: `cjlaoflbipaehclleojofopapalhiooe`. That id is already in `.env` as `ULIXDESK_EXTENSION_IDS`. To confirm it, open `chrome://extensions`, turn on Developer mode, and read the ID under the extension name. For any other build, put that id in `ULIXDESK_EXTENSION_IDS` (comma-separated if more than one).
+
+The public key is not a secret. It only keeps the unpacked id stable, so one `ULIXDESK_EXTENSION_IDS` value works everywhere. CORS still requires a valid access token. Someone who copies the public key into another unpacked extension can pass the CORS check, and still cannot authenticate without a token. Do not commit a private key. A later Chrome Web Store publish needs its own private key, kept out of this repo. That store id will be different, and it has to be added to `ULIXDESK_EXTENSION_IDS`.
+
 ## Extension API
 
-No authentication yet. The Chrome extension should call these from its service worker. Responses are JSON. Times are UTC ISO-8601 strings.
+`GET /api/projects`, `GET /api/timer`, `POST /api/timer/start`, and `POST /api/timer/stop` accept `Authorization: Bearer <token>`. Responses are JSON. Times are UTC ISO-8601 strings. Successful and error responses send `Cache-Control: no-store`.
 
-`POST /api/timer/start` and `POST /api/timer/stop` require `Content-Type: application/json` (`415` `{ "error": "Content-Type must be application/json." }` otherwise). A request with an `Origin` header is accepted when that origin is the app's own origin. The app origin is `request.url` and the `Host` header. `localhost`, `127.0.0.1`, and `::1` on that same port count as the same origin, so a call through `http://127.0.0.1:3000` is accepted when the app is also on port 3000. Node reports an IPv6 hostname as `[::1]`; that bracketed form is treated as `::1`. Any other origin gets `403` `{ "error": "This origin can't control the timer." }`. Requests with no `Origin` header are still accepted, which covers the extension service worker and local tools. To allow the extension's origin later, add it to `TIMER_API_ORIGIN_ALLOWLIST` in `src/lib/timer-api-guard.ts`, or set `ULIXDESK_TIMER_ORIGINS` to a comma-separated list such as `chrome-extension://<extension-id>`. CORS response headers, the extension's `host_permissions`, and Host-header / DNS-rebinding hardening (a Host allowlist or a token) are left for the extension slice.
+A valid token skips the origin and host checks. The extension can call the API from `chrome-extension://<id>` when that id is listed in `ULIXDESK_EXTENSION_IDS`. An `Authorization` header that is not a bearer token gets `401` `{ "error": "Send a Bearer access token.", "code": "BEARER_REQUIRED" }`. An unknown or revoked token gets `401` `{ "error": "That access token is invalid or has been revoked.", "code": "TOKEN_INVALID" }` and does not fall through to the same-origin rules. A bad token does not update last used. A valid token updates last used, and at most once a minute.
+
+Requests with no `Authorization` header keep the same-origin rules. `POST /api/timer/start` and `POST /api/timer/stop` require `Content-Type: application/json` (`415` `{ "error": "Content-Type must be application/json.", "code": "UNSUPPORTED_MEDIA_TYPE" }` otherwise), including when a token is sent. A request with an `Origin` header is accepted when that origin is this app. `localhost`, `127.0.0.1`, and `::1` on that same port count as the same origin, so a call through `http://127.0.0.1:3000` is accepted when the app is also on port 3000. Node reports an IPv6 hostname as `[::1]`; that bracketed form is treated as `::1`. Any other origin gets `403` `{ "error": "This origin can't control the timer.", "code": "ORIGIN_FORBIDDEN" }`. Requests with no `Origin` header are still accepted, which covers local tools.
+
+The host is trusted only when it is loopback (`localhost`, `127.0.0.1`, `::1`) or listed in `ULIXDESK_APP_HOSTS` (comma-separated host, host:port, or origin values, for example `desk.example.com,https://staging.example.com`). The same allowlist is applied by `src/middleware.ts` to every page, server action, and API route. An arbitrary `Host` is rejected with `403` and `"code": "HOST_FORBIDDEN"` even if `Origin` matches that host. Pages, server actions, and every other route, including `GET /api/projects`, return `{ "error": "This host isn't allowed to access UlixDesk.", "code": "HOST_FORBIDDEN" }`. `GET /api/timer`, `POST /api/timer/start`, and `POST /api/timer/stop` return `{ "error": "This host isn't allowed to control the timer.", "code": "HOST_FORBIDDEN" }`. That closes the DNS-rebinding hole where a page could point a public name at this server and send a matching Host and Origin, then call the create-token action and read the plaintext token. A request that sends `Authorization: Bearer <token>` to `GET /api/projects`, `GET /api/timer`, `POST /api/timer/start`, or `POST /api/timer/stop` is the only exception: middleware lets it through from any host, and the route still returns `401` for a bad token. `ULIXDESK_TIMER_ORIGINS` remains an extra origin allowlist for callers that do not send a token.
+
+On OVH, set `ULIXDESK_APP_HOSTS` to each environment's public hostname before the process starts. Production might be `desk.example.com` and staging `staging.example.com`. Without that variable, the site answers only on loopback.
+
+These four routes, and only these routes, answer CORS for chrome-extension origins whose id is in `ULIXDESK_EXTENSION_IDS`. `OPTIONS` returns `204` with `Access-Control-Allow-Origin` set to that exact origin, `Access-Control-Allow-Methods: GET, POST, OPTIONS`, and `Access-Control-Allow-Headers: Authorization, Content-Type`. Other origins, including other `chrome-extension://` ids and `https://` websites, get `403` and no CORS headers. Actual responses echo an allowlisted extension origin the same way, including on `401` and `403`, so the extension can read the error. CORS is not opened to arbitrary web origins. Error JSON keeps the human `error` string and adds a `code`.
 
 ### `GET /api/projects`
 
@@ -141,12 +179,15 @@ The running timer, or `{ "timer": null }`.
 ```
 
 - `201` `{ "timer": { ...same shape as GET /api/timer } }`
-- `400` `{ "error": "Choose a project." }` when `projectId` is blank
-- `400` `{ "error": "Choose an active project." }` when the project is archived
-- `404` `{ "error": "That project no longer exists." }` when the project id is unknown
-- `400` `{ "error": "Note must be 2000 characters or fewer." }`
-- `400` `{ "error": "Send a JSON body with a project id." }` when the body is not a JSON object with a string `projectId`
-- `409` `{ "error": "A timer is already running. Stop it before starting another.", "timer": { ... } }`
+- `400` `{ "error": "Choose a project.", "code": "PROJECT_REQUIRED" }` when `projectId` is blank
+- `400` `{ "error": "Choose an active project.", "code": "PROJECT_ARCHIVED" }` when the project is archived
+- `404` `{ "error": "That project no longer exists.", "code": "PROJECT_NOT_FOUND" }` when the project id is unknown
+- `400` `{ "error": "Note must be 2000 characters or fewer.", "code": "NOTE_TOO_LONG" }`
+- `400` `{ "error": "Send a JSON body with a project id.", "code": "INVALID_JSON" }` when the body is not a JSON object with a string `projectId`
+- `409` `{ "error": "A timer is already running. Stop it before starting another.", "code": "ALREADY_RUNNING", "timer": { ... } }`
+- `415` `{ "error": "Content-Type must be application/json.", "code": "UNSUPPORTED_MEDIA_TYPE" }`
+- `403` `{ "error": "This origin can't control the timer.", "code": "ORIGIN_FORBIDDEN" }`
+- `403` `{ "error": "This host isn't allowed to control the timer.", "code": "HOST_FORBIDDEN" }`
 
 ### `POST /api/timer/stop`
 
@@ -175,13 +216,22 @@ No JSON fields. Send `Content-Type: application/json`. The same origin rule as s
 
 `warnings` can include `This timer ran longer than 24 hours, so the saved entry was capped at 24 hours.` and `This time overlaps another entry. You can still save it.` `capped` is true when the saved end is exactly 24 hours after the start.
 
-- `404` `{ "error": "No timer is running." }`
-- `409` `{ "error": "Let the timer run for at least a second before stopping." }`
+- `404` `{ "error": "No timer is running.", "code": "NOT_RUNNING" }`
+- `409` `{ "error": "Let the timer run for at least a second before stopping.", "code": "TOO_SHORT" }`
+
+## What shipped in Slice 4
+
+- Extension access tokens. Settings creates a named token, shows the plaintext once, and stores a SHA-256 hash. The list shows name, created, last used, and Active or Revoked. Revoke keeps the row and stops the token.
+- Bearer auth on the timer API and `GET /api/projects`, plus CORS for `chrome-extension://` origins. Unauthenticated calls still follow the same-origin rules, and an untrusted Host is rejected.
+- A Chrome extension popup: project picker, optional note, Start and Stop, live elapsed time, and the running project and client. After this popup starts the timer, the status line says “Timer running”. Opening the popup while a timer is already running, including one started in the web app, says “A timer is already running.” If the last chosen project is archived and no active projects remain, the popup says “No active projects”. The toolbar badge shows a dot under one minute and elapsed minutes after that. Opening the popup refreshes the badge, and `chrome.alarms` checks about once a minute. The access token stays in `chrome.storage.local` on that computer.
+- Options for the server URL and token, Grant permission for that origin, and Test connection. The last chosen project is remembered. Host access is an optional permission requested for the saved origin only. There is no `<all_urls>` permission.
+
+A click on Add client, Add project, Add time, or the header timer before hydration posts the server action. An archived project id in the header is cleared after the notice is shown, so a reload does not repeat “That project is no longer active. Choose another project.”
 
 ## Deferred
 
-- Authentication and accounts
-- Chrome extension UI, including CORS response headers, extension `host_permissions`, and Host-header / DNS-rebinding hardening (a Host allowlist or a token)
+- User accounts and login beyond extension access tokens
+- Chrome Web Store publishing
 - Screenshots, activity, and idle tracking
 - Approvals and reasons
 - Reporting beyond the daily and weekly timesheets

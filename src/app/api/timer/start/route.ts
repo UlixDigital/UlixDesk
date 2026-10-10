@@ -1,30 +1,35 @@
-import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
+import { authorizeApiRequest, jsonApi, optionsResponse } from "@/lib/api-auth";
+import { apiError, timerFailureApiCode } from "@/lib/api-errors";
 import { serializeTimer } from "@/lib/time-api";
+import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { startTimer } from "@/lib/time-entries";
-import { timerApiRefusal } from "@/lib/timer-api-guard";
 
 export const dynamic = "force-dynamic";
 
+export function OPTIONS(request: Request) {
+  return optionsResponse(request);
+}
+
 export async function POST(request: Request) {
-  const refused = timerApiRefusal(request);
+  const refused = await authorizeApiRequest(request, { requireJson: true });
   if (refused) return refused;
 
   let body: unknown;
   try {
     body = await request.json();
   } catch {
-    return Response.json({ error: timeCopy.invalidJson }, { status: 400 });
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
   if (!body || typeof body !== "object" || Array.isArray(body)) {
-    return Response.json({ error: timeCopy.invalidJson }, { status: 400 });
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
 
   const record = body as Record<string, unknown>;
   if (typeof record.projectId !== "string") {
-    return Response.json({ error: timeCopy.invalidJson }, { status: 400 });
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
   if (record.note != null && typeof record.note !== "string") {
-    return Response.json({ error: timeCopy.invalidJson }, { status: 400 });
+    return jsonApi(request, apiError(timeCopy.invalidJson, "INVALID_JSON"), 400);
   }
 
   const result = await startTimer({
@@ -36,14 +41,15 @@ export async function POST(request: Request) {
   if (!result.ok) {
     const status =
       result.code === "already-running" ? 409 : result.code === "project-missing" ? 404 : 400;
-    return Response.json(
+    return jsonApi(
+      request,
       {
-        error: timerFailureMessage(result.code),
+        ...apiError(timerFailureMessage(result.code), timerFailureApiCode(result.code)),
         ...(result.timer ? { timer: serializeTimer(result.timer) } : {}),
       },
-      { status },
+      status,
     );
   }
 
-  return Response.json({ timer: serializeTimer(result.timer) }, { status: 201 });
+  return jsonApi(request, { timer: serializeTimer(result.timer) }, 201);
 }

@@ -56,8 +56,13 @@ export function TimerControls({
       setRememberedProjectId(remembered);
       return;
     }
+    if (remembered) {
+      setRememberedProjectId(remembered);
+      // Show the notice for this page view, then forget the id so a reload
+      // does not repeat it.
+      writeTimerProject("");
+    }
     setProjectId("");
-    setRememberedProjectId(remembered);
   }, [projects]);
 
   useEffect(() => {
@@ -193,6 +198,7 @@ function IdleTimer({
 }) {
   return (
     <form
+      action={action}
       className="flex flex-col gap-3 sm:flex-row sm:items-center"
       onSubmit={(event) => submitWithoutFormReset(event, action)}
     >
