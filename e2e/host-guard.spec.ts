@@ -40,7 +40,7 @@ test("rejects an untrusted Host on pages and server actions, and still accepts b
   const evilPage = await rawRequest({ path: "/settings", host: "evil.test:3100" });
   expect(evilPage.status).toBe(403);
   expect(JSON.parse(evilPage.body)).toEqual({
-    error: timeCopy.hostForbidden,
+    error: timeCopy.hostDenied,
     code: apiCodes.HOST_FORBIDDEN,
   });
 
@@ -55,9 +55,25 @@ test("rejects an untrusted Host on pages and server actions, and still accepts b
   });
   expect(evilAction.status).toBe(403);
   expect(JSON.parse(evilAction.body)).toEqual({
-    error: timeCopy.hostForbidden,
+    error: timeCopy.hostDenied,
     code: apiCodes.HOST_FORBIDDEN,
   });
+
+  const evilProjects = await rawRequest({ path: "/api/projects", host: "evil.test:3100" });
+  expect(evilProjects.status).toBe(403);
+  expect(JSON.parse(evilProjects.body)).toEqual({
+    error: timeCopy.hostDenied,
+    code: apiCodes.HOST_FORBIDDEN,
+  });
+
+  for (const path of ["/api/timer", "/api/timer/start", "/api/timer/stop"]) {
+    const evilTimer = await rawRequest({ path, host: "evil.test:3100" });
+    expect(evilTimer.status).toBe(403);
+    expect(JSON.parse(evilTimer.body)).toEqual({
+      error: timeCopy.hostForbidden,
+      code: apiCodes.HOST_FORBIDDEN,
+    });
+  }
 
   const loopback = await rawRequest({ path: "/settings", host: "127.0.0.1:3100" });
   expect(loopback.status).toBe(200);

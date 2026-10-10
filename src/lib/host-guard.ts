@@ -1,6 +1,5 @@
 import { apiCodes, apiError } from "@/lib/api-errors";
-import { timeCopy } from "@/lib/time-copy";
-import { hostIsTrusted } from "@/lib/timer-api-guard";
+import { hostForbiddenMessage, hostIsTrusted } from "@/lib/timer-api-guard";
 
 /** Routes that accept a bearer token and therefore skip the Host allowlist. */
 export const TOKEN_API_PATHS = [
@@ -23,8 +22,8 @@ export function bearerSkipsHostCheck(pathname: string, authorization: string | n
   return BEARER_TOKEN.test(authorization.trim());
 }
 
-export function untrustedHostBody() {
-  return apiError(timeCopy.hostForbidden, apiCodes.HOST_FORBIDDEN);
+export function untrustedHostBody(pathname: string) {
+  return apiError(hostForbiddenMessage(pathname), apiCodes.HOST_FORBIDDEN);
 }
 
 /**
@@ -39,7 +38,7 @@ export function hostGuardRefusal(input: {
 }): Response | null {
   if (bearerSkipsHostCheck(input.pathname, input.authorization)) return null;
   if (hostIsTrusted(input.host)) return null;
-  return Response.json(untrustedHostBody(), {
+  return Response.json(untrustedHostBody(input.pathname), {
     status: 403,
     headers: { "cache-control": "no-store" },
   });

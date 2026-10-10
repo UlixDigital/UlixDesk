@@ -84,6 +84,16 @@ describe("timer API origin", () => {
     );
     expect(fromUrl?.status).toBe(403);
     expect(await fromUrl?.json()).toEqual({ error: timeCopy.hostForbidden, code: "HOST_FORBIDDEN" });
+
+    const projects = timerApiRefusal(
+      request({
+        url: "http://localhost:3000/api/projects",
+        host: "evil.example",
+        origin: "http://evil.example",
+      }),
+    );
+    expect(projects?.status).toBe(403);
+    expect(await projects?.json()).toEqual({ error: timeCopy.hostDenied, code: "HOST_FORBIDDEN" });
   });
 
   it("allows a configured host only when the origin matches it", async () => {

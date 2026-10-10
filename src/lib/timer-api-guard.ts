@@ -80,6 +80,14 @@ export function hostnameFromHost(host: string) {
   }
 }
 
+/** Timer routes keep the timer host message. Every other path uses the app message. */
+export function hostForbiddenMessage(pathname: string) {
+  if (pathname === "/api/timer" || pathname.startsWith("/api/timer/")) {
+    return timeCopy.hostForbidden;
+  }
+  return timeCopy.hostDenied;
+}
+
 export function hostIsTrusted(host: string | null | undefined) {
   if (!host) return false;
   const hostname = hostnameFromHost(host);
@@ -147,7 +155,9 @@ export function unauthenticatedApiRefusal(request: HeaderSource): Response | nul
   const hostHeader = request.headers.get("host")?.trim();
   const host = hostHeader || page.host;
   if (!hostIsTrusted(host)) {
-    return Response.json(apiError(timeCopy.hostForbidden, apiCodes.HOST_FORBIDDEN), { status: 403 });
+    return Response.json(apiError(hostForbiddenMessage(page.pathname), apiCodes.HOST_FORBIDDEN), {
+      status: 403,
+    });
   }
 
   const origin = request.headers.get("origin");

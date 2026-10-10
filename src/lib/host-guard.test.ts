@@ -22,7 +22,7 @@ describe("host guard", () => {
     expect(page?.status).toBe(403);
     expect(page?.headers.get("cache-control")).toBe("no-store");
     expect(await page?.json()).toEqual({
-      error: timeCopy.hostForbidden,
+      error: timeCopy.hostDenied,
       code: apiCodes.HOST_FORBIDDEN,
     });
 
@@ -33,9 +33,33 @@ describe("host guard", () => {
     });
     expect(action?.status).toBe(403);
     expect(await action?.json()).toEqual({
-      error: timeCopy.hostForbidden,
+      error: timeCopy.hostDenied,
       code: apiCodes.HOST_FORBIDDEN,
     });
+
+    const projects = hostGuardRefusal({
+      pathname: "/api/projects",
+      host: "evil.test:3000",
+      authorization: null,
+    });
+    expect(projects?.status).toBe(403);
+    expect(await projects?.json()).toEqual({
+      error: timeCopy.hostDenied,
+      code: apiCodes.HOST_FORBIDDEN,
+    });
+
+    for (const pathname of ["/api/timer", "/api/timer/start", "/api/timer/stop"]) {
+      const timer = hostGuardRefusal({
+        pathname,
+        host: "evil.test:3000",
+        authorization: null,
+      });
+      expect(timer?.status).toBe(403);
+      expect(await timer?.json()).toEqual({
+        error: timeCopy.hostForbidden,
+        code: apiCodes.HOST_FORBIDDEN,
+      });
+    }
   });
 
   it("allows loopback and hosts listed in ULIXDESK_APP_HOSTS", () => {
@@ -62,7 +86,7 @@ describe("host guard", () => {
     ).toBe(403);
   });
 
-  it("lets a bearer token skip the host check only on the token routes", () => {
+  it("lets a bearer token skip the host check only on the token routes", async () => {
     expect(bearerSkipsHostCheck("/api/projects", bearer)).toBe(true);
     expect(bearerSkipsHostCheck("/api/timer", "bearer token")).toBe(true);
     expect(bearerSkipsHostCheck("/api/timer/start", bearer)).toBe(true);
@@ -77,12 +101,15 @@ describe("host guard", () => {
         hostGuardRefusal({ pathname, host: "evil.test:3000", authorization: bearer }),
       ).toBeNull();
     }
-    expect(
-      hostGuardRefusal({
-        pathname: "/api/projects",
-        host: "evil.test:3000",
-        authorization: null,
-      })?.status,
-    ).toBe(403);
+    const projects = hostGuardRefusal({
+      pathname: "/api/projects",
+      host: "evil.test:3000",
+      authorization: null,
+    });
+    expect(projects?.status).toBe(403);
+    expect(await projects?.json()).toEqual({
+      error: timeCopy.hostDenied,
+      code: apiCodes.HOST_FORBIDDEN,
+    });
   });
 });
