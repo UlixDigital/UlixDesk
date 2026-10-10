@@ -10,6 +10,7 @@ import {
   type TimerActionState,
 } from "@/app/timesheets/actions";
 import { ClockIcon } from "@/components/icons";
+import { keepControlledFormValues } from "@/components/keep-controlled-form";
 import { MAX_ENTRY_MS, timeCopy } from "@/lib/time-copy";
 import { formatElapsed } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
@@ -144,7 +145,11 @@ function IdleTimer({
 }) {
   const [projectId, setProjectId] = useState("");
   return (
-    <form action={action} className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <form
+      action={action}
+      className="flex flex-col gap-3 sm:flex-row sm:items-center"
+      onReset={keepControlledFormValues}
+    >
       <label htmlFor="timer-project" className="sr-only">
         Project
       </label>

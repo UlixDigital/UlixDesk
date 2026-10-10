@@ -14,6 +14,7 @@ import { listClientsForFilter } from "@/lib/projects";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { timeCopy } from "@/lib/time-copy";
 import {
+  getRunningTimer,
   listEntriesOverlapping,
   listProjectsForTimesheetFilter,
 } from "@/lib/time-entries";
@@ -24,6 +25,7 @@ import {
   formatWeekHeading,
   parseNotice,
   parseTimesheetView,
+  runningEntryForDay,
   timesheetsHref,
   type TimesheetView,
 } from "@/lib/timesheet";
@@ -69,24 +71,52 @@ export default async function TimesheetsPage({
   const client = clients.find((item) => item.id === (params.client ?? "").trim()) ?? null;
   const projectId = project?.id ?? "";
   const clientId = client?.id ?? "";
+  const now = new Date();
   const range = rangeFor(view, date, timeZone);
-  const entries = await listEntriesOverlapping({
-    rangeStart: range.start,
-    rangeEnd: range.end,
-    projectId: projectId || undefined,
-    clientId: clientId || undefined,
-  });
+  const [entries, runningRecord] = await Promise.all([
+    listEntriesOverlapping({
+      rangeStart: range.start,
+      rangeEnd: range.end,
+      projectId: projectId || undefined,
+      clientId: clientId || undefined,
+    }),
+    view === "day" ? getRunningTimer() : Promise.resolve(null),
+  ]);
   const filtered = Boolean(projectId || clientId);
   const notice = parseNotice(params.notice);
   const daily =
     view === "day"
       ? buildDailyTimesheet({ date, timeZone, entries })
       : null;
+  const running =
+    view === "day"
+      ? runningEntryForDay({
+          date,
+          timeZone,
+          now,
+          projectId,
+          clientId,
+          entry: runningRecord
+            ? {
+                id: runningRecord.id,
+                projectId: runningRecord.projectId,
+                projectName: runningRecord.project.name,
+                projectArchived: runningRecord.project.archivedAt !== null,
+                clientId: runningRecord.project.client?.id ?? null,
+                clientName: runningRecord.project.client?.name ?? null,
+                startedAt: runningRecord.startedAt,
+                billable: runningRecord.billable,
+                note: runningRecord.note,
+              }
+            : null,
+        })
+      : null;
   const weekly =
     view === "week"
       ? buildWeeklyTimesheet({ date, timeZone, entries })
       : null;
-  const empty = view === "day" ? daily!.rows.length === 0 : weekly!.rows.length === 0;
+  const empty =
+    view === "day" ? daily!.rows.length === 0 && !running : weekly!.rows.length === 0;
 
   return (
     <div>
@@ -171,7 +201,13 @@ export default async function TimesheetsPage({
           addHref={addTimeFor(date, projectId)}
         />
       ) : view === "day" && daily ? (
-        <DailyTimesheet date={date} rows={daily.rows} totalMs={daily.totalMs} />
+        <DailyTimesheet
+          date={date}
+          rows={daily.rows}
+          totalMs={daily.totalMs}
+          running={running}
+          serverNow={now.getTime()}
+        />
       ) : weekly ? (
         <WeeklyTimesheet
           dates={weekly.dates}

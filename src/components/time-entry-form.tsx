@@ -4,10 +4,11 @@ import Link from "next/link";
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
 import { saveTimeEntryAction } from "@/app/timesheets/actions";
+import { keepControlledFormValues } from "@/components/keep-controlled-form";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import { timeCopy } from "@/lib/time-copy";
-import { formatTrackedDuration } from "@/lib/timesheet";
+import { formatTrackedDuration, overnightDurationNotice } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
 import { zonedDateTimeToUtc } from "@/lib/time-zone";
 import {
@@ -101,7 +102,9 @@ export function TimeEntryForm({
     startTime,
     endTime,
   });
-  const durationLabel = durationReadout(date, startTime, resolvedEndDate, endTime, timeZone);
+  const durationMs = durationMilliseconds(date, startTime, resolvedEndDate, endTime, timeZone);
+  const durationLabel = durationMs === null ? "—" : formatTrackedDuration(durationMs);
+  const overnight = overnightDurationNotice(endsNextDay, durationMs);
   const overlap = hasLiveOverlap({
     date,
     startTime,
@@ -134,7 +137,12 @@ export function TimeEntryForm({
         {title}
       </h1>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
-      <form action={formAction} className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6" noValidate>
+      <form
+        action={formAction}
+        className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
+        noValidate
+        onReset={keepControlledFormValues}
+      >
         {entryId ? <input type="hidden" name="id" value={entryId} readOnly /> : null}
         <input type="hidden" name="timeZone" value={timeZone} readOnly />
         <input type="hidden" name="billable" value={billable ? "true" : "false"} readOnly />
@@ -253,14 +261,18 @@ export function TimeEntryForm({
         ) : null}
         <div className="rounded-lg bg-slate-50 px-4 py-3">
           <p className="text-xs font-medium text-slate-500">Duration</p>
-          <p className="mt-1 text-lg font-semibold text-slate-900" aria-live="polite">
-            {durationLabel}
-            {endsNextDay ? (
-              <span className="ml-3 text-sm font-medium text-slate-600">
-                {timeCopy.endsNextDay}
-              </span>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <p className="text-lg font-semibold text-slate-900" aria-live="polite">
+              {durationLabel}
+            </p>
+            {overnight.warning ? (
+              <p role="status" className="text-sm font-medium text-amber-800">
+                {overnight.warning}
+              </p>
+            ) : overnight.hint ? (
+              <p className="text-sm font-medium text-slate-600">{overnight.hint}</p>
             ) : null}
-          </p>
+          </div>
         </div>
         <div>
           <label className="flex cursor-pointer items-start gap-3">
@@ -324,7 +336,7 @@ function projectLabel(project: ProjectChoice) {
   return project.clientName ? `${name} · ${project.clientName}` : name;
 }
 
-function durationReadout(
+function durationMilliseconds(
   date: string,
   startTime: string,
   endDate: string,
@@ -333,8 +345,8 @@ function durationReadout(
 ) {
   const start = zonedDateTimeToUtc(date, startTime, timeZone);
   const end = zonedDateTimeToUtc(endDate, endTime, timeZone);
-  if (!start || !end || end <= start) return "—";
-  return formatTrackedDuration(end.getTime() - start.getTime());
+  if (!start || !end || end <= start) return null;
+  return end.getTime() - start.getTime();
 }
 
 function hasLiveOverlap(input: {

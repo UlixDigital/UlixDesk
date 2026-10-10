@@ -54,6 +54,7 @@ export const timeCopy = {
   continuesPrevious: "Continues from the previous day",
   endsNextDay: "Ends the next day",
   endDateHint: "This entry crosses midnight.",
+  runningBadge: "Running",
   stopBeforeDelete: "Stop the timer before deleting this entry.",
   invalidJson: "Send a JSON body with a project id.",
   jsonContentType: "Content-Type must be application/json.",
@@ -74,6 +75,12 @@ export const timeCopy = {
 export const NOTE_MAX = 2000;
 export const MAX_ENTRY_MS = 24 * 60 * 60 * 1000;
 export const MIN_TIMER_MS = 1000;
+export const LONG_OVERNIGHT_MS = 12 * 60 * 60 * 1000;
+
+/** Shown beside the duration when an automatic overnight roll is longer than 12 hours. */
+export function longOvernightWarning(duration: string) {
+  return `This entry is ${duration} long and ends the next day. Check the times.`;
+}
 
 export type TimerFailureCode =
   | "already-running"

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { DeleteTimeEntryButton } from "@/components/time-entry-delete";
+import { RunningEntryRow } from "@/components/running-entry-row";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import { timeCopy } from "@/lib/time-copy";
@@ -12,6 +13,7 @@ import {
   shiftTimesheetDate,
   timesheetsHref,
   type DailyRow,
+  type RunningDailyEntry,
   type TimesheetView,
   type WeeklyRow,
 } from "@/lib/timesheet";
@@ -21,10 +23,14 @@ export function DailyTimesheet({
   date,
   rows,
   totalMs,
+  running = null,
+  serverNow,
 }: {
   date: string;
   rows: DailyRow[];
   totalMs: number;
+  running?: RunningDailyEntry | null;
+  serverNow: number;
 }) {
   return (
     <div>
@@ -33,6 +39,9 @@ export function DailyTimesheet({
       </p>
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
         <ul className="divide-y divide-slate-200">
+          {running ? (
+            <RunningEntryRow entry={running} date={date} serverNow={serverNow} />
+          ) : null}
           {rows.map((row) => (
             <li key={row.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:px-5">
               <div>

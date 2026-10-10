@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { keepControlledFormValues } from "@/components/keep-controlled-form";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import type { ClientOption } from "@/lib/project-display";
@@ -103,6 +104,7 @@ export function ProjectForm({
         action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
+        onReset={keepControlledFormValues}
       >
         {projectId ? (
           <input type="hidden" name="id" value={projectId} readOnly />

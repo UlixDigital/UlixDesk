@@ -5,6 +5,8 @@ import {
   buildWeeklyTimesheet,
   formatElapsed,
   formatTrackedDuration,
+  overnightDurationNotice,
+  runningEntryForDay,
   timesheetEmptyCopy,
   timesheetsHref,
   type TimesheetEntry,
@@ -165,5 +167,99 @@ describe("timesheet totals and day boundaries", () => {
     expect(timesheetsHref({ view: "week", date: "2026-10-09", notice: "overlap" })).toBe(
       "/timesheets?view=week&date=2026-10-09&notice=overlap",
     );
+  });
+
+  it("warns when a rolled entry is longer than 12 hours and keeps the short hint at 12 hours", () => {
+    const hour = 60 * 60 * 1000;
+    expect(overnightDurationNotice(true, 23 * hour)).toEqual({
+      hint: null,
+      warning: "This entry is 23h long and ends the next day. Check the times.",
+    });
+    expect(overnightDurationNotice(true, 12 * hour)).toEqual({
+      hint: timeCopy.endsNextDay,
+      warning: null,
+    });
+    expect(overnightDurationNotice(true, 90 * 60 * 1000)).toEqual({
+      hint: timeCopy.endsNextDay,
+      warning: null,
+    });
+    expect(overnightDurationNotice(false, 23 * hour)).toEqual({
+      hint: null,
+      warning: null,
+    });
+  });
+
+  it("shows a running timer on the days it overlaps without adding it to completed totals", () => {
+    const running = {
+      id: "run-1",
+      projectId: "project-1",
+      projectName: "Website",
+      projectArchived: false,
+      clientId: "client-1",
+      clientName: "Acme",
+      startedAt: new Date("2026-10-09T15:00:00.000Z"),
+      billable: true,
+      note: "Draft",
+    };
+    const now = new Date("2026-10-09T15:30:00.000Z");
+    const today = runningEntryForDay({
+      date: "2026-10-09",
+      timeZone: "UTC",
+      now,
+      entry: running,
+    });
+    expect(today).toMatchObject({
+      id: "run-1",
+      startLabel: "3:00 PM",
+      startedAt: "2026-10-09T15:00:00.000Z",
+      continuesFromPrevious: false,
+      continuesToNext: false,
+    });
+    expect(
+      runningEntryForDay({
+        date: "2026-10-08",
+        timeZone: "UTC",
+        now,
+        entry: running,
+      }),
+    ).toBeNull();
+    expect(
+      runningEntryForDay({
+        date: "2026-10-09",
+        timeZone: "UTC",
+        now,
+        entry: running,
+        projectId: "other-project",
+      }),
+    ).toBeNull();
+    expect(
+      runningEntryForDay({
+        date: "2026-10-09",
+        timeZone: "UTC",
+        now,
+        entry: running,
+        clientId: "other-client",
+      }),
+    ).toBeNull();
+
+    const stillRunningYesterday = runningEntryForDay({
+      date: "2026-10-08",
+      timeZone: "UTC",
+      now: new Date("2026-10-09T15:30:00.000Z"),
+      entry: {
+        ...running,
+        startedAt: new Date("2026-10-08T23:00:00.000Z"),
+      },
+    });
+    expect(stillRunningYesterday?.continuesToNext).toBe(true);
+    expect(stillRunningYesterday?.startLabel).toBe("11:00 PM");
+
+    const completed = buildDailyTimesheet({
+      date: "2026-10-09",
+      timeZone: "UTC",
+      entries: [],
+    });
+    expect(completed.rows).toEqual([]);
+    expect(completed.totalMs).toBe(0);
   });
 });

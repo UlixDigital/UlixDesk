@@ -2,6 +2,11 @@ import path from "node:path";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+    },
+  },
   test: {
     environment: "node",
     fileParallelism: false,
@@ -12,7 +17,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: "file:./test.db",
     },
-    include: ["src/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "src/**/*.test.tsx"],
   },
   resolve: {
     alias: {

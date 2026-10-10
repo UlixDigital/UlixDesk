@@ -178,6 +178,31 @@ describe("extension API", () => {
     expect(await (await getTimer()).json()).toEqual({ timer: null });
   });
 
+  it("treats localhost, 127.0.0.1, and ::1 on the same port as this app", async () => {
+    const project = await createProject({
+      name: "Website",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    const viaLoopback = await startRoute(
+      post("http://localhost/api/timer/start", { projectId: project.id }, "http://127.0.0.1"),
+    );
+    expect(viaLoopback.status).toBe(201);
+    await prisma.timeEntry.updateMany({
+      where: { endedAt: null },
+      data: { startedAt: new Date(Date.now() - 2000) },
+    });
+    const stopped = await stopRoute(stopRequest("http://[::1]"));
+    expect(stopped.status).toBe(200);
+
+    const wrongPort = await startRoute(
+      post("http://localhost/api/timer/start", { projectId: project.id }, "http://127.0.0.1:3000"),
+    );
+    expect(wrongPort.status).toBe(403);
+    expect((await wrongPort.json()).error).toBe(timeCopy.originForbidden);
+  });
+
   it("rejects another website and accepts the app origin or an allowlisted one", async () => {
     const project = await createProject({
       name: "Website",

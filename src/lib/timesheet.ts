@@ -1,5 +1,5 @@
 import { countLabel } from "@/lib/client-display";
-import { timeCopy } from "@/lib/time-copy";
+import { LONG_OVERNIGHT_MS, longOvernightWarning, timeCopy } from "@/lib/time-copy";
 import {
   addCalendarDays,
   formatCivilDate,
@@ -25,6 +25,20 @@ export type TimesheetEntry = {
   billable: boolean;
   note: string | null;
   source: "manual" | "timer";
+};
+
+export type RunningDailyEntry = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  projectArchived: boolean;
+  clientName: string | null;
+  startLabel: string;
+  startedAt: string;
+  billable: boolean;
+  note: string | null;
+  continuesFromPrevious: boolean;
+  continuesToNext: boolean;
 };
 
 export type DailyRow = {
@@ -99,6 +113,24 @@ export function portionMs(
   const start = Math.max(startedAt.getTime(), rangeStart.getTime());
   const end = Math.min(endedAt.getTime(), rangeEnd.getTime());
   return Math.max(0, end - start);
+}
+
+/**
+ * Short overnight rolls keep “Ends the next day”.
+ * A roll longer than 12 hours warns with the real duration instead.
+ * Saving stays allowed either way.
+ */
+export function overnightDurationNotice(endsNextDay: boolean, durationMs: number | null) {
+  if (!endsNextDay || durationMs === null || durationMs <= 0) {
+    return { hint: null, warning: null };
+  }
+  if (durationMs > LONG_OVERNIGHT_MS) {
+    return {
+      hint: null,
+      warning: longOvernightWarning(formatTrackedDuration(durationMs)),
+    };
+  }
+  return { hint: timeCopy.endsNextDay, warning: null };
 }
 
 export function formatTrackedDuration(ms: number) {
@@ -300,4 +332,47 @@ export function buildWeeklyTimesheet(input: {
 
 export function shiftTimesheetDate(date: string, view: TimesheetView, by: number) {
   return addCalendarDays(date, view === "week" ? by * 7 : by);
+}
+
+type RunningSource = {
+  id: string;
+  projectId: string;
+  projectName: string;
+  projectArchived: boolean;
+  clientId: string | null;
+  clientName: string | null;
+  startedAt: Date;
+  billable: boolean;
+  note: string | null;
+};
+
+/** The running timer when it overlaps this local day and the active filters. Totals stay separate. */
+export function runningEntryForDay(input: {
+  date: string;
+  timeZone: string;
+  now: Date;
+  entry: RunningSource | null;
+  projectId?: string;
+  clientId?: string;
+}): RunningDailyEntry | null {
+  const entry = input.entry;
+  if (!entry) return null;
+  if (input.projectId && entry.projectId !== input.projectId) return null;
+  if (input.clientId && entry.clientId !== input.clientId) return null;
+  const dayStart = zonedDayStart(input.date, input.timeZone);
+  const dayEnd = zonedDayEnd(input.date, input.timeZone);
+  if (!(entry.startedAt < dayEnd && input.now >= dayStart)) return null;
+  return {
+    id: entry.id,
+    projectId: entry.projectId,
+    projectName: entry.projectName,
+    projectArchived: entry.projectArchived,
+    clientName: entry.clientName,
+    startLabel: formatZonedTime(entry.startedAt, input.timeZone),
+    startedAt: entry.startedAt.toISOString(),
+    billable: entry.billable,
+    note: entry.note,
+    continuesFromPrevious: entry.startedAt < dayStart,
+    continuesToNext: input.now > dayEnd,
+  };
 }

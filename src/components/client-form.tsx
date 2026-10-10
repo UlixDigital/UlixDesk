@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useActionState, useEffect, useId, useState, type ReactNode } from "react";
 import { useFormStatus } from "react-dom";
+import { keepControlledFormValues } from "@/components/keep-controlled-form";
 import { cn } from "@/lib/cn";
 import { ui } from "@/lib/ui";
 import { isValidEmail, type ClientFormState } from "@/lib/validation";
@@ -89,6 +90,7 @@ export function ClientForm({
         action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
+        onReset={keepControlledFormValues}
       >
         {clientId ? (
           <input type="hidden" name="id" value={clientId} readOnly />
