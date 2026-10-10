@@ -204,3 +204,11 @@ test("clears an archived header project with a visible message", async ({ page }
     });
   }
 });
+
+test("renders extension access before a token exists", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Extension access" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New token" })).toBeVisible();
+  await expect(page.getByText("No access tokens")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create token" })).toBeEnabled();
+});

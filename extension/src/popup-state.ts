@@ -79,7 +79,7 @@ export function derivePopup(input: {
   }
   if (input.failure) return failureModel(input.failure);
   if (!input.projects) return { kind: "loading" };
-  if (input.projects.length === 0) return { kind: "no-projects" };
+  if (input.projects.length === 0 && !input.archivedNotice) return { kind: "no-projects" };
 
   const known = input.projects.some((project) => project.id === input.projectId);
   return {

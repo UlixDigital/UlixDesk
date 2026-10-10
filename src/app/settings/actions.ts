@@ -3,20 +3,9 @@
 import { revalidatePath } from "next/cache";
 import { createAccessToken, parseTokenName, revokeAccessToken } from "@/lib/access-tokens";
 import { tokenCopy } from "@/lib/token-copy";
+import type { CreateTokenState } from "@/lib/token-form-state";
 
-export type CreateTokenState = {
-  errors: { name?: string; form?: string };
-  values: { name: string };
-  token: string | null;
-  tokenName: string | null;
-};
-
-export const emptyCreateTokenState: CreateTokenState = {
-  errors: {},
-  values: { name: "" },
-  token: null,
-  tokenName: null,
-};
+export type { CreateTokenState };
 
 export async function createAccessTokenAction(
   _previous: CreateTokenState,

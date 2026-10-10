@@ -83,5 +83,16 @@ describe("popup state", () => {
       notice: popupCopy.projectGone,
       helper: popupCopy.chooseProject,
     });
+
+    const onlyChoice = derivePopup({
+      ...base,
+      projects: [],
+      projectId: "old",
+      archivedNotice: true,
+    });
+    expect(onlyChoice).toMatchObject({
+      kind: "idle",
+      notice: popupCopy.projectGone,
+    });
   });
 });

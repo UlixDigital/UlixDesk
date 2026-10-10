@@ -3,15 +3,12 @@
 import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
-import {
-  createAccessTokenAction,
-  emptyCreateTokenState,
-  revokeAccessTokenAction,
-} from "@/app/settings/actions";
+import { createAccessTokenAction, revokeAccessTokenAction } from "@/app/settings/actions";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { KeyIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { formatTokenTimestamp, revokeTokenBody, tokenCopy } from "@/lib/token-copy";
+import { emptyCreateTokenState } from "@/lib/token-form-state";
 import { ui } from "@/lib/ui";
 
 type TokenRow = {
