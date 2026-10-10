@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>UlixDesk options</title>
+    <link rel="stylesheet" href="extension.css" />
+  </head>
+  <body class="options">
+    <main class="options-card">
+      <div class="brand">
+        <span class="mark">U</span>
+        <div class="brand-text">
+          <span class="brand-name">UlixDesk</span>
+          <span class="brand-meta">Extension options</span>
+        </div>
+      </div>
+      <h1>Connect to UlixDesk</h1>
+      <p class="intro">
+        Enter the server URL and an access token from the Extension access page. The token stays
+        in this browser, in local storage.
+      </p>
+      <div class="field">
+        <label class="label" for="server-url">Server URL</label>
+        <input
+          id="server-url"
+          name="serverUrl"
+          type="url"
+          inputmode="url"
+          autocomplete="off"
+          spellcheck="false"
+          placeholder="http://127.0.0.1:3000"
+        />
+        <p class="hint">Use http:// or https://, for example http://127.0.0.1:3000.</p>
+      </div>
+      <div class="field">
+        <label class="label" for="access-token">Access token</label>
+        <input
+          id="access-token"
+          name="token"
+          type="password"
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <p class="hint">Shown once when you create it in UlixDesk. It is stored only on this computer.</p>
+      </div>
+      <div class="actions">
+        <button id="save" type="button" class="button primary">Save</button>
+        <button id="grant" type="button" class="button secondary">Grant permission</button>
+        <button id="test" type="button" class="button secondary">Test connection</button>
+      </div>
+      <p id="status" class="status" role="status"></p>
+    </main>
+    <script type="module" src="options.js"></script>
+  </body>
+</html>

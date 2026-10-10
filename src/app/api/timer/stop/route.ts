@@ -1,28 +1,29 @@
-import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
+import { authorizeApiRequest, jsonApi, optionsResponse } from "@/lib/api-auth";
 import { serializeStoppedEntry } from "@/lib/time-api";
+import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import { stopTimer } from "@/lib/time-entries";
-import { timerApiRefusal } from "@/lib/timer-api-guard";
 
 export const dynamic = "force-dynamic";
 
+export function OPTIONS(request: Request) {
+  return optionsResponse(request);
+}
+
 export async function POST(request: Request) {
-  const refused = timerApiRefusal(request);
+  const refused = await authorizeApiRequest(request, { requireJson: true });
   if (refused) return refused;
 
   const result = await stopTimer(new Date());
   if (!result.ok) {
     const status = result.code === "too-short" ? 409 : 404;
-    return Response.json(
-      { error: timerFailureMessage(result.code) },
-      { status },
-    );
+    return jsonApi(request, { error: timerFailureMessage(result.code) }, status);
   }
 
   const warnings: string[] = [];
   if (result.capped) warnings.push(timeCopy.timerCapped);
   if (result.overlap) warnings.push(timeCopy.overlap);
 
-  return Response.json({
+  return jsonApi(request, {
     entry: serializeStoppedEntry(result.entry, result.capped),
     warnings,
   });
