@@ -130,14 +130,14 @@ export function AccessTokenSettings({
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
+          <div className="mt-4 w-full max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
             <table className="w-full table-fixed text-left text-sm">
               <colgroup>
-                <col className="w-[30%]" />
-                <col className="w-[22%]" />
-                <col className="w-[22%]" />
-                <col className="w-[12%]" />
-                <col className="w-[14%]" />
+                <col style={{ width: "30%" }} />
+                <col style={{ width: "22%" }} />
+                <col style={{ width: "22%" }} />
+                <col style={{ width: "12%" }} />
+                <col style={{ width: "14%" }} />
               </colgroup>
               <thead className="border-b border-slate-200 text-xs font-semibold tracking-wide text-slate-500 uppercase">
                 <tr>
@@ -161,23 +161,25 @@ export function AccessTokenSettings({
               <tbody className="divide-y divide-slate-100">
                 {tokens.map((token) => (
                   <tr key={token.id}>
-                    <th scope="row" className="max-w-0 px-4 py-3 font-medium text-slate-900">
-                      <span className="block truncate" title={token.name}>
-                        {token.name}
-                      </span>
+                    <th
+                      scope="row"
+                      title={token.name}
+                      className="max-w-0 truncate px-4 py-3 font-medium text-slate-900"
+                    >
+                      {token.name}
                     </th>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="max-w-0 overflow-hidden px-4 py-3 text-slate-700">
                       {formatTokenTimestamp(new Date(token.createdAt), timeZone)}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">
+                    <td className="max-w-0 overflow-hidden px-4 py-3 text-slate-700">
                       {token.lastUsedAt
                         ? formatTokenTimestamp(new Date(token.lastUsedAt), timeZone)
                         : tokenCopy.notUsed}
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="max-w-0 overflow-hidden px-4 py-3">
                       <Status revoked={Boolean(token.revokedAt)} />
                     </td>
-                    <td className="px-2 py-3 text-right whitespace-nowrap">
+                    <td className="max-w-0 overflow-hidden px-2 py-3 text-right">
                       {token.revokedAt ? null : (
                         <RevokeButton id={token.id} name={token.name} />
                       )}

@@ -224,12 +224,17 @@ test("keeps a long token name inside the table and leaves Revoke on screen", asy
   await expect(nameCell).toHaveText(name);
   const revoke = page.getByRole("button", { name: `Revoke ${name}` });
   await expect(revoke).toBeVisible();
-  const fits = await page.locator("table").evaluate((table) => {
+  const metrics = await page.locator("table").evaluate((table) => {
     const wrapper = table.parentElement;
-    if (!wrapper) return false;
-    return wrapper.scrollWidth <= wrapper.clientWidth + 1 && table.scrollWidth <= wrapper.clientWidth + 1;
+    return {
+      wrapperScroll: wrapper?.scrollWidth ?? -1,
+      wrapperClient: wrapper?.clientWidth ?? -1,
+      tableScroll: table.scrollWidth,
+      tableClient: table.clientWidth,
+    };
   });
-  expect(fits).toBe(true);
+  expect(metrics.tableScroll, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.wrapperClient + 1);
+  expect(metrics.wrapperScroll, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.wrapperClient + 1);
   const revokeBox = await revoke.boundingBox();
   const viewport = page.viewportSize();
   expect(revokeBox).not.toBeNull();
