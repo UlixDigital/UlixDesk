@@ -82,46 +82,23 @@ export function TeamPanel({
                 {roleLabel(person.role)} · {person.deactivated ? authCopy.deactivatedStatus : authCopy.active}
               </p>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {person.id !== actorId && roles.includes(person.role as UserRole) ? (
-                <form action={setRoleAction} className="flex items-center gap-2">
-                  <input type="hidden" name="userId" value={person.id} readOnly />
-                  <label className="sr-only" htmlFor={`role-${person.id}`}>
-                    {authCopy.roleLabel} for {person.name}
-                  </label>
-                  <select id={`role-${person.id}`} name="role" defaultValue={person.role} className={ui.input}>
-                    {roles.map((role) => (
-                      <option key={role} value={role}>
-                        {roleLabel(role)}
-                      </option>
-                    ))}
-                  </select>
-                  <button type="submit" className={ui.secondaryButton}>
-                    {authCopy.saveRole}
-                  </button>
-                </form>
-              ) : null}
-              {person.id !== actorId && (actorRole === "owner" || person.role !== "owner") ? (
-                <>
+            <div className="flex flex-col items-start gap-2">
+              <RoleForm person={person} roles={roles} />
+              <div className="flex flex-wrap items-center gap-2">
+                {person.id !== actorId ? (
                   <form action={resetAction}>
                     <input type="hidden" name="userId" value={person.id} readOnly />
                     <button type="submit" className={ui.secondaryButton}>
                       {authCopy.resetPassword}
                     </button>
                   </form>
-                  {person.deactivated ? (
-                    <form action={setActiveAction}>
-                      <input type="hidden" name="userId" value={person.id} readOnly />
-                      <input type="hidden" name="active" value="1" readOnly />
-                      <button type="submit" className={ui.primaryButton}>
-                        {authCopy.restore}
-                      </button>
-                    </form>
-                  ) : (
-                    <DeactivateButton id={person.id} name={person.name} />
-                  )}
-                </>
-              ) : null}
+                ) : null}
+                {person.deactivated ? (
+                  <ActiveForm person={person} active />
+                ) : (
+                  <DeactivateButton id={person.id} name={person.name} />
+                )}
+              </div>
             </div>
           </li>
         ))}
@@ -181,9 +158,56 @@ function AddButton() {
   );
 }
 
+function RoleForm({ person, roles }: { person: TeamRow; roles: UserRole[] }) {
+  const [state, action] = useActionState(setRoleAction, { error: null });
+  const options = roles.includes(person.role as UserRole) ? roles : [person.role as UserRole, ...roles];
+  return (
+    <form action={action} className="flex flex-wrap items-center gap-2">
+      <input type="hidden" name="userId" value={person.id} readOnly />
+      <label className="sr-only" htmlFor={`role-${person.id}`}>
+        {authCopy.roleLabel} for {person.name}
+      </label>
+      <select id={`role-${person.id}`} name="role" defaultValue={person.role} className={ui.input}>
+        {options.map((role) => (
+          <option key={role} value={role}>
+            {roleLabel(role)}
+          </option>
+        ))}
+      </select>
+      <button type="submit" className={ui.secondaryButton}>
+        {authCopy.saveRole}
+      </button>
+      {state.error ? (
+        <p role="alert" className="w-full text-sm text-rose-800">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
+function ActiveForm({ person, active }: { person: TeamRow; active: boolean }) {
+  const [state, action] = useActionState(setActiveAction, { error: null });
+  return (
+    <form action={action}>
+      <input type="hidden" name="userId" value={person.id} readOnly />
+      <input type="hidden" name="active" value={active ? "1" : "0"} readOnly />
+      <button type="submit" className={active ? ui.primaryButton : ui.dangerButton}>
+        {active ? authCopy.restore : authCopy.deactivateConfirm}
+      </button>
+      {state.error ? (
+        <p role="alert" className="mt-2 text-sm text-rose-800">
+          {state.error}
+        </p>
+      ) : null}
+    </form>
+  );
+}
+
 function DeactivateButton({ id, name }: { id: string; name: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  const [state, action] = useActionState(setActiveAction, { error: null });
   return (
     <>
       <button type="button" className={ui.secondaryButton} onClick={() => dialogRef.current?.showModal()}>
@@ -191,13 +215,18 @@ function DeactivateButton({ id, name }: { id: string; name: string }) {
         <span className="sr-only"> {name}</span>
       </button>
       <dialog ref={dialogRef} className="confirm-dialog" aria-labelledby={titleId}>
-        <form action={setActiveAction} className="w-[min(100%,28rem)] rounded-xl bg-white p-6 shadow-xl">
+        <form action={action} className="w-[min(100%,28rem)] rounded-xl bg-white p-6 shadow-xl">
           <input type="hidden" name="userId" value={id} readOnly />
           <input type="hidden" name="active" value="0" readOnly />
           <h2 id={titleId} className="text-lg font-semibold text-slate-900">
             {authCopy.deactivateTitle}
           </h2>
           <p className="mt-2 text-sm text-slate-600">{authCopy.deactivateBody}</p>
+          {state.error ? (
+            <p role="alert" className="mt-3 text-sm text-rose-800">
+              {state.error}
+            </p>
+          ) : null}
           <div className="mt-6 flex justify-end gap-2">
             <button type="button" className={ui.secondaryButton} onClick={() => dialogRef.current?.close()}>
               {authCopy.cancel}

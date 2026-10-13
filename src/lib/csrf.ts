@@ -1,4 +1,4 @@
-import { requestHeader } from "@/lib/request-headers";
+import { requestHeader, trustedForwardedHost, trustedForwardedProto } from "@/lib/request-headers";
 import { testState } from "@/lib/test-hooks";
 import { hostIsTrusted } from "@/lib/timer-api-guard";
 
@@ -29,17 +29,18 @@ function sameLoopbackPort(originHost: string, requestHost: string) {
  *    X-Forwarded-Host) the app was reached on, and that host must be
  *    loopback or ULIXDESK_APP_HOSTS. Next.js also refuses an action whose
  *    Origin does not match the host before the action runs.
- * Caddy forwards the public Host and sets X-Forwarded-Proto / X-Forwarded-Host.
- * The app and Postgres are not published on the host, so those headers come
- * from Caddy.
+ * Caddy sets Host, X-Forwarded-Host, and X-Forwarded-Proto, plus a shared
+ * secret header. Those forwarded headers are ignored unless the secret matches,
+ * so another container on the Docker network cannot spoof them. The app and
+ * Postgres publish no host ports.
  */
 export async function originAllowed() {
   if (process.env.VITEST === "true" && !testState.headers) return true;
 
   const origin = await requestHeader("origin");
-  const forwardedHost = (await requestHeader("x-forwarded-host"))?.split(",")[0]?.trim();
+  const forwardedHost = await trustedForwardedHost();
   const host = forwardedHost || (await requestHeader("host"))?.trim() || "";
-  const forwardedProto = (await requestHeader("x-forwarded-proto"))?.split(",")[0]?.trim();
+  const forwardedProto = await trustedForwardedProto();
   if (!origin || !host) return false;
 
   let originUrl: URL;

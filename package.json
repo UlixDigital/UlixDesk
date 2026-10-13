@@ -14,7 +14,8 @@
     "postinstall": "prisma generate",
     "db:up": "docker compose up -d postgres",
     "db:migrate": "prisma migrate deploy",
-    "user:bootstrap": "node scripts/bootstrap-owner.mjs"
+    "user:bootstrap": "node scripts/bootstrap-owner.mjs",
+    "import:sqlite": "node scripts/import-sqlite.mjs"
   },
   "dependencies": {
     "@node-rs/argon2": "^2.2.2",

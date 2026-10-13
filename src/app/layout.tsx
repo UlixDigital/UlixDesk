@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { StagingBanner } from "@/components/staging-banner";
 import { TimezoneSync } from "@/components/timezone-sync";
 import "./globals.css";
 
@@ -25,6 +26,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${geistSans.className} antialiased`}>
+        <StagingBanner />
         <TimezoneSync />
         {children}
       </body>

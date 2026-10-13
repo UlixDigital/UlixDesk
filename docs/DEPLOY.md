@@ -11,7 +11,7 @@ Two copies run on one small server:
 
 ### How a change reaches the team
 
-A developer opens a pull request. GitHub runs the checks (lint, types, unit tests, and the browser tests). After the pull request is merged into `main`, GitHub builds one image, stores it, and installs that image on staging. Nothing is typed into the server by hand for a normal change.
+A developer opens a pull request. GitHub runs the checks (lint, types, unit tests, and the browser tests). After the pull request is merged into `main`, those checks run again. Staging updates only if they pass. GitHub then builds one image, stores it, and installs that image on staging. Nothing is typed into the server by hand for a normal change.
 
 ### How a change reaches everyone
 
@@ -19,7 +19,7 @@ Production does not update by itself. Someone on the team opens GitHub → Actio
 
 ### If something breaks
 
-Say so in the team channel and stop using the broken page. The team can put production back on the previous image from the same **Deploy production** workflow by choosing **rollback**. That does not need a new commit. Staging can be put back the same way by deploying the previous commit id that was saved on the server.
+Say so in the team channel and stop using the broken page. The team can step production back from the same **Deploy production** workflow by choosing **rollback**. That goes back one deployed image. Run it again to step back further. It does not swap the two newest images, and it does not need a new commit.
 
 ### How to add a team member
 
@@ -38,10 +38,12 @@ One Docker Compose project:
 | Postgres 16 | 512 MB | none |
 | app-staging | 384 MB | none |
 | app-production | 384 MB | none |
-| Caddy | 64 MB | 80 and 443 |
+| Caddy | 64 MB | 80, 443, and 443/udp (HTTP/3) |
 | backup | 64 MB | none |
 
-Caddy is the only process on the public internet. It terminates HTTPS and forwards the real `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For`. The apps trust those headers because nothing else can reach them. Session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`.
+Caddy is the only process on the public internet. It terminates HTTPS and forwards the real `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For`, plus a shared secret header (`X-Ulixdesk-Proxy`). The apps trust the forwarded headers only when that secret matches `ULIXDESK_TRUSTED_PROXY_SECRET`. The apps and Postgres publish no host ports, and the deploy script starts each app with `--no-deps`, so the first staging deploy does not start production. Session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`.
+
+Staging sets `ULIXDESK_ENVIRONMENT=staging` and shows a banner: “Staging. This is the rehearsal copy, not the live tracker.” Production sets `ULIXDESK_ENVIRONMENT=production` and does not show it.
 
 `npm start` on a developer machine binds to `127.0.0.1`. Inside Docker the app listens on `0.0.0.0` so Caddy can reach it, and that port is not published on the host.
 
@@ -86,8 +88,11 @@ Caddy requests Let's Encrypt certificates for those names after the ports are op
 | `/opt/ulixdesk/env/postgres.env` | `env/postgres.env.example` |
 | `/opt/ulixdesk/env/staging.env` | `env/staging.env.example` |
 | `/opt/ulixdesk/env/production.env` | `env/production.env.example` |
+| `/opt/ulixdesk/env/caddy.env` | `env/caddy.env.example` |
 
-Local `npm run dev` uses `.env`, copied from `.env.example`.
+Local `npm run dev` uses `.env`, copied from `.env.example`. `.env` is not committed.
+
+`ULIXDESK_TRUSTED_PROXY_SECRET` is the same value in `caddy.env`, `staging.env`, and `production.env`. Leave it unset for `npm run dev`. The laptop then ignores `X-Forwarded-*` and counts sign-in attempts as `127.0.0.1`.
 
 Database passwords are letters and numbers only, because the first-boot SQL script inserts them. Session secrets are at least 32 characters, different per environment, and must not be the local development value on a `ulixdigital.com` host.
 
@@ -96,9 +101,9 @@ Database passwords are letters and numbers only, because the first-boot SQL scri
 ### First deploy
 
 1. Finish DNS, the server script, the three env files, and `docker login`.
-2. Merge to `main`. The **Deploy staging** workflow builds `ghcr.io/<owner>/<repo>:<commit sha>`, pushes it, copies the compose files to `/opt/ulixdesk`, and starts staging.
-3. Open staging, sign in as the bootstrap owner, and add the team.
-4. Run **Deploy production** with that same commit SHA.
+2. Merge to `main`. After CI succeeds, the **Deploy staging** workflow builds `ghcr.io/<owner>/<repo>:<commit sha>`, pushes it, copies the compose files to `/opt/ulixdesk`, and starts staging only. Production is not started with that image.
+3. Open staging, sign in as the bootstrap owner, change that password, and add the team.
+4. Run **Deploy production** with that same 40-character commit SHA. That is the first time the production container starts.
 
 The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next. The image turns Prisma telemetry off (`CHECKPOINT_DISABLE`) and points migrate at the query and schema engines already in the image, so a start does not download anything.
 
@@ -118,6 +123,31 @@ npm run dev
 ```
 
 Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
+
+After that first sign-in, on staging and on production:
+
+1. Open **Extension access** and use **Change password**. The current password is the bootstrap password. Choose a new one.
+2. Remove `ULIXDESK_BOOTSTRAP_PASSWORD` from that environment's env file. Leave the email and name if you like. Bootstrap will not change the password on the next start, because the account already exists.
+3. Recreate that app container so the process stops holding the old password. From `/opt/ulixdesk`:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-staging
+```
+
+Use `app-production` for the live copy. `restart` alone does not reload the env file.
+
+### Bringing across the Phase 1 database
+
+A new database starts empty. That is the default. To copy the old SQLite file (clients, projects, time entries, and the running timer) after the owner exists:
+
+```bash
+npm run import:sqlite -- --from /path/to/phase1.db --dry-run
+npm run import:sqlite -- --from /path/to/phase1.db
+```
+
+`--dry-run` prints the counts and writes nothing. The import assigns every time row to the earliest active owner. Run it again and it does nothing. If Postgres already has different clients, projects, or time, it refuses. Old extension tokens are not copied. After signing in, each person creates a new token under Extension access.
+
+`DATABASE_URL` must point at the database you mean to fill. Do not point it at production unless that database is the one you intend to fill.
 
 ### Backups and restore
 
@@ -139,19 +169,19 @@ Use `ulixdesk_staging` and stop `app-staging` for the rehearsal database. Take a
 
 ### Rollback
 
-Each deploy writes the image it replaced to `/opt/ulixdesk/staging-previous-tag` or `production-previous-tag`.
+Each deploy appends the image it started to `/opt/ulixdesk/staging-history` or `production-history`. The current image is also in `staging-tag` or `production-tag`.
 
-Production: Actions → **Deploy production** → **rollback**. A reviewer still has to approve, because the job uses the `production` GitHub Environment.
+Production: Actions → **Deploy production** → **rollback**. A reviewer still has to approve, because the job uses the `production` GitHub Environment. Each run removes the latest history line and starts the image that is now last. Run it again to step back further. It does not swap the two newest tags.
 
 From the server, for staging or if GitHub is unavailable:
 
 ```bash
 cd /opt/ulixdesk
-PREV=$(cat production-previous-tag)
-./scripts/remote-deploy.sh production "$PREV"
+./scripts/remote-deploy.sh production --rollback
+./scripts/remote-deploy.sh staging --rollback
 ```
 
-The `$(cat ...)` runs before the script replaces the tag file, so the previous id is kept. Run the same command with `staging-previous-tag` and `staging` for the rehearsal copy.
+The image reference must be `ghcr.io/<owner>/<repo>:<40-character sha>`. The promote workflow rejects any other `image_tag`.
 
 Create the GitHub Environment named `production` and add required reviewers before the first production run. Until those reviewers exist, GitHub will not ask anyone.
 
@@ -199,7 +229,7 @@ Set these on the repository. The values stay in GitHub. Do not commit them.
 
 These are **not** GitHub secrets. They live only on the server:
 
-- `env/postgres.env`, `env/staging.env`, `env/production.env`
+- `env/postgres.env`, `env/caddy.env`, `env/staging.env`, `env/production.env`
 - The GHCR read token from `docker login ghcr.io`
 
 There is no separate production SSH secret. Staging and production are the same machine.

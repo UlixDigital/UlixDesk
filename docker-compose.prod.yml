@@ -7,6 +7,7 @@ name: ulixdesk
 
 x-logging: &logging
   logging:
+    driver: json-file
     options:
       max-size: "10m"
       max-file: "3"
@@ -30,7 +31,7 @@ services:
     <<: *logging
 
   app-staging:
-    image: ${ULIXDESK_STAGING_IMAGE:-ulixdesk:local}
+    image: ${ULIXDESK_IMAGE_REPOSITORY:-ulixdesk}:${STAGING_IMAGE_TAG:-local}
     restart: unless-stopped
     environment:
       CHECKPOINT_DISABLE: "1"
@@ -46,7 +47,7 @@ services:
     <<: *logging
 
   app-production:
-    image: ${ULIXDESK_PRODUCTION_IMAGE:-ulixdesk:local}
+    image: ${ULIXDESK_IMAGE_REPOSITORY:-ulixdesk}:${PRODUCTION_IMAGE_TAG:-local}
     restart: unless-stopped
     environment:
       CHECKPOINT_DISABLE: "1"
@@ -67,6 +68,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+      - "443:443/udp"
+    env_file:
+      - ./env/caddy.env
     volumes:
       - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
       - ulixdesk_caddy_data:/data

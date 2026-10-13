@@ -29,6 +29,10 @@ import { getCurrentUser } from "@/lib/session";
 import { setTestRequestHeaders } from "@/lib/test-hooks";
 import { createTestUser, signInAs } from "@/lib/test-actor";
 import { startTimer } from "@/lib/time-entries";
+import { requestIp } from "@/lib/request-headers";
+import { PROXY_SECRET_HEADER } from "@/lib/trusted-proxy";
+import { changePasswordAction } from "@/app/settings/actions";
+import { setActiveAction, setRoleAction } from "@/app/team/actions";
 import { createTeamMember, setTeamRole, setUserActive } from "@/lib/users";
 import { emptyClientFormValues, type ClientFormState } from "@/lib/validation";
 
@@ -108,13 +112,34 @@ describe("login and logout", () => {
       );
       expect(result.code).toBe("invalid");
     }
-    const byAccount = await authenticateLogin(
+    const otherPeopleCannotLockTheAccount = await authenticateLogin(
       "member@ulix.test",
       "test-password-10",
       "198.51.100.8",
       now,
     );
-    expect(byAccount).toEqual({ ok: false, error: authCopy.rateLimited, code: "rate-limited" });
+    expect(otherPeopleCannotLockTheAccount.ok).toBe(true);
+  });
+
+  it("counts dev sign-in attempts as loopback unless the proxy secret matches", async () => {
+    setTestRequestHeaders({ "x-forwarded-for": "203.0.113.9" });
+    expect(await requestIp()).toBe("127.0.0.1");
+
+    process.env.ULIXDESK_TRUSTED_PROXY_SECRET = "local-trusted-proxy-secret";
+    setTestRequestHeaders({
+      "x-forwarded-for": "203.0.113.9",
+      [PROXY_SECRET_HEADER]: "wrong-secret-value!!",
+    });
+    expect(await requestIp()).toBe("127.0.0.1");
+
+    setTestRequestHeaders({
+      "x-forwarded-for": "203.0.113.9",
+      [PROXY_SECRET_HEADER]: "local-trusted-proxy-secret",
+    });
+    expect(await requestIp()).toBe("203.0.113.9");
+
+    delete process.env.ULIXDESK_TRUSTED_PROXY_SECRET;
+    setTestRequestHeaders(null);
   });
 });
 
@@ -185,6 +210,76 @@ describe("protected routes and roles", () => {
       active: false,
     });
     expect(self).toEqual({ ok: false, error: authCopy.cannotDeactivateSelf });
+
+    const secondOwner = await createTestUser("owner", "second-owner@ulix.test");
+    const selfRole = await setTeamRole({
+      actor: secondOwner,
+      userId: secondOwner.id,
+      role: "admin",
+    });
+    expect(selfRole).toEqual({ ok: false, error: authCopy.cannotChangeOwnRole });
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: secondOwner.id } })).role).toBe(
+      "owner",
+    );
+  });
+
+  it("returns team refusal messages from the role and deactivate actions", async () => {
+    const owner = await signInAs("owner", "action-owner@ulix.test");
+    const demoteSelf = await setRoleAction(
+      { error: null },
+      form({ userId: owner.user.id, role: "member" }),
+    );
+    expect(demoteSelf).toEqual({ error: authCopy.lastOwner });
+
+    const otherOwner = await createTestUser("owner", "action-other-owner@ulix.test");
+    const changeOwnRole = await setRoleAction(
+      { error: null },
+      form({ userId: owner.user.id, role: "admin" }),
+    );
+    expect(changeOwnRole).toEqual({ error: authCopy.cannotChangeOwnRole });
+
+    const deactivateSelf = await setActiveAction(
+      { error: null },
+      form({ userId: owner.user.id, active: "0" }),
+    );
+    expect(deactivateSelf).toEqual({ error: authCopy.cannotDeactivateSelf });
+
+    await signInAs("admin", "action-admin@ulix.test");
+    const adminChangesOwner = await setRoleAction(
+      { error: null },
+      form({ userId: otherOwner.id, role: "member" }),
+    );
+    expect(adminChangesOwner).toEqual({ error: authCopy.cannotManageOwner });
+    const adminDeactivatesOwner = await setActiveAction(
+      { error: null },
+      form({ userId: otherOwner.id, active: "0" }),
+    );
+    expect(adminDeactivatesOwner).toEqual({ error: authCopy.cannotManageOwner });
+  });
+
+  it("lets someone change their own password and rejects the current one when it is wrong", async () => {
+    await signInAs("member", "password-change@ulix.test");
+    const wrong = await changePasswordAction(
+      { error: null, notice: null },
+      form({ current: "wrong-password", password: "new-password-10", confirm: "new-password-10" }),
+    );
+    expect(wrong).toEqual({ error: authCopy.currentPasswordWrong, notice: null });
+
+    const saved = await changePasswordAction(
+      { error: null, notice: null },
+      form({
+        current: "test-password-10",
+        password: "new-password-10",
+        confirm: "new-password-10",
+      }),
+    );
+    expect(saved).toEqual({ error: null, notice: authCopy.passwordChanged });
+    const signedIn = await authenticateLogin(
+      "password-change@ulix.test",
+      "new-password-10",
+      "127.0.0.1",
+    );
+    expect(signedIn.ok).toBe(true);
   });
 });
 
@@ -210,8 +305,22 @@ describe("request protection", () => {
     setTestRequestHeaders({
       origin: "http://127.0.0.1:3000",
       host: "127.0.0.1:3000",
+      "x-forwarded-host": "evil.test",
+      "x-forwarded-proto": "http",
     });
     expect(await originAllowed()).toBe(true);
+
+    process.env.ULIXDESK_TRUSTED_PROXY_SECRET = "local-trusted-proxy-secret";
+    setTestRequestHeaders({
+      origin: "http://127.0.0.1:3000",
+      host: "127.0.0.1:3000",
+      "x-forwarded-host": "evil.test",
+      "x-forwarded-proto": "http",
+      [PROXY_SECRET_HEADER]: "local-trusted-proxy-secret",
+    });
+    expect(await originAllowed()).toBe(false);
+    delete process.env.ULIXDESK_TRUSTED_PROXY_SECRET;
+    setTestRequestHeaders(null);
   });
 });
 

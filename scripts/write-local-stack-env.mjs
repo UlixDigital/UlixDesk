@@ -27,6 +27,8 @@ await writeFile(
     "ULIXDESK_EXTENSION_IDS=cjlaoflbipaehclleojofopapalhiooe",
     "ULIXDESK_TIMER_ORIGINS=",
     "ULIXDESK_PUBLIC_ORIGIN=https://staging.desk.localhost",
+    "ULIXDESK_ENVIRONMENT=staging",
+    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
     "ULIXDESK_BOOTSTRAP_EMAIL=staging-owner@ulix.local",
     "ULIXDESK_BOOTSTRAP_PASSWORD=staging-owner-password",
     "ULIXDESK_BOOTSTRAP_NAME=Staging Owner",
@@ -46,6 +48,8 @@ await writeFile(
     "ULIXDESK_EXTENSION_IDS=cjlaoflbipaehclleojofopapalhiooe",
     "ULIXDESK_TIMER_ORIGINS=",
     "ULIXDESK_PUBLIC_ORIGIN=https://desk.localhost",
+    "ULIXDESK_ENVIRONMENT=production",
+    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
     "ULIXDESK_BOOTSTRAP_EMAIL=owner@ulix.local",
     "ULIXDESK_BOOTSTRAP_PASSWORD=local-owner-password",
     "ULIXDESK_BOOTSTRAP_NAME=Local Owner",
@@ -54,4 +58,14 @@ await writeFile(
   ].join("\n"),
 );
 
-console.log("Wrote env/postgres.env, env/staging.env, and env/production.env for local stack testing.");
+await writeFile(
+  new URL("caddy.env", dir),
+  [
+    "# Generated for a local production-style stack. Not a real secret.",
+    "ACME_EMAIL=ops@ulixdigital.com",
+    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
+    "",
+  ].join("\n"),
+);
+
+console.log("Wrote env/postgres.env, env/staging.env, env/production.env, and env/caddy.env for local stack testing.");

@@ -174,6 +174,19 @@ describe("extension API", () => {
     const idle = await stopRoute(stopRequest());
     expect(idle.status).toBe(404);
     expect((await idle.json()).error).toBe(timeCopy.timerNone);
+
+    const brokenStop = await stopRoute(
+      new Request("http://localhost/api/timer/stop", {
+        method: "POST",
+        headers: sessionHeaders({ "content-type": "application/json" }),
+        body: "{",
+      }),
+    );
+    expect(brokenStop.status).toBe(400);
+    expect(await brokenStop.json()).toEqual({
+      error: timeCopy.invalidJsonBody,
+      code: apiCodes.INVALID_JSON,
+    });
   });
 
   it("stops a persisted timer and reports a 24-hour cap", async () => {

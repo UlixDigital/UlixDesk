@@ -107,12 +107,11 @@ export async function requireUser() {
 export async function publicOrigin() {
   const configured = process.env.ULIXDESK_PUBLIC_ORIGIN?.replace(/\/$/, "");
   if (configured) return configured;
-  const { requestHeader } = await import("@/lib/request-headers");
-  const host =
-    (await requestHeader("x-forwarded-host"))?.split(",")[0]?.trim() ||
-    (await requestHeader("host"))?.trim();
-  const proto =
-    (await requestHeader("x-forwarded-proto"))?.split(",")[0]?.trim() || "http";
+  const { requestHeader, trustedForwardedHost, trustedForwardedProto } = await import(
+    "@/lib/request-headers"
+  );
+  const host = (await trustedForwardedHost()) || (await requestHeader("host"))?.trim();
+  const proto = (await trustedForwardedProto()) || "http";
   if (!host) return "http://127.0.0.1:3000";
   return `${proto}://${host}`;
 }

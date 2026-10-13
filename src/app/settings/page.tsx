@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { AccessTokenSettings } from "@/components/access-token-settings";
+import { ChangePasswordForm } from "@/components/change-password-form";
 import { listAccessTokens } from "@/lib/access-tokens";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { getCurrentUser } from "@/lib/session";
@@ -16,7 +17,9 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <AccessTokenSettings
+    <>
+      <ChangePasswordForm />
+      <AccessTokenSettings
       timeZone={timeZone ?? "UTC"}
       tokens={tokens.map((token) => ({
         id: token.id,
@@ -26,5 +29,6 @@ export default async function SettingsPage() {
         revokedAt: token.revokedAt?.toISOString() ?? null,
       }))}
     />
+    </>
   );
 }

@@ -61,24 +61,34 @@ export async function resetPasswordAction(
   };
 }
 
-export async function setRoleAction(formData: FormData) {
+export type RowState = { error: string | null };
+
+export async function setRoleAction(_previous: RowState, formData: FormData): Promise<RowState> {
   const gate = await gateManager();
-  if (!gate.ok) return;
-  await setTeamRole({
+  if (!gate.ok) {
+    return { error: gate.error === authCopy.manageDenied ? authCopy.teamDenied : gate.error };
+  }
+  const result = await setTeamRole({
     actor: gate.user,
     userId: String(formData.get("userId") ?? ""),
     role: String(formData.get("role") ?? ""),
   });
+  if (!result.ok) return { error: result.error };
   revalidatePath("/team");
+  return { error: null };
 }
 
-export async function setActiveAction(formData: FormData) {
+export async function setActiveAction(_previous: RowState, formData: FormData): Promise<RowState> {
   const gate = await gateManager();
-  if (!gate.ok) return;
-  await setUserActive({
+  if (!gate.ok) {
+    return { error: gate.error === authCopy.manageDenied ? authCopy.teamDenied : gate.error };
+  }
+  const result = await setUserActive({
     actor: gate.user,
     userId: String(formData.get("userId") ?? ""),
     active: formData.get("active") === "1",
   });
+  if (!result.ok) return { error: result.error };
   revalidatePath("/team");
+  return { error: null };
 }

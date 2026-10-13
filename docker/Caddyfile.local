@@ -1,5 +1,8 @@
 {
 	local_certs
+	servers {
+		protocols h1 h2 h3
+	}
 }
 
 https://desk.localhost {
@@ -9,6 +12,7 @@ https://desk.localhost {
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-For {remote_host}
+		header_up X-Ulixdesk-Proxy {$ULIXDESK_TRUSTED_PROXY_SECRET}
 	}
 }
 
@@ -19,5 +23,6 @@ https://staging.desk.localhost {
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-For {remote_host}
+		header_up X-Ulixdesk-Proxy {$ULIXDESK_TRUSTED_PROXY_SECRET}
 	}
 }

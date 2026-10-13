@@ -1,13 +1,21 @@
 import { normalizeEmail } from "@/lib/users-validation";
 
-/** Eight failures per 15 minutes, counted separately for the IP and the email. */
+/**
+ * Eight failures per 15 minutes.
+ * One bucket is the IP. The other is that IP together with the email.
+ * A failure from somewhere else cannot lock the account.
+ */
 export const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 export const LOGIN_MAX_FAILURES = 8;
 
 type Bucket = { failures: number; resetAt: number };
 
 const ipBuckets = new Map<string, Bucket>();
-const accountBuckets = new Map<string, Bucket>();
+const pairBuckets = new Map<string, Bucket>();
+
+function pairKey(ip: string, email: string) {
+  return `${ip}\n${normalizeEmail(email)}`;
+}
 
 function limited(map: Map<string, Bucket>, key: string, now: number) {
   const bucket = map.get(key);
@@ -29,23 +37,23 @@ function bump(map: Map<string, Bucket>, key: string, now: number) {
 export function loginLimited(ip: string, email: string, now = Date.now()) {
   return (
     limited(ipBuckets, ip, now) ??
-    limited(accountBuckets, normalizeEmail(email), now) ?? { limited: false as const }
+    limited(pairBuckets, pairKey(ip, email), now) ?? { limited: false as const }
   );
 }
 
 export function recordLoginFailure(ip: string, email: string, now = Date.now()) {
   bump(ipBuckets, ip, now);
-  bump(accountBuckets, normalizeEmail(email), now);
+  bump(pairBuckets, pairKey(ip, email), now);
   if (ipBuckets.size > 5000) ipBuckets.clear();
-  if (accountBuckets.size > 5000) accountBuckets.clear();
+  if (pairBuckets.size > 5000) pairBuckets.clear();
 }
 
 export function clearLoginFailures(ip: string, email: string) {
   ipBuckets.delete(ip);
-  accountBuckets.delete(normalizeEmail(email));
+  pairBuckets.delete(pairKey(ip, email));
 }
 
 export function resetLoginRateLimits() {
   ipBuckets.clear();
-  accountBuckets.clear();
+  pairBuckets.clear();
 }

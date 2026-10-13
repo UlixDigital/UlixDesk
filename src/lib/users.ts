@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import { SETUP_TTL_MS, authCopy } from "@/lib/auth-copy";
 import { prisma } from "@/lib/db";
-import { hashPassword } from "@/lib/password";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import {
   assignableRoles,
   canManageTarget,
@@ -121,6 +121,9 @@ export async function setTeamRole(input: {
     });
     if (others === 0) return { ok: false as const, error: authCopy.lastOwner };
   }
+  if (input.actor.id === target.id) {
+    return { ok: false as const, error: authCopy.cannotChangeOwnRole };
+  }
   await prisma.user.update({ where: { id: target.id }, data: { role: input.role } });
   return { ok: true as const };
 }
@@ -161,6 +164,22 @@ export async function setUserActive(input: {
       data: { usedAt: now },
     }),
   ]);
+  return { ok: true as const };
+}
+
+export async function changeOwnPassword(input: {
+  userId: string;
+  currentPassword: string;
+  nextPassword: string;
+}) {
+  const user = await prisma.user.findUnique({ where: { id: input.userId } });
+  if (!user?.passwordHash) return { ok: false as const, error: authCopy.currentPasswordWrong };
+  const matches = await verifyPassword(input.currentPassword, user.passwordHash);
+  if (!matches) return { ok: false as const, error: authCopy.currentPasswordWrong };
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash: await hashPassword(input.nextPassword) },
+  });
   return { ok: true as const };
 }
 

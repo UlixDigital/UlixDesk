@@ -25,7 +25,9 @@ npm run dev
 
 `npm run db:up` starts Postgres from `docker-compose.yml` and publishes it on `127.0.0.1:5432` only. The first start also creates `ulixdesk_test` and `ulixdesk_e2e`, so unit tests and Playwright do not use the dev database.
 
-`npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). The bootstrap owner in the committed local `.env` is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, extension tokens at `/settings`, and the team page at `/team` for owners and admins.
+`npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). Copy `.env.example` to `.env` (`.env` is not committed). The local bootstrap owner is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, change that password under Extension access, then remove `ULIXDESK_BOOTSTRAP_PASSWORD` from `.env` if this database will keep being used. Clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, extension tokens and the password form at `/settings`, and the team page at `/team` for owners and admins.
+
+A new database starts empty. To copy a Phase 1 SQLite file after the owner exists, see [docs/DEPLOY.md](docs/DEPLOY.md). `npm run import:sqlite -- --from <path> --dry-run` prints counts and writes nothing.
 
 `npm run user:bootstrap` creates that owner only when the database has no users. It does not print the password. See [docs/DEPLOY.md](docs/DEPLOY.md) for staging, production, and a local run of the full Caddy stack.
 

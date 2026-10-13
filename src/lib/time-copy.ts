@@ -58,6 +58,7 @@ export const timeCopy = {
   runningBadge: "Running",
   stopBeforeDelete: "Stop the timer before deleting this entry.",
   invalidJson: "Send a JSON body with a project id.",
+  invalidJsonBody: "The request body is not valid JSON.",
   jsonContentType: "Content-Type must be application/json.",
   originForbidden: "This origin can't control the timer.",
   originDenied: "This origin isn't allowed to access UlixDesk.",

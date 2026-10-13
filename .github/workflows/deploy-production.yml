@@ -4,14 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       action:
-        description: Promote the staging image, or roll production back one tag
+        description: Promote the staging image, or step production back through deployed tags
         type: choice
         options:
           - promote
           - rollback
         required: true
       image_tag:
-        description: Commit SHA currently on staging. Required when promoting. Leave blank for rollback.
+        description: Full 40-character commit SHA currently on staging. Required when promoting. Leave blank for rollback.
         required: false
         type: string
 
@@ -46,12 +46,13 @@ jobs:
           ssh_cmd() { ssh -i ~/.ssh/id_ed25519 "$target" "$@"; }
           repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
           if [ "$ACTION" = "rollback" ]; then
-            previous=$(ssh_cmd "cat /opt/ulixdesk/production-previous-tag")
-            test -n "$previous"
-            ssh_cmd "/opt/ulixdesk/scripts/remote-deploy.sh production '$previous'"
+            ssh_cmd "/opt/ulixdesk/scripts/remote-deploy.sh production --rollback"
             exit 0
           fi
-          test -n "$IMAGE_TAG"
+          printf '%s\n' "$IMAGE_TAG" | grep -Eq '^[0-9a-f]{40}$' || {
+            echo "image_tag must be the 40-character commit SHA that staging is running." >&2
+            exit 1
+          }
           image="ghcr.io/${repo}:${IMAGE_TAG}"
           staging=$(ssh_cmd "cat /opt/ulixdesk/staging-tag")
           if [ "$staging" != "$image" ]; then

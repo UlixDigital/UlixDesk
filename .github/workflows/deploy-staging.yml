@@ -1,7 +1,10 @@
 name: Deploy staging
 
+# Starts only after the CI workflow succeeds on a push to main.
 on:
-  push:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
 
 concurrency:
@@ -9,14 +12,21 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
+  actions: read
   contents: read
   packages: write
 
 jobs:
   deploy:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - uses: docker/login-action@v3
         with:
           registry: ghcr.io
@@ -24,8 +34,11 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push the image
         id: image
+        env:
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
-          image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]'):$GITHUB_SHA"
+          printf '%s\n' "$HEAD_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]'):$HEAD_SHA"
           docker build -t "$image" .
           docker push "$image"
           echo "name=$image" >> "$GITHUB_OUTPUT"
@@ -42,7 +55,7 @@ jobs:
           printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
           chmod 600 ~/.ssh/id_ed25519
           target="$SSH_USER@$SSH_HOST"
-          ssh -i ~/.ssh/id_ed25519 "$target" "mkdir -p /opt/ulixdesk/docker/backup /opt/ulixdesk/docker/postgres /opt/ulixdesk/scripts"
+          ssh -i ~/.ssh/id_ed25519 "$target" "mkdir -p /opt/ulixdesk/docker/backup /opt/ulixdesk/docker/postgres /opt/ulixdesk/scripts /opt/ulixdesk/env"
           scp -i ~/.ssh/id_ed25519 \
             docker-compose.prod.yml \
             "$target:/opt/ulixdesk/docker-compose.prod.yml"
