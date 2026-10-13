@@ -14,6 +14,7 @@ import { archiveClientAction, restoreClientAction, saveClientAction } from "@/ap
 import { listClients } from "@/lib/clients";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { signInAs } from "@/lib/test-actor";
 import { emptyClientFormValues, type ClientFormState } from "@/lib/validation";
 
 const initialState: ClientFormState = {
@@ -35,6 +36,7 @@ function form(entries: Record<string, string | string[]>) {
 
 async function resetDatabase() {
   await resetTestDatabase();
+  await signInAs("owner", "clients-owner@ulix.test");
 }
 
 beforeEach(resetDatabase);

@@ -1,0 +1,61 @@
+name: Deploy production
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: Promote the staging image, or roll production back one tag
+        type: choice
+        options:
+          - promote
+          - rollback
+        required: true
+      image_tag:
+        description: Commit SHA currently on staging. Required when promoting. Leave blank for rollback.
+        required: false
+        type: string
+
+concurrency:
+  group: ulixdesk-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Promote or roll back
+        env:
+          SSH_HOST: ${{ secrets.ULIXDESK_SSH_HOST }}
+          SSH_USER: ${{ secrets.ULIXDESK_SSH_USER }}
+          SSH_KEY: ${{ secrets.ULIXDESK_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.ULIXDESK_SSH_KNOWN_HOSTS }}
+          ACTION: ${{ inputs.action }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          target="$SSH_USER@$SSH_HOST"
+          ssh_cmd() { ssh -i ~/.ssh/id_ed25519 "$target" "$@"; }
+          repo=$(echo "$REPOSITORY" | tr '[:upper:]' '[:lower:]')
+          if [ "$ACTION" = "rollback" ]; then
+            previous=$(ssh_cmd "cat /opt/ulixdesk/production-previous-tag")
+            test -n "$previous"
+            ssh_cmd "/opt/ulixdesk/scripts/remote-deploy.sh production '$previous'"
+            exit 0
+          fi
+          test -n "$IMAGE_TAG"
+          image="ghcr.io/${repo}:${IMAGE_TAG}"
+          staging=$(ssh_cmd "cat /opt/ulixdesk/staging-tag")
+          if [ "$staging" != "$image" ]; then
+            echo "Refusing to promote ${image}. Staging is running ${staging}." >&2
+            exit 1
+          fi
+          ssh_cmd "/opt/ulixdesk/scripts/remote-deploy.sh production '$image'"

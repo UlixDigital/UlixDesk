@@ -1,7 +1,11 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { saveProjectAction } from "@/app/projects/actions";
+import { PermissionNote } from "@/components/permission-note";
 import { ProjectForm } from "@/components/project-form";
+import { authCopy } from "@/lib/auth-copy";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { RestoreButton } from "@/components/project-row-actions";
 import { TrackedTime } from "@/components/tracked-time";
 import { projectsHref, type ClientOption } from "@/lib/project-display";
@@ -21,6 +25,10 @@ export async function generateMetadata({
 }
 
 export default async function EditProjectPage({ params }: EditPageProps) {
+  const user = await getCurrentUser();
+  if (!user || !canManageWorkspace(user.role)) {
+    return <PermissionNote message={authCopy.manageDenied} />;
+  }
   const { id } = await params;
   const project = await getProject(id);
   if (!project) notFound();

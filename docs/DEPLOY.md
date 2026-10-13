@@ -1,0 +1,205 @@
+# UlixDesk go-live
+
+## For Anupa
+
+UlixDesk is the staff time tracker. People sign in with an email and a password. There is no public signup page, and clients do not get accounts.
+
+Two copies run on one small server:
+
+- **Staging** is the rehearsal copy, at `https://staging.desk.ulixdigital.com`.
+- **Production** is the real copy, at `https://desk.ulixdigital.com`.
+
+### How a change reaches the team
+
+A developer opens a pull request. GitHub runs the checks (lint, types, unit tests, and the browser tests). After the pull request is merged into `main`, GitHub builds one image, stores it, and installs that image on staging. Nothing is typed into the server by hand for a normal change.
+
+### How a change reaches everyone
+
+Production does not update by itself. Someone on the team opens GitHub → Actions → **Deploy production** → **Run workflow**, chooses **promote**, and pastes the commit id that is already on staging. GitHub then asks a reviewer to approve. After that approval, production starts the same image staging is already running. It does not build a second, different copy.
+
+### If something breaks
+
+Say so in the team channel and stop using the broken page. The team can put production back on the previous image from the same **Deploy production** workflow by choosing **rollback**. That does not need a new commit. Staging can be put back the same way by deploying the previous commit id that was saved on the server.
+
+### How to add a team member
+
+Sign in as an owner or an admin. Open **Team**. Enter the person's name and email, choose Member (or Admin, or Owner if you are an owner), and press **Add team member**. UlixDesk does not email them. Copy the set-password link that appears and send it yourself. The link works once and expires in 72 hours. They open it, choose a password, and then sign in.
+
+To replace a forgotten password, press **Reset password** on that person and send the new link. The old link stops working. **Deactivate** signs them out and stops their extension tokens. **Restore access** lets them sign in again. Old extension tokens stay revoked, so they create a new one on Extension access.
+
+## For the team
+
+### What runs on the server
+
+One Docker Compose project:
+
+| Container | Memory cap | Published ports |
+| --- | --- | --- |
+| Postgres 16 | 512 MB | none |
+| app-staging | 384 MB | none |
+| app-production | 384 MB | none |
+| Caddy | 64 MB | 80 and 443 |
+| backup | 64 MB | none |
+
+Caddy is the only process on the public internet. It terminates HTTPS and forwards the real `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For`. The apps trust those headers because nothing else can reach them. Session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`.
+
+`npm start` on a developer machine binds to `127.0.0.1`. Inside Docker the app listens on `0.0.0.0` so Caddy can reach it, and that port is not published on the host.
+
+### Why one Postgres
+
+Two Postgres processes would each keep their own cache on a 2 GB machine. One Postgres container with two databases is lighter. Staging uses the role `ulixdesk_staging` and database `ulixdesk_staging`. Production uses `ulixdesk_production` and `ulixdesk_production`. Staging's password cannot connect to the production database. Each app also caps its pool with `connection_limit=5`.
+
+### First-time server setup
+
+On the new Ubuntu VPS, as root, after an SSH key is in `authorized_keys`:
+
+```bash
+# Copy scripts/server-setup.sh to the server first, then:
+sudo sh server-setup.sh
+```
+
+The script installs Docker and the Compose plugin, turns on unattended security upgrades, adds a 2 GB swap file when the machine has under about 2.5 GB of RAM, and sets the firewall to allow only SSH, port 80, and port 443. It turns off SSH password login only when an authorized key is already present.
+
+Create `/opt/ulixdesk` and the env files from the examples in `env/`. Log the server into GHCR once so it can pull images:
+
+```bash
+docker login ghcr.io
+```
+
+Use a GitHub token with `read:packages`. Keep that token on the server only. Do not put it in the repository or in GitHub Actions. The Actions workflow pushes with the built-in `GITHUB_TOKEN`.
+
+Build images in GitHub Actions, not on the VPS.
+
+### DNS
+
+Point both names at the VPS address:
+
+- `A` `desk.ulixdigital.com`
+- `A` `staging.desk.ulixdigital.com`
+
+Caddy requests Let's Encrypt certificates for those names after the ports are open and the DNS is visible. Set `ACME_EMAIL` in the Caddy environment if you want a different account email. The default in the Caddyfile is `ops@ulixdigital.com`.
+
+### Env files
+
+| File on the server | Example in the repo |
+| --- | --- |
+| `/opt/ulixdesk/env/postgres.env` | `env/postgres.env.example` |
+| `/opt/ulixdesk/env/staging.env` | `env/staging.env.example` |
+| `/opt/ulixdesk/env/production.env` | `env/production.env.example` |
+
+Local `npm run dev` uses `.env`, copied from `.env.example`.
+
+Database passwords are letters and numbers only, because the first-boot SQL script inserts them. Session secrets are at least 32 characters, different per environment, and must not be the local development value on a `ulixdigital.com` host.
+
+`ULIXDESK_MIGRATE_LOCK` is `8675309` for staging and `8675310` for production. Postgres advisory locks are shared across databases in one cluster, so the keys differ and the two apps can migrate at the same time. A second container of the same app waits on the lock, runs migrate, then starts. Only one of them migrates at a time.
+
+### First deploy
+
+1. Finish DNS, the server script, the three env files, and `docker login`.
+2. Merge to `main`. The **Deploy staging** workflow builds `ghcr.io/<owner>/<repo>:<commit sha>`, pushes it, copies the compose files to `/opt/ulixdesk`, and starts staging.
+3. Open staging, sign in as the bootstrap owner, and add the team.
+4. Run **Deploy production** with that same commit SHA.
+
+The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next.
+
+### Bootstrap owner
+
+Set `ULIXDESK_BOOTSTRAP_EMAIL`, `ULIXDESK_BOOTSTRAP_PASSWORD` (at least 10 characters), and `ULIXDESK_BOOTSTRAP_NAME` in the env file before the first start. If the database has no users and those variables are missing, the app still starts and prints instructions. It does not create an open signup page, and it does not print the password.
+
+When users already exist, bootstrap assigns any leftover unowned time entries, and the old workspace timer, to the earliest active owner. The same assignment is in `prisma/migrations/20261013121000_assign_legacy_owner`. On a brand-new database that migration changes nothing, because the owner does not exist yet. Bootstrap repeats it after creating the owner.
+
+Locally:
+
+```bash
+npm run db:up
+npx prisma migrate deploy
+npm run user:bootstrap
+npm run dev
+```
+
+Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
+
+### Backups and restore
+
+The backup container dumps both databases when it starts, then again every day at 03:15 UTC. Files are custom-format (`pg_dump -Fc`) under the `ulixdesk_backups` volume:
+
+- `/backup/daily/<database>-YYYYMMDD.dump` — deleted after 7 days
+- `/backup/weekly/<database>-YYYYMMDD.dump` — Sunday's copy, deleted after 28 days
+
+Restore production (this replaces the data in that database):
+
+```bash
+cd /opt/ulixdesk
+docker compose -f docker-compose.prod.yml stop app-production
+./scripts/restore-backup.sh ulixdesk_production /backup/daily/ulixdesk_production-YYYYMMDD.dump
+docker compose -f docker-compose.prod.yml start app-production
+```
+
+Use `ulixdesk_staging` and stop `app-staging` for the rehearsal database. Take a fresh dump first if the current data might still be needed.
+
+### Rollback
+
+Each deploy writes the image it replaced to `/opt/ulixdesk/staging-previous-tag` or `production-previous-tag`.
+
+Production: Actions → **Deploy production** → **rollback**. A reviewer still has to approve, because the job uses the `production` GitHub Environment.
+
+From the server, for staging or if GitHub is unavailable:
+
+```bash
+cd /opt/ulixdesk
+PREV=$(cat production-previous-tag)
+./scripts/remote-deploy.sh production "$PREV"
+```
+
+The `$(cat ...)` runs before the script replaces the tag file, so the previous id is kept. Run the same command with `staging-previous-tag` and `staging` for the rehearsal copy.
+
+Create the GitHub Environment named `production` and add required reviewers before the first production run. Until those reviewers exist, GitHub will not ask anyone.
+
+### Extension server URL
+
+The unpacked extension id is `cjlaoflbipaehclleojofopapalhiooe`. Put that in `ULIXDESK_EXTENSION_IDS` (already in the examples).
+
+In the extension options, set the server URL to the origin the person should use:
+
+- Local: `http://127.0.0.1:3000`
+- Staging: `https://staging.desk.ulixdigital.com`
+- Production: `https://desk.ulixdigital.com`
+
+Create the access token while signed in on that same origin, under Extension access. The token belongs to that person. A timer started from the extension runs as them. Deactivating them revokes the token.
+
+### Try the production stack on a laptop
+
+This does not use the real DNS names or Let's Encrypt. Caddy makes a local certificate for `desk.localhost` and `staging.desk.localhost`.
+
+```bash
+node scripts/write-local-stack-env.mjs
+docker compose -f docker-compose.prod.yml -f docker-compose.local.yml up -d --build
+```
+
+Open `https://desk.localhost` and `https://staging.desk.localhost`. The browser will warn about Caddy's local certificate. Accept it for this test, or trust Caddy's local CA. Sign in with the passwords written into `env/production.env` and `env/staging.env` (`local-owner-password` and `staging-owner-password`). Those files are gitignored.
+
+Stop it with:
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.local.yml down
+```
+
+### GitHub secrets
+
+Set these on the repository. The values stay in GitHub. Do not commit them.
+
+| Secret | What it is |
+| --- | --- |
+| `ULIXDESK_SSH_HOST` | The VPS address or hostname |
+| `ULIXDESK_SSH_USER` | The SSH user that can run Docker |
+| `ULIXDESK_SSH_PRIVATE_KEY` | The private key for that user, including the line breaks |
+| `ULIXDESK_SSH_KNOWN_HOSTS` | One line from `ssh-keyscan -H <host>` for that server |
+
+`GITHUB_TOKEN` is provided by Actions and is used only to push the image. No other GitHub secret is required.
+
+These are **not** GitHub secrets. They live only on the server:
+
+- `env/postgres.env`, `env/staging.env`, `env/production.env`
+- The GHCR read token from `docker login ghcr.io`
+
+There is no separate production SSH secret. Staging and production are the same machine.

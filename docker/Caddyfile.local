@@ -1,0 +1,23 @@
+{
+	local_certs
+}
+
+https://desk.localhost {
+	tls internal
+	reverse_proxy app-production:3000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+https://staging.desk.localhost {
+	tls internal
+	reverse_proxy app-staging:3000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

@@ -1,12 +1,16 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { PermissionNote } from "@/components/permission-note";
 import { saveClientAction } from "@/app/clients/actions";
 import { ClientForm } from "@/components/client-form";
 import { RestoreButton } from "@/components/client-row-actions";
 import { ClientProjects } from "@/components/client-projects";
 import { TrackedTime } from "@/components/tracked-time";
+import { authCopy } from "@/lib/auth-copy";
 import { clientsHref } from "@/lib/client-display";
 import { getClient } from "@/lib/clients";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { listProjectsForClient } from "@/lib/projects";
 import { trackedMsForClient } from "@/lib/time-entries";
 
@@ -23,6 +27,10 @@ export async function generateMetadata({
 }
 
 export default async function EditClientPage({ params }: EditPageProps) {
+  const user = await getCurrentUser();
+  if (!user || !canManageWorkspace(user.role)) {
+    return <PermissionNote message={authCopy.manageDenied} />;
+  }
   const { id } = await params;
   const client = await getClient(id);
   if (!client) notFound();

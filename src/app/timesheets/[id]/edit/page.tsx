@@ -5,6 +5,8 @@ import { TimeEntryForm } from "@/components/time-entry-form";
 import { DeleteTimeEntryButton } from "@/components/time-entry-delete";
 import { TimezonePending } from "@/components/timesheet-empty-state";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy } from "@/lib/time-copy";
 import { getTimeEntry, listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
 import { timesheetsHref } from "@/lib/timesheet";
@@ -20,7 +22,10 @@ export async function generateMetadata({
   params,
 }: EditPageProps): Promise<Metadata> {
   const { id } = await params;
-  const entry = await getTimeEntry(id);
+  const user = await getCurrentUser();
+  const entry = user
+    ? await getTimeEntry(id, canManageWorkspace(user.role) ? null : user.id)
+    : null;
   return { title: entry ? "Edit time entry" : "Time entry not found" };
 }
 
@@ -29,7 +34,9 @@ export default async function EditTimeEntryPage({
   searchParams,
 }: EditPageProps) {
   const { id } = await params;
-  const entry = await getTimeEntry(id);
+  const user = await getCurrentUser();
+  if (!user) notFound();
+  const entry = await getTimeEntry(id, canManageWorkspace(user.role) ? null : user.id);
   if (!entry) notFound();
 
   const query = await searchParams;
@@ -62,7 +69,7 @@ export default async function EditTimeEntryPage({
   }
 
   const projects = await listProjectChoices(entry.projectId);
-  const overlaps = await listOverlapCandidates(new Date());
+  const overlaps = await listOverlapCandidates(new Date(), entry.userId ?? user.id);
   const start = zonedParts(entry.startedAt, timeZone);
   const end = zonedParts(entry.endedAt, timeZone);
   const requestedDate = (query.date ?? "").trim();

@@ -18,6 +18,7 @@ import {
 import { prisma } from "@/lib/db";
 import { createProject } from "@/lib/projects";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { signInAs } from "@/lib/test-actor";
 import { timeCopy } from "@/lib/time-copy";
 import { getRunningTimer } from "@/lib/time-entries";
 import {
@@ -36,7 +37,12 @@ function form(entries: Record<string, string>) {
   return formData;
 }
 
-beforeEach(resetTestDatabase);
+let userId = "";
+
+beforeEach(async () => {
+  await resetTestDatabase();
+  userId = (await signInAs("member", "timesheets@ulix.test")).user.id;
+});
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -213,12 +219,12 @@ describe("time entry actions", () => {
       form({ projectId: project.id }),
     );
     expect(again.error).toBe(timeCopy.timerAlready);
-    const running = await getRunningTimer();
+    const running = await getRunningTimer(userId);
     expect(running).not.toBeNull();
     await expect(
       deleteTimeEntryAction(form({ id: running!.id, date: "2026-01-15" })),
     ).rejects.toThrow("REDIRECT:/timesheets?date=2026-01-15&notice=running");
-    expect(await getRunningTimer()).not.toBeNull();
+    expect(await getRunningTimer(userId)).not.toBeNull();
     expect(await prisma.timeEntry.count({ where: { endedAt: null } })).toBe(1);
   });
 });

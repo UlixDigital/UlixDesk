@@ -18,6 +18,7 @@ import {
 import { archiveClient, createClient } from "@/lib/clients";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { signInAs } from "@/lib/test-actor";
 import { listProjects } from "@/lib/projects";
 import {
   emptyProjectFormValues,
@@ -39,6 +40,7 @@ function form(entries: Record<string, string>) {
 
 async function resetDatabase() {
   await resetTestDatabase();
+  await signInAs("owner", "projects-owner@ulix.test");
 }
 
 async function makeClient(name: string) {

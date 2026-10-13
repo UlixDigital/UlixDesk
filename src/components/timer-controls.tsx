@@ -30,10 +30,12 @@ export function TimerControls({
   projects,
   timer,
   serverNow,
+  canManage = true,
 }: {
   projects: Array<{ id: string; name: string; clientName: string | null }>;
   timer: TimerSnapshot | null;
   serverNow: number;
+  canManage?: boolean;
 }) {
   const [startState, startAction, startPending] = useActionState(
     startTimerAction,
@@ -99,9 +101,11 @@ export function TimerControls({
       ) : projects.length === 0 ? (
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <TimerIdentity title={timeCopy.timerIdle} detail={timeCopy.noProjects} />
-          <Link href="/projects/new" className={ui.primaryButton}>
-            {timeCopy.addProject}
-          </Link>
+          {canManage ? (
+            <Link href="/projects/new" className={ui.primaryButton}>
+              {timeCopy.addProject}
+            </Link>
+          ) : null}
         </div>
       ) : (
         <IdleTimer

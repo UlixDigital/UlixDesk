@@ -1,0 +1,26 @@
+# Local development database only. The app itself runs with `npm run dev`.
+# The production-style stack (Caddy, two apps, backups) is docker-compose.prod.yml.
+name: ulixdesk-dev
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ulixdesk
+      POSTGRES_PASSWORD: ulixdesk
+      POSTGRES_DB: ulixdesk
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - ulixdesk_dev_pg:/var/lib/postgresql/data
+      - ./docker/postgres/init-dev.sql:/docker-entrypoint-initdb.d/10-databases.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ulixdesk -d ulixdesk"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+
+volumes:
+  ulixdesk_dev_pg:

@@ -1,13 +1,21 @@
 import type { Metadata } from "next";
 import { ClientForm } from "@/components/client-form";
+import { PermissionNote } from "@/components/permission-note";
 import { saveClientAction } from "@/app/clients/actions";
+import { authCopy } from "@/lib/auth-copy";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { emptyClientFormValues } from "@/lib/validation";
 
 export const metadata: Metadata = {
   title: "New client",
 };
 
-export default function NewClientPage() {
+export default async function NewClientPage() {
+  const user = await getCurrentUser();
+  if (!user || !canManageWorkspace(user.role)) {
+    return <PermissionNote message={authCopy.manageDenied} />;
+  }
   return (
     <ClientForm
       action={saveClientAction}

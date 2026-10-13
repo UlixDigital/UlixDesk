@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
+import { signIn } from "./auth";
 import { e2eDatabaseUrl, e2eOrigin } from "./env";
 
 if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
@@ -13,18 +14,16 @@ let clientId = "";
 let projectId = "";
 let timerProjectId = "";
 
-async function stopWorkspaceTimer() {
-  const running = await prisma.runningTimer.findUnique({
-    where: { id: "workspace" },
-    include: { timeEntry: true },
-  });
-  if (!running) return;
-  const started = running.timeEntry.startedAt.getTime();
-  await prisma.timeEntry.update({
-    where: { id: running.timeEntryId },
-    data: { endedAt: new Date(Math.max(Date.now(), started + 1000)) },
-  });
-  await prisma.runningTimer.delete({ where: { id: "workspace" } });
+async function stopRunningTimers() {
+  const running = await prisma.runningTimer.findMany({ include: { timeEntry: true } });
+  for (const row of running) {
+    const started = row.timeEntry.startedAt.getTime();
+    await prisma.timeEntry.update({
+      where: { id: row.timeEntryId },
+      data: { endedAt: new Date(Math.max(Date.now(), started + 1000)) },
+    });
+    await prisma.runningTimer.delete({ where: { id: row.id } });
+  }
 }
 
 async function waitForHydration(page: Page) {
@@ -36,7 +35,7 @@ async function waitForHydration(page: Page) {
 }
 
 test.beforeAll(async () => {
-  await stopWorkspaceTimer();
+  await stopRunningTimers();
   const client = await prisma.client.create({
     data: { name: "E2E Select Client" },
   });
@@ -52,7 +51,7 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopWorkspaceTimer();
+  await stopRunningTimers();
   await prisma.timeEntry.deleteMany({
     where: { projectId: { in: [projectId, timerProjectId].filter(Boolean) } },
   });
@@ -78,6 +77,10 @@ async function saveTimeAgain(page: Page) {
   await expect(page.getByText("Choose a project.", { exact: true })).toHaveCount(0);
   await expect(page.locator("#entry-project")).toHaveValue(projectId);
 }
+
+test.beforeEach(async ({ page }) => {
+  await signIn(page.context(), prisma);
+});
 
 test("keeps the Add time project after equal times, a future end, and a long note", async ({
   page,
@@ -148,7 +151,7 @@ test("keeps the Add project client after a blank name, including keyboard select
 });
 
 test("keeps the header timer project after start and stop", async ({ page }) => {
-  await stopWorkspaceTimer();
+  await stopRunningTimers();
   await page.goto("/timesheets");
   await waitForHydration(page);
   await page.locator("#timer-project").selectOption(timerProjectId);
@@ -164,7 +167,7 @@ test("keeps the header timer project after start and stop", async ({ page }) => 
 });
 
 test("clears an archived header project with a visible message", async ({ page }) => {
-  await stopWorkspaceTimer();
+  await stopRunningTimers();
   await page.goto("/timesheets");
   await waitForHydration(page);
   await page.locator("#timer-project").selectOption(timerProjectId);

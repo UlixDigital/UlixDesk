@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { signIn } from "./auth";
 import { e2eDatabaseUrl, e2eOrigin } from "./env";
 
 if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
@@ -17,6 +18,7 @@ test("submits before JavaScript with POST instead of putting fields in the URL",
 }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
+  await signIn(context, prisma);
   await page.goto("/projects/new");
   await expect(page.locator("form")).toHaveAttribute("method", /post/i);
 

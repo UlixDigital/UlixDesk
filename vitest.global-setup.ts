@@ -1,14 +1,13 @@
 import { execSync } from "node:child_process";
-import { rmSync } from "node:fs";
+
+const databaseUrl = "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk_test";
 
 export default function setup() {
-  rmSync("prisma/test.db", { force: true });
-  rmSync("prisma/test.db-journal", { force: true });
-  execSync("npx prisma migrate deploy", {
+  execSync("npx prisma migrate reset --force --skip-seed", {
     stdio: "inherit",
     env: {
       ...process.env,
-      DATABASE_URL: "file:./test.db",
+      DATABASE_URL: databaseUrl,
     },
   });
 }

@@ -2,45 +2,38 @@
 
 UlixDesk is Ulix Digital's internal time-tracking app. The product follows the same shape as Hubstaff: a directory of clients, then projects, then time tracked against that work.
 
-This repository contains **Slice 1: Clients**, **Slice 2: Projects**, **Slice 3: Timesheets**, and **Slice 4: the Chrome extension timer**. The team can keep a directory of clients and projects, track time in the app, and start or stop the same timer from Chrome.
-
-There is no login yet. The Chrome extension authenticates with an access token created on the Extension access page. That token is not a user account. The app is an internal MVP backed by a local database.
+This repository contains **Slice 1: Clients**, **Slice 2: Projects**, **Slice 3: Timesheets**, **Slice 4: the Chrome extension timer**, and **Slice 5: go-live foundations** (staff login, PostgreSQL, and the staging/production stack). Staff sign in with an email and a password. There is no public signup and no client login.
 
 ## Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript
 - Tailwind CSS 4
-- Prisma 6 + SQLite for local development
+- Prisma 6 + PostgreSQL 16
 
 ## Run locally
 
-From the repository root:
+From the repository root, with Docker available:
 
 ```bash
 npm install
+cp .env.example .env
+npm run db:up
 npx prisma migrate deploy
+npm run user:bootstrap
 npm run dev
 ```
 
-`npm run dev` listens on `127.0.0.1` only, so the app is not reachable from other machines on the network. Open [http://127.0.0.1:3000](http://127.0.0.1:3000). `localhost` still works, because it resolves to that address. The home page redirects to [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients). Projects live at [http://127.0.0.1:3000/projects](http://127.0.0.1:3000/projects). Timesheets live at [http://127.0.0.1:3000/timesheets](http://127.0.0.1:3000/timesheets). Extension access tokens live at [http://127.0.0.1:3000/settings](http://127.0.0.1:3000/settings).
+`npm run db:up` starts Postgres from `docker-compose.yml` and publishes it on `127.0.0.1:5432` only. The first start also creates `ulixdesk_test` and `ulixdesk_e2e`, so unit tests and Playwright do not use the dev database.
 
-`npm install` generates the Prisma client. `npx prisma migrate deploy` creates the local SQLite database at `prisma/dev.db` and applies every migration, including the Slice 3 time-entry migration (`20261009150000_time_entries`). That file is gitignored.
+`npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). The bootstrap owner in the committed local `.env` is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, extension tokens at `/settings`, and the team page at `/team` for owners and admins.
 
-If you already have a Slice 1 or Slice 2 database, run `npx prisma migrate deploy` again before starting the app. That adds the `TimeEntry` and `RunningTimer` tables. It does not delete clients or projects.
+`npm run user:bootstrap` creates that owner only when the database has no users. It does not print the password. See [docs/DEPLOY.md](docs/DEPLOY.md) for staging, production, and a local run of the full Caddy stack.
 
-`.env` contains:
-
-```bash
-DATABASE_URL="file:./dev.db"
-ULIXDESK_EXTENSION_IDS="cjlaoflbipaehclleojofopapalhiooe"
-```
-
-`DATABASE_URL` is a local file path, not a credential. Do not point this app at a production database. `ULIXDESK_EXTENSION_IDS` is the unpacked extension's public id, also not a secret. On OVH, set `ULIXDESK_APP_HOSTS` to that environment's public hostname before starting the app. See Extension API below.
-
-To wipe local data and reapply migrations:
+To wipe the dev database and reapply migrations:
 
 ```bash
 npx prisma migrate reset --force
+npm run user:bootstrap
 ```
 
 ## Checks
@@ -48,12 +41,13 @@ npx prisma migrate reset --force
 ```bash
 npm test
 npm run lint
+npm run typecheck
 npm run build
 npx playwright install chromium
 npm run test:e2e
 ```
 
-`npm test` runs the Vitest unit tests against `prisma/test.db`. `npm run test:e2e` runs Playwright in Chromium. It covers failed saves on Add time and Add project, the header timer after start, stop, and an archived project, a submit before JavaScript, and the unpacked Chrome extension. Playwright starts its own `npm run dev` on [http://127.0.0.1:3100](http://127.0.0.1:3100) and does not reuse a server that is already running. That server uses `DATABASE_URL=file:./e2e.db` (`prisma/e2e.db`), which the run deletes and migrates before Next starts. It does not read or write `prisma/dev.db`, so it cannot stop a timer you started with `npm run dev`. The extension test loads the unpacked build in headed Chromium. Chrome's permission dialog is outside the page, so that test needs a display plus `xdotool` and `ffmpeg` to click Allow.
+`npm test` runs Vitest against `ulixdesk_test`. `npm run typecheck` checks the app and the extension. `npm run test:e2e` runs Playwright in Chromium against `ulixdesk_e2e` on [http://127.0.0.1:3100](http://127.0.0.1:3100). It resets that database, creates the e2e owner (`owner@ulix.test` / `e2e-password-10`), and does not reuse a server that is already running. It does not read the dev database. The extension test loads the unpacked build in headed Chromium and is skipped when `CI` is set. Chrome's permission dialog is outside the page, so that test needs a display plus `xdotool` and `ffmpeg` to click Allow.
 
 ## What shipped in Slice 1
 
@@ -64,7 +58,7 @@ npm run test:e2e
 - Empty states for no clients, no active clients while archives exist, no archived clients, and no search matches.
 - Server-side validation, including a required name.
 
-Emails are stored in a related table because SQLite does not support Prisma scalar lists. The form edits them as chips.
+Emails are stored in a related table. The form edits them as chips.
 
 ## What shipped in Slice 2
 
@@ -222,21 +216,27 @@ No JSON fields. Send `Content-Type: application/json`. The same origin rule as s
 ## What shipped in Slice 4
 
 - Extension access tokens. Settings creates a named token, shows the plaintext once, and stores a SHA-256 hash. The list shows name, created, last used, and Active or Revoked. Revoke keeps the row and stops the token.
-- Bearer auth on the timer API and `GET /api/projects`, plus CORS for `chrome-extension://` origins. Unauthenticated calls still follow the same-origin rules, and an untrusted Host is rejected.
+- Bearer auth on the timer API and `GET /api/projects`, plus CORS for `chrome-extension://` origins. An untrusted Host is rejected. Slice 5 ties each token to a user. A call with no bearer token needs a session cookie after the same origin checks.
 - A Chrome extension popup: project picker, optional note, Start and Stop, live elapsed time, and the running project and client. After this popup starts the timer, the status line says “Timer running”. Opening the popup while a timer is already running, including one started in the web app, says “A timer is already running.” If the last chosen project is archived and no active projects remain, the popup says “No active projects”. The toolbar badge shows a dot under one minute and elapsed minutes after that. Opening the popup refreshes the badge, and `chrome.alarms` checks about once a minute. The access token stays in `chrome.storage.local` on that computer.
 - Options for the server URL and token, Grant permission for that origin, and Test connection. The last chosen project is remembered. Host access is an optional permission requested for the saved origin only. There is no `<all_urls>` permission.
 
 A click on Add client, Add project, Add time, or the header timer before hydration posts the server action. An archived project id in the header is cleared after the notice is shown, so a reload does not repeat “That project is no longer active. Choose another project.”
 
+## What shipped in Slice 5
+
+- Staff login with Argon2id passwords, server-side sessions, logout, and login rate limits. Owners and admins manage clients, projects, and the team. Members track their own time. Each person has their own running timer.
+- Team page: add a person, copy a one-time set-password link, reset that link, change a role, and deactivate or restore. UlixDesk does not send email.
+- Extension tokens belong to the signed-in user. PostgreSQL replaces SQLite. The production image, Caddy, backups, and GitHub workflows are described in [docs/DEPLOY.md](docs/DEPLOY.md).
+- The extension popup says “That project no longer exists. Choose another project.” when the server returns `PROJECT_NOT_FOUND`. `GET /api/projects` says “This origin isn't allowed to access UlixDesk.” for a forbidden origin. Invalid JSON on timer start uses the `INVALID_JSON` code. `http://[::1]:3000` counts as the same origin as the other loopback names on that port.
+
 ## Deferred
 
-- User accounts and login beyond extension access tokens
 - Chrome Web Store publishing
 - Screenshots, activity, and idle tracking
 - Approvals and reasons
 - Reporting beyond the daily and weekly timesheets
-- Members, roles, and people admin
 - Pay rates, bill rates, budgets, and to-dos
 - Import, duplicate, and transfer
 - Invoicing, auto-invoicing, invoice notes, tax, and net terms
-- Production deployment
+- Email delivery for invites
+- Client logins, public signup, and SSO

@@ -15,6 +15,8 @@ export const apiCodes = {
   HOST_FORBIDDEN: "HOST_FORBIDDEN",
   BEARER_REQUIRED: "BEARER_REQUIRED",
   TOKEN_INVALID: "TOKEN_INVALID",
+  AUTH_REQUIRED: "AUTH_REQUIRED",
+  ACCOUNT_DEACTIVATED: "ACCOUNT_DEACTIVATED",
 } as const;
 
 export type ApiErrorCode = (typeof apiCodes)[keyof typeof apiCodes];

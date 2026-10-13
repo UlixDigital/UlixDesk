@@ -9,8 +9,8 @@ import type { TimesheetEntry } from "@/lib/timesheet";
 import { intervalsOverlap, normalizeNote } from "@/lib/time-validation";
 
 /**
- * One running timer for the workspace until accounts exist.
- * Later, use the signed-in user's id here and set TimeEntry.userId to the same value.
+ * Legacy running-timer id from before each person had an account.
+ * Bootstrap reassigns that row to the owner. New timers use the user id.
  */
 export const WORKSPACE_TIMER_ID = "workspace";
 
@@ -189,9 +189,10 @@ export async function projectSelectionError(
   return null;
 }
 
-export async function getTimeEntry(id: string) {
+/** `userId` null means every person. Callers that are members pass their own id. */
+export async function getTimeEntry(id: string, userId: string | null) {
   const row = await prisma.timeEntry.findFirst({
-    where: { id, userId: null },
+    where: { id, ...(userId ? { userId } : {}) },
     include: entryInclude,
   });
   return row ? toRecord(row) : null;
@@ -202,10 +203,11 @@ export async function listEntriesOverlapping(input: {
   rangeEnd: Date;
   projectId?: string;
   clientId?: string;
+  userId: string | null;
 }) {
   const rows = await prisma.timeEntry.findMany({
     where: {
-      userId: null,
+      ...(input.userId ? { userId: input.userId } : {}),
       endedAt: { not: null, gt: input.rangeStart },
       startedAt: { lt: input.rangeEnd },
       ...(input.projectId ? { projectId: input.projectId } : {}),
@@ -225,9 +227,9 @@ export type OverlapCandidate = {
 };
 
 /** Completed entries, plus the running timer closed at `now`, for the overlap warning. */
-export async function listOverlapCandidates(now: Date): Promise<OverlapCandidate[]> {
+export async function listOverlapCandidates(now: Date, userId: string): Promise<OverlapCandidate[]> {
   const rows = await prisma.timeEntry.findMany({
-    where: { userId: null },
+    where: { userId },
     select: { id: true, startedAt: true, endedAt: true },
   });
   const candidates: OverlapCandidate[] = [];
@@ -248,10 +250,11 @@ export async function hasOverlap(input: {
   endedAt: Date;
   excludeId?: string;
   now: Date;
+  userId: string;
 }) {
   const rows = await prisma.timeEntry.findMany({
     where: {
-      userId: null,
+      userId: input.userId,
       ...(input.excludeId ? { id: { not: input.excludeId } } : {}),
       startedAt: { lt: input.endedAt },
     },
@@ -263,16 +266,17 @@ export async function hasOverlap(input: {
   });
 }
 
-export async function createManualEntry(input: ManualEntryInput, now: Date) {
+export async function createManualEntry(input: ManualEntryInput, now: Date, userId: string) {
   const overlap = await hasOverlap({
     startedAt: input.startedAt,
     endedAt: input.endedAt,
     now,
+    userId,
   });
   const created = await prisma.timeEntry.create({
     data: {
       projectId: input.projectId,
-      userId: null,
+      userId,
       startedAt: input.startedAt,
       endedAt: input.endedAt,
       billable: input.billable,
@@ -288,9 +292,10 @@ export async function updateManualEntry(
   id: string,
   input: ManualEntryInput,
   now: Date,
+  userId: string,
 ) {
   const existing = await prisma.timeEntry.findFirst({
-    where: { id, userId: null },
+    where: { id, userId },
   });
   if (!existing || !existing.endedAt) return null;
   const overlap = await hasOverlap({
@@ -298,6 +303,7 @@ export async function updateManualEntry(
     endedAt: input.endedAt,
     excludeId: id,
     now,
+    userId,
   });
   const updated = await prisma.timeEntry.update({
     where: { id },
@@ -313,22 +319,22 @@ export async function updateManualEntry(
   return { entry: toRecord(updated), overlap };
 }
 
-export async function deleteTimeEntry(id: string) {
-  const existing = await getTimeEntry(id);
+export async function deleteTimeEntry(id: string, userId: string | null) {
+  const existing = await getTimeEntry(id, userId);
   if (!existing) return { ok: false as const, reason: "missing" as const };
   if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
   await prisma.timeEntry.delete({ where: { id } });
   return { ok: true as const, entry: existing };
 }
 
-export async function getRunningTimer() {
+export async function getRunningTimer(userId: string) {
   const row = await prisma.runningTimer.findUnique({
-    where: { id: WORKSPACE_TIMER_ID },
+    where: { id: userId },
     include: { timeEntry: { include: entryInclude } },
   });
   if (!row) return null;
   if (row.timeEntry.endedAt) {
-    await prisma.runningTimer.delete({ where: { id: WORKSPACE_TIMER_ID } }).catch(() => undefined);
+    await prisma.runningTimer.delete({ where: { id: userId } }).catch(() => undefined);
     return null;
   }
   return toRecord(row.timeEntry);
@@ -338,6 +344,7 @@ export async function startTimer(input: {
   projectId: string;
   note: string;
   now: Date;
+  userId: string;
 }): Promise<
   | { ok: true; timer: TimeEntryRecord }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
@@ -350,14 +357,14 @@ export async function startTimer(input: {
   try {
     const timer = await prisma.$transaction(async (tx) => {
       const running = await tx.runningTimer.findUnique({
-        where: { id: WORKSPACE_TIMER_ID },
+        where: { id: input.userId },
         include: { timeEntry: { include: entryInclude } },
       });
       if (running && !running.timeEntry.endedAt) {
         return { conflict: toRecord(running.timeEntry) };
       }
       if (running) {
-        await tx.runningTimer.delete({ where: { id: WORKSPACE_TIMER_ID } });
+        await tx.runningTimer.delete({ where: { id: input.userId } });
       }
 
       const project = await tx.project.findUnique({
@@ -370,7 +377,7 @@ export async function startTimer(input: {
       const created = await tx.timeEntry.create({
         data: {
           projectId,
-          userId: null,
+          userId: input.userId,
           startedAt: input.now,
           endedAt: null,
           billable: project.billable,
@@ -380,7 +387,7 @@ export async function startTimer(input: {
         include: entryInclude,
       });
       await tx.runningTimer.create({
-        data: { id: WORKSPACE_TIMER_ID, timeEntryId: created.id },
+        data: { id: input.userId, timeEntryId: created.id },
       });
       return { timer: toRecord(created) };
     });
@@ -392,25 +399,25 @@ export async function startTimer(input: {
     if ("inactive" in timer) return { ok: false, code: "project-inactive" };
     return { ok: true, timer: timer.timer };
   } catch (error) {
-    const running = await getRunningTimer();
+    const running = await getRunningTimer(input.userId);
     if (running) return { ok: false, code: "already-running", timer: running };
     throw error;
   }
 }
 
-export async function stopTimer(now: Date): Promise<
+export async function stopTimer(now: Date, userId: string): Promise<
   | { ok: true; entry: TimeEntryRecord; capped: boolean; overlap: boolean }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
 > {
   try {
     const claimed = await prisma.$transaction(async (tx) => {
       const row = await tx.runningTimer.findUnique({
-        where: { id: WORKSPACE_TIMER_ID },
+        where: { id: userId },
         include: { timeEntry: { include: entryInclude } },
       });
       if (!row || row.timeEntry.endedAt) {
         if (row?.timeEntry.endedAt) {
-          await tx.runningTimer.delete({ where: { id: WORKSPACE_TIMER_ID } });
+          await tx.runningTimer.delete({ where: { id: userId } });
         }
         return { ok: false as const, code: "not-running" as const };
       }
@@ -436,7 +443,7 @@ export async function stopTimer(now: Date): Promise<
         return { ok: false as const, code: "not-running" as const };
       }
       await tx.runningTimer.deleteMany({
-        where: { id: WORKSPACE_TIMER_ID, timeEntryId: row.timeEntry.id },
+        where: { id: userId, timeEntryId: row.timeEntry.id },
       });
       const updated = await tx.timeEntry.findUniqueOrThrow({
         where: { id: row.timeEntry.id },
@@ -456,6 +463,7 @@ export async function stopTimer(now: Date): Promise<
       endedAt: claimed.endedAt,
       excludeId: claimed.entry.id,
       now,
+      userId,
     });
     return {
       ok: true,
@@ -464,7 +472,7 @@ export async function stopTimer(now: Date): Promise<
       overlap,
     };
   } catch (error) {
-    const running = await getRunningTimer();
+    const running = await getRunningTimer(userId);
     if (!running) return { ok: false, code: "not-running" };
     throw error;
   }
@@ -483,7 +491,7 @@ async function sumCompleted(where: {
   project?: { clientId: string };
 }) {
   const rows = await prisma.timeEntry.findMany({
-    where: { userId: null, endedAt: { not: null }, ...where },
+    where: { endedAt: { not: null }, ...where },
     select: { startedAt: true, endedAt: true },
   });
   return rows.reduce((sum, row) => sum + durationMs({ startedAt: row.startedAt, endedAt: row.endedAt }), 0);

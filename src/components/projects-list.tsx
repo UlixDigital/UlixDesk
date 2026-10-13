@@ -10,9 +10,11 @@ const columns =
 export function ProjectsList({
   projects,
   archived,
+  canManage = true,
 }: {
   projects: ProjectRecord[];
   archived: boolean;
+  canManage?: boolean;
 }) {
   return (
     <section aria-label={archived ? "Archived projects" : "Active projects"}>
@@ -75,18 +77,22 @@ export function ProjectsList({
                 </p>
               </div>
               <div className="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                <Link
-                  href={`/projects/${project.id}/edit`}
-                  className={ui.secondaryButton}
-                >
-                  Edit
-                  <span className="sr-only"> {project.name}</span>
-                </Link>
-                {archived ? (
-                  <RestoreButton id={project.id} name={project.name} />
-                ) : (
-                  <ArchiveButton id={project.id} name={project.name} />
-                )}
+                {canManage ? (
+                  <>
+                    <Link
+                      href={`/projects/${project.id}/edit`}
+                      className={ui.secondaryButton}
+                    >
+                      Edit
+                      <span className="sr-only"> {project.name}</span>
+                    </Link>
+                    {archived ? (
+                      <RestoreButton id={project.id} name={project.name} />
+                    ) : (
+                      <ArchiveButton id={project.id} name={project.name} />
+                    )}
+                  </>
+                ) : null}
               </div>
             </li>
           ))}

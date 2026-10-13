@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { authCopy } from "@/lib/auth-copy";
 import { timesheetsHref, type TimesheetView } from "@/lib/timesheet";
 import { timeCopy } from "@/lib/time-copy";
 import { ui } from "@/lib/ui";
@@ -12,15 +13,19 @@ export function TimesheetFilters({
   date,
   projectId,
   clientId,
+  user = "",
   projects,
   clients,
+  people = [],
 }: {
   view: TimesheetView;
   date: string;
   projectId: string;
   clientId: string;
+  user?: string;
   projects: Option[];
   clients: Option[];
+  people?: Option[];
 }) {
   const filtered = Boolean(projectId || clientId);
 
@@ -31,7 +36,7 @@ export function TimesheetFilters({
       className="mt-6 flex flex-col gap-2 lg:flex-row lg:items-center"
       onChange={(event) => {
         const id = (event.target as HTMLElement).id;
-        if (id === "timesheet-project" || id === "timesheet-client") {
+        if (id === "timesheet-project" || id === "timesheet-client" || id === "timesheet-person") {
           event.currentTarget.requestSubmit();
         }
       }}
@@ -78,13 +83,35 @@ export function TimesheetFilters({
           ))}
         </select>
       </div>
+      {people.length > 0 ? (
+        <div className="min-w-0 flex-1">
+          <label htmlFor="timesheet-person" className="sr-only">
+            {authCopy.personLabel}
+          </label>
+          <select
+            key={user}
+            id="timesheet-person"
+            name="user"
+            defaultValue={user}
+            className={ui.input}
+          >
+            <option value="">{authCopy.myTime}</option>
+            <option value="all">{authCopy.everyone}</option>
+            {people.map((person) => (
+              <option key={person.id} value={person.id}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
       <div className="flex gap-2">
         <button type="submit" className={ui.secondaryButton}>
           Filter
         </button>
         {filtered ? (
           <Link
-            href={timesheetsHref({ view, date })}
+            href={timesheetsHref({ view, date, user })}
             className={ui.secondaryButton}
           >
             {timeCopy.clearFilters}

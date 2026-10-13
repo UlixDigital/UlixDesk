@@ -67,6 +67,18 @@ export function KeyIcon(props: IconProps) {
   );
 }
 
+export function UsersIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16 20.25v-1.5A2.75 2.75 0 0 0 13.25 16h-6.5A2.75 2.75 0 0 0 4 18.75v1.5M10 12.25a3.25 3.25 0 1 0 0-6.5 3.25 3.25 0 0 0 0 6.5ZM20 20.25v-1.5A2.75 2.75 0 0 0 17.25 16M16.5 5.9a3.25 3.25 0 0 1 0 6.2"
+      />
+    </svg>
+  );
+}
+
 export function ClockIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

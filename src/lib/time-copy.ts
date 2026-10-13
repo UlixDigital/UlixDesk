@@ -60,6 +60,7 @@ export const timeCopy = {
   invalidJson: "Send a JSON body with a project id.",
   jsonContentType: "Content-Type must be application/json.",
   originForbidden: "This origin can't control the timer.",
+  originDenied: "This origin isn't allowed to access UlixDesk.",
   hostForbidden: "This host isn't allowed to control the timer.",
   hostDenied: "This host isn't allowed to access UlixDesk.",
   previousDay: "Previous day",

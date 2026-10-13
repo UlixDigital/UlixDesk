@@ -14,6 +14,8 @@ import {
   type ClientOption,
 } from "@/lib/project-display";
 import { countProjectsByStatus, listClientsForFilter, loadProjectLists } from "@/lib/projects";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { ui } from "@/lib/ui";
 
 export const metadata: Metadata = {
@@ -45,6 +47,8 @@ export default async function ProjectsPage({
     visibleCount: projects.length,
     otherCount: status === "active" ? totals.archived : totals.active,
   });
+  const actor = await getCurrentUser();
+  const canManage = actor ? canManageWorkspace(actor.role) : false;
   const clients: ClientOption[] = filterClients.map((client) => ({
     id: client.id,
     name: client.name,
@@ -62,10 +66,12 @@ export default async function ProjectsPage({
             Work you track time against.
           </p>
         </div>
-        <Link href="/projects/new" className={ui.primaryButton}>
-          <PlusIcon className="h-4 w-4" />
-          Add project
-        </Link>
+        {canManage ? (
+          <Link href="/projects/new" className={ui.primaryButton}>
+            <PlusIcon className="h-4 w-4" />
+            Add project
+          </Link>
+        ) : null}
       </div>
 
       <ProjectFilters
@@ -106,7 +112,7 @@ export default async function ProjectsPage({
           status={status}
         />
       ) : (
-        <ProjectsList projects={projects} archived={status === "archived"} />
+        <ProjectsList projects={projects} archived={status === "archived"} canManage={canManage} />
       )}
     </div>
   );

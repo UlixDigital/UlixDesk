@@ -3,11 +3,59 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
 }
 
-/// A company or contact UlixDesk will track time for.
+/// A staff account. There is no public signup and no client login.
+/// `role` is owner, admin, or member.
+model User {
+  id             String          @id @default(cuid())
+  email          String          @unique
+  name           String
+  role           String          @default("member")
+  passwordHash   String?
+  deactivatedAt  DateTime?
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  sessions       Session[]
+  passwordSetups PasswordSetup[]
+  accessTokens   AccessToken[]
+  timeEntries    TimeEntry[]
+
+  @@index([role])
+  @@index([deactivatedAt])
+}
+
+/// Server-side session. The cookie holds a random token; only the hash is stored.
+model Session {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String   @unique
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  rotatedAt  DateTime @default(now())
+  expiresAt  DateTime
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+/// One-time set-password token. The plaintext is shown once. Only the hash is stored.
+model PasswordSetup {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// A company or contact UlixDesk tracks time for.
 model Client {
   id         String        @id @default(cuid())
   name       String
@@ -23,7 +71,7 @@ model Client {
   @@index([name])
 }
 
-/// Related rows because SQLite does not support Prisma scalar lists.
+/// One email address for a client, in the order shown on the form.
 model ClientEmail {
   id       String @id @default(cuid())
   email    String
@@ -37,15 +85,15 @@ model ClientEmail {
 
 /// Work tracked for an optional client. Archive sets archivedAt; rows are not deleted.
 model Project {
-  id          String    @id @default(cuid())
+  id          String      @id @default(cuid())
   name        String
   description String?
-  billable    Boolean   @default(true)
+  billable    Boolean     @default(true)
   clientId    String?
-  client      Client?   @relation(fields: [clientId], references: [id], onDelete: SetNull)
+  client      Client?     @relation(fields: [clientId], references: [id], onDelete: SetNull)
   archivedAt  DateTime?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
   timeEntries TimeEntry[]
 
   @@index([clientId])
@@ -54,14 +102,14 @@ model Project {
 }
 
 /// One block of tracked time. `endedAt` is null only while its timer is running.
-/// `userId` stays null until authentication exists. Every current row belongs to
-/// the single workspace. Adding accounts later means filling `userId` and using
-/// that id as `RunningTimer.id` — the time columns do not need to change.
+/// `userId` is the staff member who tracked it. Rows from before accounts existed
+/// stay null until bootstrap assigns them to the owner.
 model TimeEntry {
   id           String        @id @default(cuid())
   projectId    String
   project      Project       @relation(fields: [projectId], references: [id], onDelete: Restrict)
   userId       String?
+  user         User?         @relation(fields: [userId], references: [id], onDelete: Restrict)
   startedAt    DateTime
   endedAt      DateTime?
   billable     Boolean
@@ -77,22 +125,26 @@ model TimeEntry {
   @@index([endedAt])
 }
 
-/// At most one running timer. The id is "workspace" until each user has an account.
+/// One running timer per user. `id` is that user's id.
+/// The legacy id "workspace" is reassigned to the bootstrap owner.
 model RunningTimer {
   id          String    @id
   timeEntryId String    @unique
   timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
 }
 
-/// A bearer token for the Chrome extension. Only the hash is stored.
-/// The plaintext is shown once, when the token is created.
+/// A bearer token for the Chrome extension. It belongs to the user who created it.
+/// Only the hash is stored. The plaintext is shown once, when the token is created.
 model AccessToken {
   id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   name       String
   tokenHash  String    @unique
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
   revokedAt  DateTime?
 
+  @@index([userId])
   @@index([createdAt])
 }

@@ -55,12 +55,31 @@ function normalizeAllowlistHost(entry: string) {
   return trimmed;
 }
 
+/**
+ * Compare origins after URL parsing so `http://[::1]:3000` matches the
+ * loopback alias even when one side was built as a string and the other
+ * came from `URL.origin`. Node reports the IPv6 hostname with brackets.
+ */
+export function canonicalOrigin(value: string) {
+  try {
+    const url = new URL(value);
+    const host = bareHostname(url.hostname).toLowerCase();
+    const port = url.port ? `:${url.port}` : "";
+    const rendered = host.includes(":") ? `[${host}]` : host;
+    return `${url.protocol}//${rendered}${port}`;
+  } catch {
+    return null;
+  }
+}
+
 export function isAllowedTimerOrigin(origin: string, appOrigin: string | Iterable<string>) {
+  const canonical = canonicalOrigin(origin);
+  if (!canonical) return false;
   const appOrigins = typeof appOrigin === "string" ? [appOrigin] : appOrigin;
   for (const candidate of appOrigins) {
-    if (origin === candidate) return true;
+    if (canonical === canonicalOrigin(candidate)) return true;
   }
-  return timerOriginAllowlist().includes(origin);
+  return timerOriginAllowlist().some((item) => canonical === canonicalOrigin(item));
 }
 
 /** Node reports the IPv6 hostname as "[::1]", not "::1". */
@@ -80,12 +99,20 @@ export function hostnameFromHost(host: string) {
   }
 }
 
+function isTimerPath(pathname: string) {
+  return pathname === "/api/timer" || pathname.startsWith("/api/timer/");
+}
+
 /** Timer routes keep the timer host message. Every other path uses the app message. */
 export function hostForbiddenMessage(pathname: string) {
-  if (pathname === "/api/timer" || pathname.startsWith("/api/timer/")) {
-    return timeCopy.hostForbidden;
-  }
+  if (isTimerPath(pathname)) return timeCopy.hostForbidden;
   return timeCopy.hostDenied;
+}
+
+/** Timer routes keep the timer origin message. Projects and other paths stay general. */
+export function originForbiddenMessage(pathname: string) {
+  if (isTimerPath(pathname)) return timeCopy.originForbidden;
+  return timeCopy.originDenied;
 }
 
 export function hostIsTrusted(host: string | null | undefined) {
@@ -162,7 +189,7 @@ export function unauthenticatedApiRefusal(request: HeaderSource): Response | nul
 
   const origin = request.headers.get("origin");
   if (origin !== null && !isAllowedTimerOrigin(origin, appOriginsForRequest(request))) {
-    return Response.json(apiError(timeCopy.originForbidden, apiCodes.ORIGIN_FORBIDDEN), {
+    return Response.json(apiError(originForbiddenMessage(page.pathname), apiCodes.ORIGIN_FORBIDDEN), {
       status: 403,
     });
   }

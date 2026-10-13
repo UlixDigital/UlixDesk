@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+coverage
+playwright-report
+test-results
+blob-report
+extension/dist
+extension/ulixdesk-extension.zip
+env/*.env
+*.db
+*.db-journal
+*.md

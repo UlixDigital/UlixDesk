@@ -11,10 +11,10 @@ export function OPTIONS(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const refused = await authorizeApiRequest(request, { requireJson: true });
-  if (refused) return refused;
+  const actor = await authorizeApiRequest(request, { requireJson: true });
+  if (actor instanceof Response) return actor;
 
-  const result = await stopTimer(new Date());
+  const result = await stopTimer(new Date(), actor.userId);
   if (!result.ok) {
     const status = result.code === "too-short" ? 409 : 404;
     return jsonApi(

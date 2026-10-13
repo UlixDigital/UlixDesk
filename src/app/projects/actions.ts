@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { gateManager } from "@/lib/auth";
 import { projectsHref } from "@/lib/project-display";
 import {
   archiveProject,
@@ -32,6 +33,8 @@ export async function saveProjectAction(
   formData: FormData,
 ): Promise<ProjectFormState> {
   const values = parseProjectFormData(formData);
+  const gate = await gateManager();
+  if (!gate.ok) return { errors: { form: gate.error }, values };
   const result = validateProjectInput(values);
   if (!result.ok) {
     return { errors: result.errors, values: result.values };
@@ -98,6 +101,8 @@ export async function saveProjectAction(
 }
 
 export async function archiveProjectAction(formData: FormData) {
+  const gate = await gateManager();
+  if (!gate.ok) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const archived = await archiveProject(id);
@@ -105,6 +110,8 @@ export async function archiveProjectAction(formData: FormData) {
 }
 
 export async function restoreProjectAction(formData: FormData) {
+  const gate = await gateManager();
+  if (!gate.ok) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   const restored = await restoreProject(id);

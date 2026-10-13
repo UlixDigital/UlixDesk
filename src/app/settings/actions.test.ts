@@ -8,9 +8,13 @@ import { createAccessTokenAction, revokeAccessTokenAction } from "@/app/settings
 import { findUsableAccessToken, hashAccessToken } from "@/lib/access-tokens";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { signInAs } from "@/lib/test-actor";
 import { tokenCopy } from "@/lib/token-copy";
 
-beforeEach(resetTestDatabase);
+beforeEach(async () => {
+  await resetTestDatabase();
+  await signInAs("member", "settings@ulix.test");
+});
 
 afterAll(async () => {
   await prisma.$disconnect();

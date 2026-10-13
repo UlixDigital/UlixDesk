@@ -1,0 +1,54 @@
+name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ulixdesk-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push the image
+        id: image
+        run: |
+          image="ghcr.io/$(echo "$GITHUB_REPOSITORY" | tr '[:upper:]' '[:lower:]'):$GITHUB_SHA"
+          docker build -t "$image" .
+          docker push "$image"
+          echo "name=$image" >> "$GITHUB_OUTPUT"
+      - name: Copy the stack and start staging
+        env:
+          SSH_HOST: ${{ secrets.ULIXDESK_SSH_HOST }}
+          SSH_USER: ${{ secrets.ULIXDESK_SSH_USER }}
+          SSH_KEY: ${{ secrets.ULIXDESK_SSH_PRIVATE_KEY }}
+          SSH_KNOWN_HOSTS: ${{ secrets.ULIXDESK_SSH_KNOWN_HOSTS }}
+          IMAGE: ${{ steps.image.outputs.name }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          target="$SSH_USER@$SSH_HOST"
+          ssh -i ~/.ssh/id_ed25519 "$target" "mkdir -p /opt/ulixdesk/docker/backup /opt/ulixdesk/docker/postgres /opt/ulixdesk/scripts"
+          scp -i ~/.ssh/id_ed25519 \
+            docker-compose.prod.yml \
+            "$target:/opt/ulixdesk/docker-compose.prod.yml"
+          scp -i ~/.ssh/id_ed25519 docker/Caddyfile "$target:/opt/ulixdesk/docker/Caddyfile"
+          scp -i ~/.ssh/id_ed25519 docker/backup/loop.sh "$target:/opt/ulixdesk/docker/backup/loop.sh"
+          scp -i ~/.ssh/id_ed25519 docker/postgres/init-prod.sh "$target:/opt/ulixdesk/docker/postgres/init-prod.sh"
+          scp -i ~/.ssh/id_ed25519 scripts/remote-deploy.sh "$target:/opt/ulixdesk/scripts/remote-deploy.sh"
+          scp -i ~/.ssh/id_ed25519 scripts/restore-backup.sh "$target:/opt/ulixdesk/scripts/restore-backup.sh"
+          ssh -i ~/.ssh/id_ed25519 "$target" "chmod +x /opt/ulixdesk/scripts/remote-deploy.sh /opt/ulixdesk/scripts/restore-backup.sh /opt/ulixdesk/docker/backup/loop.sh /opt/ulixdesk/docker/postgres/init-prod.sh && /opt/ulixdesk/scripts/remote-deploy.sh staging '$IMAGE'"

@@ -1,0 +1,21 @@
+{
+	email {$ACME_EMAIL:ops@ulixdigital.com}
+}
+
+desk.ulixdigital.com {
+	reverse_proxy app-production:3000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+}
+
+staging.desk.ulixdigital.com {
+	reverse_proxy app-staging:3000 {
+		header_up Host {host}
+		header_up X-Forwarded-Host {host}
+		header_up X-Forwarded-Proto {scheme}
+		header_up X-Forwarded-For {remote_host}
+	}
+}

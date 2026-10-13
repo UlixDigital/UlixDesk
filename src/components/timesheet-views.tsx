@@ -110,6 +110,7 @@ export function WeeklyTimesheet({
   totalMs,
   projectId,
   clientId,
+  user = "",
 }: {
   dates: string[];
   today: string;
@@ -118,6 +119,7 @@ export function WeeklyTimesheet({
   totalMs: number;
   projectId: string;
   clientId: string;
+  user?: string;
 }) {
   return (
     <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
@@ -182,6 +184,7 @@ export function WeeklyTimesheet({
                           date: dates[index],
                           projectId: projectId || row.projectId,
                           clientId,
+                          user,
                         })}
                         className="hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
                       >
@@ -241,6 +244,7 @@ export function TimesheetNav({
   today,
   projectId,
   clientId,
+  user = "",
   heading,
 }: {
   view: TimesheetView;
@@ -248,6 +252,7 @@ export function TimesheetNav({
   today: string;
   projectId: string;
   clientId: string;
+  user?: string;
   heading: string;
 }) {
   const previous = shiftTimesheetDate(date, view, -1);
@@ -261,20 +266,20 @@ export function TimesheetNav({
       <h2 className="text-lg font-semibold text-slate-900">{heading}</h2>
       <div className="flex flex-wrap gap-2">
         <Link
-          href={timesheetsHref({ view, date: previous, projectId, clientId })}
+          href={timesheetsHref({ view, date: previous, projectId, clientId, user })}
           className={ui.secondaryButton}
         >
           {view === "week" ? timeCopy.previousWeek : timeCopy.previousDay}
         </Link>
         <Link
-          href={timesheetsHref({ view, date: today, projectId, clientId })}
+          href={timesheetsHref({ view, date: today, projectId, clientId, user })}
           className={ui.secondaryButton}
           aria-current={onToday ? "date" : undefined}
         >
           {view === "week" ? timeCopy.thisWeek : timeCopy.today}
         </Link>
         <Link
-          href={timesheetsHref({ view, date: next, projectId, clientId })}
+          href={timesheetsHref({ view, date: next, projectId, clientId, user })}
           className={ui.secondaryButton}
         >
           {view === "week" ? timeCopy.nextWeek : timeCopy.nextDay}
