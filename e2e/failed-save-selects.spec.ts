@@ -1,5 +1,10 @@
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
+import { e2eDatabaseUrl, e2eOrigin } from "./env";
+
+if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
+  throw new Error(`e2e must use ${e2eDatabaseUrl}, got ${process.env.DATABASE_URL ?? "(unset)"}`);
+}
 
 const prisma = new PrismaClient();
 const TIMER_PROJECT_KEY = "ulixdesk-timer-project";
@@ -63,7 +68,7 @@ test.beforeEach(async ({ context }) => {
     {
       name: "ulixdesk-timezone",
       value: "UTC",
-      url: "http://127.0.0.1:3000",
+      url: e2eOrigin,
     },
   ]);
 });
@@ -182,10 +187,58 @@ test("clears an archived header project with a visible message", async ({ page }
     await expect(page.locator("#timer-project option:checked")).toHaveText("Project");
     await expect(page.getByRole("button", { name: "Start", exact: true })).toBeDisabled();
     await expect(page.getByText("Choose a project.", { exact: true })).toHaveCount(0);
+    await page.waitForFunction(
+      (key) => window.sessionStorage.getItem(key) === null,
+      TIMER_PROJECT_KEY,
+    );
+    await page.reload();
+    await waitForHydration(page);
+    await expect(
+      page.getByText("That project is no longer active. Choose another project."),
+    ).toHaveCount(0);
+    await expect(page.getByText("Choose a project to start the timer.")).toBeVisible();
   } finally {
     await prisma.project.update({
       where: { id: timerProjectId },
       data: { archivedAt: null },
     });
   }
+});
+
+test("renders extension access before a token exists", async ({ page }) => {
+  await page.goto("/settings");
+  await expect(page.getByRole("heading", { name: "Extension access" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New token" })).toBeVisible();
+  await expect(page.getByText("No access tokens")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Create token" })).toBeEnabled();
+});
+
+test("keeps a long token name inside the table and leaves Revoke on screen", async ({ page }) => {
+  const name = "n".repeat(80);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto("/settings");
+  await page.locator("#token-name").fill(name);
+  await page.getByRole("button", { name: "Create token" }).click();
+  const nameCell = page.locator("table").getByTitle(name);
+  await expect(nameCell).toBeVisible();
+  await expect(nameCell).toHaveText(name);
+  const revoke = page.getByRole("button", { name: `Revoke ${name}` });
+  await expect(revoke).toBeVisible();
+  const metrics = await page.locator("table").evaluate((table) => {
+    const wrapper = table.parentElement;
+    return {
+      wrapperScroll: wrapper?.scrollWidth ?? -1,
+      wrapperClient: wrapper?.clientWidth ?? -1,
+      tableScroll: table.scrollWidth,
+      tableClient: table.clientWidth,
+    };
+  });
+  expect(metrics.tableScroll, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.wrapperClient + 1);
+  expect(metrics.wrapperScroll, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.wrapperClient + 1);
+  const revokeBox = await revoke.boundingBox();
+  const viewport = page.viewportSize();
+  expect(revokeBox).not.toBeNull();
+  if (!revokeBox) return;
+  expect(revokeBox.x + revokeBox.width).toBeLessThanOrEqual((viewport?.width ?? 768) + 1);
+  await prisma.accessToken.deleteMany({ where: { name } });
 });

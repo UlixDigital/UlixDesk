@@ -83,3 +83,16 @@ model RunningTimer {
   timeEntryId String    @unique
   timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
 }
+
+/// A bearer token for the Chrome extension. Only the hash is stored.
+/// The plaintext is shown once, when the token is created.
+model AccessToken {
+  id         String    @id @default(cuid())
+  name       String
+  tokenHash  String    @unique
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+
+  @@index([createdAt])
+}

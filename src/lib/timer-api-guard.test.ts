@@ -65,24 +65,63 @@ describe("timer API origin", () => {
     expect(otherPort?.status).toBe(403);
   });
 
-  it("derives the app origin from Host when request.url is an internal name", async () => {
-    const allowed = timerApiRefusal(
+  it("rejects an untrusted host even when that host matches Origin", async () => {
+    const rebound = timerApiRefusal(
       request({
         url: "http://localhost:3000/api/timer/start",
-        host: "app.internal:3000",
-        origin: "http://app.internal:3000",
+        host: "evil.example",
+        origin: "http://evil.example",
       }),
     );
-    expect(allowed).toBeNull();
+    expect(rebound?.status).toBe(403);
+    expect(await rebound?.json()).toEqual({ error: timeCopy.hostForbidden, code: "HOST_FORBIDDEN" });
 
-    const foreign = timerApiRefusal(
+    const fromUrl = timerApiRefusal(
       request({
-        url: "http://localhost:3000/api/timer/start",
-        host: "app.internal:3000",
-        origin: "https://evil.test",
+        url: "http://evil.example/api/timer/start",
+        origin: "http://evil.example",
       }),
     );
-    expect(foreign?.status).toBe(403);
-    expect(await foreign?.json()).toEqual({ error: timeCopy.originForbidden });
+    expect(fromUrl?.status).toBe(403);
+    expect(await fromUrl?.json()).toEqual({ error: timeCopy.hostForbidden, code: "HOST_FORBIDDEN" });
+
+    const projects = timerApiRefusal(
+      request({
+        url: "http://localhost:3000/api/projects",
+        host: "evil.example",
+        origin: "http://evil.example",
+      }),
+    );
+    expect(projects?.status).toBe(403);
+    expect(await projects?.json()).toEqual({ error: timeCopy.hostDenied, code: "HOST_FORBIDDEN" });
+  });
+
+  it("allows a configured host only when the origin matches it", async () => {
+    process.env.ULIXDESK_APP_HOSTS = "https://app.internal:3000";
+    try {
+      const allowed = timerApiRefusal(
+        request({
+          url: "http://localhost:3000/api/timer/start",
+          host: "app.internal:3000",
+          origin: "http://app.internal:3000",
+        }),
+      );
+      expect(allowed).toBeNull();
+
+      const foreign = timerApiRefusal(
+        request({
+          url: "http://localhost:3000/api/timer/start",
+          host: "app.internal:3000",
+          origin: "https://evil.test",
+        }),
+      );
+      expect(foreign?.status).toBe(403);
+      expect(await foreign?.json()).toEqual({
+        error: timeCopy.originForbidden,
+        code: "ORIGIN_FORBIDDEN",
+      });
+    } finally {
+      delete process.env.ULIXDESK_APP_HOSTS;
+    }
   });
 });

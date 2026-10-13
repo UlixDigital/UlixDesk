@@ -7,6 +7,9 @@ import { startTransition, type FormEvent } from "react";
  * its first option because React does not rewrite defaultSelected.
  * Calling the useActionState dispatch from onSubmit, inside startTransition,
  * does not schedule that reset, so the select, checkbox, and text values stay.
+ * The form still sets action to that dispatch. React posts server actions,
+ * so a click before hydration does not fall through to a GET that puts the
+ * fields in the URL.
  */
 export function submitWithoutFormReset(
   event: FormEvent<HTMLFormElement>,

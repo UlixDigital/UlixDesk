@@ -54,6 +54,19 @@ export function SearchIcon(props: IconProps) {
   );
 }
 
+export function KeyIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <circle cx="8.25" cy="15" r="3.25" />
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M11 13.25 19.25 5M16.25 8l2.25 2.25M14 10.25l2.25 2.25"
+      />
+    </svg>
+  );
+}
+
 export function ClockIcon(props: IconProps) {
   return (
     <svg {...base(props)}>

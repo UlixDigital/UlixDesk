@@ -100,6 +100,7 @@ export function ProjectForm({
       <p className="mt-2 text-sm text-slate-600">{description}</p>
       {banner ? <div className="mt-4">{banner}</div> : null}
       <form
+        action={formAction}
         className="mt-6 space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
         noValidate
         onSubmit={(event) => submitWithoutFormReset(event, formAction)}
