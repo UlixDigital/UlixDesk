@@ -18,12 +18,13 @@ export function SetPasswordForm({ token }: { token: string }) {
 
   return (
     <form
-      action={async (formData) => {
+      action={action}
+      onSubmit={(event) => {
+        const formData = new FormData(event.currentTarget);
         setSubmitted({
           password: String(formData.get("password") ?? ""),
           confirm: String(formData.get("confirm") ?? ""),
         });
-        await action(formData);
       }}
       className="mt-6 space-y-4"
     >

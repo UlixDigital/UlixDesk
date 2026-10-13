@@ -41,7 +41,7 @@ One Docker Compose project:
 | Caddy | 64 MB | 80, 443, and 443/udp (HTTP/3) |
 | backup | 64 MB | none |
 
-Caddy is the only process on the public internet. It terminates HTTPS and forwards the real `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For`, plus a shared secret header (`X-Ulixdesk-Proxy`). The apps trust the forwarded headers only when that secret matches `ULIXDESK_TRUSTED_PROXY_SECRET`. The apps and Postgres publish no host ports, and the deploy script starts each app with `--no-deps`, so the first staging deploy does not start production. Session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`.
+Caddy is the only process on the public internet. It terminates HTTPS and forwards the real `Host`, `X-Forwarded-Host`, `X-Forwarded-Proto`, and `X-Forwarded-For`, plus a shared secret header (`X-Ulixdesk-Proxy`). Staging and production use different secrets. Caddy sends `ULIXDESK_STAGING_PROXY_SECRET` to the staging app and `ULIXDESK_PRODUCTION_PROXY_SECRET` to the production app. Each app trusts the forwarded headers only when that header matches its own `ULIXDESK_TRUSTED_PROXY_SECRET`. The apps and Postgres publish no host ports, and the deploy script starts each app with `--no-deps`, so the first staging deploy does not start production. Session cookies are `httpOnly`, `SameSite=Lax`, and `Secure` when `NODE_ENV=production`.
 
 Staging sets `ULIXDESK_ENVIRONMENT=staging` and shows a banner: “Staging. This is the rehearsal copy, not the live tracker.” Production sets `ULIXDESK_ENVIRONMENT=production` and does not show it.
 
@@ -81,6 +81,44 @@ Point both names at the VPS address:
 
 Caddy requests Let's Encrypt certificates for those names after the ports are open and the DNS is visible. Set `ACME_EMAIL` in the Caddy environment if you want a different account email. The default in the Caddyfile is `ops@ulixdigital.com`.
 
+### Check that Caddy sees the real client address
+
+Docker's userland proxy can hide the visitor. Caddy then logs a `172.x` or other docker-network address, and sign-in limits follow that address instead of the person. IPv6 can do the same if `ip6tables` is off.
+
+From a computer that is not the VPS, note the public addresses and request both sites:
+
+```bash
+curl -4 -s https://ifconfig.me; echo
+curl -6 -s https://ifconfig.me; echo
+curl -4 -sI https://desk.ulixdigital.com/login
+curl -6 -sI https://desk.ulixdigital.com/login
+```
+
+On the VPS, the Caddy log should show those same addresses in `remote_ip`:
+
+```bash
+cd /opt/ulixdesk
+docker compose -f docker-compose.prod.yml logs caddy --since 2m
+```
+
+`remote_ip` must be the address from `ifconfig.me`, not a docker address (`172.16.0.0/12`, `10.0.0.0/8`, or a `fd` address). Repeat the `curl -6` check and confirm the IPv6 `remote_ip` is the laptop's IPv6 address.
+
+If `remote_ip` is a docker address, turn off the userland proxy so iptables keeps the original source, including IPv6:
+
+```bash
+sudo mkdir -p /etc/docker
+sudo tee /etc/docker/daemon.json >/dev/null <<'EOF'
+{
+  "userland-proxy": false,
+  "ip6tables": true
+}
+EOF
+sudo systemctl restart docker
+cd /opt/ulixdesk && docker compose -f docker-compose.prod.yml up -d
+```
+
+Run the curl commands and the log command again. If the address is still hidden, run Caddy on the host network so it accepts the connection itself: set `network_mode: host` on the caddy service, remove its published `ports`, and point `reverse_proxy` at the app containers. Do not publish the app ports on the public interface. The userland-proxy change is the one to keep when the log already shows the real address.
+
 ### Env files
 
 | File on the server | Example in the repo |
@@ -92,7 +130,7 @@ Caddy requests Let's Encrypt certificates for those names after the ports are op
 
 Local `npm run dev` uses `.env`, copied from `.env.example`. `.env` is not committed.
 
-`ULIXDESK_TRUSTED_PROXY_SECRET` is the same value in `caddy.env`, `staging.env`, and `production.env`. Leave it unset for `npm run dev`. The laptop then ignores `X-Forwarded-*` and counts sign-in attempts as `127.0.0.1`.
+`ULIXDESK_STAGING_PROXY_SECRET` and `ULIXDESK_PRODUCTION_PROXY_SECRET` live in `caddy.env`. They must be different, and each must be at least 16 characters. `staging.env` sets `ULIXDESK_TRUSTED_PROXY_SECRET` to the staging value. `production.env` sets it to the production value. Leave the app secret unset for `npm run dev`. The laptop then ignores `X-Forwarded-*` and counts sign-in attempts as `127.0.0.1`.
 
 Database passwords are letters and numbers only, because the first-boot SQL script inserts them. Session secrets are at least 32 characters, different per environment, and must not be the local development value on a `ulixdigital.com` host.
 
@@ -104,6 +142,7 @@ Database passwords are letters and numbers only, because the first-boot SQL scri
 2. Merge to `main`. After CI succeeds, the **Deploy staging** workflow builds `ghcr.io/<owner>/<repo>:<commit sha>`, pushes it, copies the compose files to `/opt/ulixdesk`, and starts staging only. Production is not started with that image.
 3. Open staging, sign in as the bootstrap owner, change that password, and add the team.
 4. Run **Deploy production** with that same 40-character commit SHA. That is the first time the production container starts.
+5. Check that Caddy sees the real client address, using the commands under **Check that Caddy sees the real client address**.
 
 The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next. The image turns Prisma telemetry off (`CHECKPOINT_DISABLE`) and points migrate at the query and schema engines already in the image, so a start does not download anything.
 

@@ -7,12 +7,15 @@ import {
   recordLoginFailure,
 } from "@/lib/rate-limit";
 import { requestIp } from "@/lib/request-headers";
+import { safeNextPath } from "@/lib/access-decision";
+import { REQUEST_PATH_HEADER } from "@/lib/request-path";
 import {
   clearSessionCookie,
   createSession,
   destroySessionCookie,
-  getCurrentUser,
+  readSession,
   readSessionSecret,
+  rotateSessionIfDue,
   writeSessionCookie,
   type CurrentUser,
 } from "@/lib/session";
@@ -82,9 +85,13 @@ export async function gateMutation(): Promise<
   { ok: true; user: CurrentUser } | { ok: false; error: string }
 > {
   if (!(await originAllowed())) return { ok: false, error: authCopy.csrfRejected };
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  return { ok: true, user };
+  const read = await readSession();
+  if (read.status === "anonymous") redirect("/login");
+  if (read.status === "rotate") {
+    const rotated = await rotateSessionIfDue();
+    if (!rotated.ok) redirect("/login");
+  }
+  return { ok: true, user: read.user };
 }
 
 export async function gateManager(): Promise<
@@ -99,9 +106,23 @@ export async function gateManager(): Promise<
 }
 
 export async function requireUser() {
-  const user = await getCurrentUser();
-  if (!user) redirect("/login");
-  return user;
+  const read = await readSession();
+  if (read.status === "rotate") {
+    const next = await currentPath();
+    redirect(`/session/refresh?next=${encodeURIComponent(next)}`);
+  }
+  if (read.status === "anonymous") {
+    if (!read.hadCookie) redirect("/login");
+    const next = await currentPath();
+    const login = next === "/clients" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
+    redirect(`/session/clear?next=${encodeURIComponent(login)}`);
+  }
+  return read.user;
+}
+
+async function currentPath() {
+  const { headers } = await import("next/headers");
+  return safeNextPath((await headers()).get(REQUEST_PATH_HEADER) ?? "/clients");
 }
 
 export async function publicOrigin() {

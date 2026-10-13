@@ -8,7 +8,7 @@ import {
   signSessionCookie,
   verifySessionCookie,
 } from "@/lib/session-cookie";
-import { rememberUser, setTestSessionToken, takeUserMemo, testState } from "@/lib/test-hooks";
+import { setTestSessionToken, testState } from "@/lib/test-hooks";
 
 const ABSOLUTE_MS = 14 * 24 * 60 * 60 * 1000;
 const IDLE_MS = 12 * 60 * 60 * 1000;
@@ -94,20 +94,26 @@ export async function destroySessionCookie(cookie: string | null) {
   await prisma.session.deleteMany({ where: { tokenHash: sha256(token) } });
 }
 
+export type SessionRead =
+  | { status: "anonymous"; hadCookie: boolean }
+  | { status: "user"; user: CurrentUser }
+  | { status: "rotate"; user: CurrentUser };
+
 /**
- * Loads the user for the current cookie, enforces idle and absolute expiry,
- * and rotates the token after 15 minutes. A second call in the same process
- * with the same cookie reuses the result, including right after rotation.
+ * Reads the session and never writes a cookie. Page renders call this.
+ * An invalid, expired, idle, or deactivated session is signed out.
+ * A token older than 15 minutes is reported as "rotate" so a route handler
+ * can set the new cookie. That write is not allowed during render.
  */
-export async function getCurrentUser(now = new Date()): Promise<CurrentUser | null> {
+export async function readSession(now = new Date()): Promise<SessionRead> {
   const cookie = await readSessionCookie();
-  if (!cookie) return null;
+  if (!cookie) return { status: "anonymous", hadCookie: false };
   const secret = process.env.ULIXDESK_SESSION_SECRET ?? "";
-  if (sessionSecretProblem(secret, process.env.ULIXDESK_APP_HOSTS ?? "")) return null;
+  if (sessionSecretProblem(secret, process.env.ULIXDESK_APP_HOSTS ?? "")) {
+    return { status: "anonymous", hadCookie: true };
+  }
   const token = await verifySessionCookie(cookie, secret);
-  if (!token) return null;
-  const cached = takeUserMemo<CurrentUser>(token);
-  if (cached) return cached;
+  if (!token) return { status: "anonymous", hadCookie: true };
 
   const session = await prisma.session.findUnique({
     where: { tokenHash: sha256(token) },
@@ -119,34 +125,70 @@ export async function getCurrentUser(now = new Date()): Promise<CurrentUser | nu
   });
   if (!session || session.expiresAt <= now || session.user.deactivatedAt) {
     if (session) await prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
-    return null;
+    return { status: "anonymous", hadCookie: true };
   }
   if (now.getTime() - session.lastSeenAt.getTime() > IDLE_MS) {
     await prisma.session.delete({ where: { id: session.id } });
-    return null;
+    return { status: "anonymous", hadCookie: true };
   }
 
   const user = toCurrentUser(session.user);
-  let nextToken = token;
   if (now.getTime() - session.rotatedAt.getTime() > ROTATE_MS) {
-    const rotatedToken = randomBytes(32).toString("base64url");
-    await prisma.session.update({
-      where: { id: session.id },
-      data: { tokenHash: sha256(rotatedToken), rotatedAt: now, lastSeenAt: now },
-    });
-    const rotatedCookie = await signSessionCookie(rotatedToken, secret);
-    await writeSessionCookie(rotatedCookie, session.expiresAt);
-    nextToken = rotatedToken;
-  } else if (now.getTime() - session.lastSeenAt.getTime() > 60_000) {
+    return { status: "rotate", user };
+  }
+  if (now.getTime() - session.lastSeenAt.getTime() > 60_000) {
     await prisma.session.update({
       where: { id: session.id },
       data: { lastSeenAt: now },
     });
   }
+  return { status: "user", user };
+}
 
-  rememberUser(token, user);
-  rememberUser(nextToken, user);
-  return user;
+export async function getCurrentUser(now = new Date()): Promise<CurrentUser | null> {
+  const read = await readSession(now);
+  if (read.status === "anonymous") return null;
+  return read.user;
+}
+
+/**
+ * Replaces the session token. Call this from a route handler or server action, never from a page.
+ * `cookie` is set when a new token was issued, so the caller can put it on its own response.
+ */
+export async function rotateSessionIfDue(now = new Date()): Promise<
+  { ok: false } | { ok: true; cookie: string | null; expiresAt: Date | null }
+> {
+  const read = await readSession(now);
+  if (read.status === "anonymous") return { ok: false };
+  if (read.status === "user") return { ok: true, cookie: null, expiresAt: null };
+
+  const cookie = await readSessionCookie();
+  const secret = readSessionSecret();
+  const token = cookie ? await verifySessionCookie(cookie, secret) : null;
+  if (!token) return { ok: false };
+  const session = await prisma.session.findUnique({ where: { tokenHash: sha256(token) } });
+  if (!session) return { ok: false };
+
+  const rotatedToken = randomBytes(32).toString("base64url");
+  const rotatedCookie = await signSessionCookie(rotatedToken, secret);
+  await prisma.session.update({
+    where: { id: session.id },
+    data: { tokenHash: sha256(rotatedToken), rotatedAt: now, lastSeenAt: now },
+  });
+  try {
+    await writeSessionCookie(rotatedCookie, session.expiresAt);
+  } catch (error) {
+    await prisma.session.update({
+      where: { id: session.id },
+      data: {
+        tokenHash: sha256(token),
+        rotatedAt: session.rotatedAt,
+        lastSeenAt: session.lastSeenAt,
+      },
+    });
+    throw error;
+  }
+  return { ok: true, cookie: rotatedCookie, expiresAt: session.expiresAt };
 }
 
 export async function userFromCookieHeader(cookieHeader: string | null, now = new Date()) {

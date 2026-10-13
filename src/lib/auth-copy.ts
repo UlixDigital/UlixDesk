@@ -21,6 +21,7 @@ export const authCopy = {
   signingIn: "Signing in…",
   signOut: "Sign out",
   setupInvalid: "This link is invalid or has expired. Ask an owner for a new one.",
+  signedOutForPasswordLink: "You were signed out so this password link can be used.",
   setupTitle: "Set your password",
   confirmPassword: "Confirm password",
   savePassword: "Save password",

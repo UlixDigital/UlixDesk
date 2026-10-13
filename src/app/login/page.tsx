@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/app/login/login-form";
 import { authCopy } from "@/lib/auth-copy";
 import { safeNextPath } from "@/lib/access-decision";
-import { getCurrentUser } from "@/lib/session";
+import { readSession } from "@/lib/session";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +16,18 @@ export default async function LoginPage({
 }: {
   searchParams: Promise<{ next?: string; signedOut?: string; password?: string }>;
 }) {
-  const user = await getCurrentUser();
+  const read = await readSession();
   const params = await searchParams;
   const next = safeNextPath(params.next ?? "/clients");
-  if (user) redirect(next);
+  if (read.status !== "anonymous") redirect(next);
+  if (read.hadCookie) {
+    const back = new URLSearchParams();
+    if (params.signedOut === "1") back.set("signedOut", "1");
+    if (params.password === "saved") back.set("password", "saved");
+    if (next !== "/clients") back.set("next", next);
+    const login = back.size > 0 ? `/login?${back.toString()}` : "/login";
+    redirect(`/session/clear?next=${encodeURIComponent(login)}`);
+  }
 
   const notice =
     params.signedOut === "1"

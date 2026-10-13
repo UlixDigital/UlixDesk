@@ -70,6 +70,17 @@ export function sessionCookieOptions(expiresAt: Date) {
   };
 }
 
+/** Deletes the session cookie. maxAge 0 is what browsers honor on the next response. */
+export function clearedSessionCookie() {
+  return {
+    httpOnly: true as const,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax" as const,
+    path: "/",
+    maxAge: 0,
+  };
+}
+
 export function readCookieHeader(cookieHeader: string | null, name: string) {
   if (!cookieHeader) return null;
   for (const part of cookieHeader.split(";")) {

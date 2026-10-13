@@ -7,6 +7,7 @@ This repository contains **Slice 1: Clients**, **Slice 2: Projects**, **Slice 3:
 ## Stack
 
 - Next.js 15 (App Router) + React 19 + TypeScript
+- Node.js 22.5 or newer (`engines` and `.nvmrc`)
 - Tailwind CSS 4
 - Prisma 6 + PostgreSQL 16
 

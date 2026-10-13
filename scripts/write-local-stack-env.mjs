@@ -28,7 +28,7 @@ await writeFile(
     "ULIXDESK_TIMER_ORIGINS=",
     "ULIXDESK_PUBLIC_ORIGIN=https://staging.desk.localhost",
     "ULIXDESK_ENVIRONMENT=staging",
-    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
+    "ULIXDESK_TRUSTED_PROXY_SECRET=local-staging-proxy-secret",
     "ULIXDESK_BOOTSTRAP_EMAIL=staging-owner@ulix.local",
     "ULIXDESK_BOOTSTRAP_PASSWORD=staging-owner-password",
     "ULIXDESK_BOOTSTRAP_NAME=Staging Owner",
@@ -49,7 +49,7 @@ await writeFile(
     "ULIXDESK_TIMER_ORIGINS=",
     "ULIXDESK_PUBLIC_ORIGIN=https://desk.localhost",
     "ULIXDESK_ENVIRONMENT=production",
-    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
+    "ULIXDESK_TRUSTED_PROXY_SECRET=local-production-proxy-secret",
     "ULIXDESK_BOOTSTRAP_EMAIL=owner@ulix.local",
     "ULIXDESK_BOOTSTRAP_PASSWORD=local-owner-password",
     "ULIXDESK_BOOTSTRAP_NAME=Local Owner",
@@ -63,7 +63,8 @@ await writeFile(
   [
     "# Generated for a local production-style stack. Not a real secret.",
     "ACME_EMAIL=ops@ulixdigital.com",
-    "ULIXDESK_TRUSTED_PROXY_SECRET=local-trusted-proxy-secret",
+    "ULIXDESK_STAGING_PROXY_SECRET=local-staging-proxy-secret",
+    "ULIXDESK_PRODUCTION_PROXY_SECRET=local-production-proxy-secret",
     "",
   ].join("\n"),
 );

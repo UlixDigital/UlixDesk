@@ -10,8 +10,32 @@ export function isPublicPath(pathname: string) {
 
 export function safeNextPath(pathname: string) {
   if (!pathname.startsWith("/") || pathname.startsWith("//")) return "/clients";
-  if (pathname.startsWith("/login") || pathname.startsWith("/set-password")) return "/clients";
-  return pathname;
+  const path = pathname.split("?")[0] ?? pathname;
+  if (
+    path.startsWith("/login") ||
+    path.startsWith("/set-password") ||
+    path.startsWith("/session")
+  ) {
+    return "/clients";
+  }
+  return path;
+}
+
+/**
+ * Where to send someone after the session cookie is cleared.
+ * Only sign-in and the set-password link are allowed. Anything else goes to sign-in.
+ */
+export function safeResumePath(value: string | null) {
+  if (!value) return "/login";
+  let url: URL;
+  try {
+    url = new URL(value, "http://ulixdesk.local");
+  } catch {
+    return "/login";
+  }
+  if (url.origin !== "http://ulixdesk.local") return "/login";
+  if (url.pathname !== "/login" && url.pathname !== "/set-password") return "/login";
+  return `${url.pathname}${url.search}`;
 }
 
 /**

@@ -6,21 +6,29 @@
 }
 
 desk.ulixdigital.com {
+	log {
+		output stdout
+		format json
+	}
 	reverse_proxy app-production:3000 {
 		header_up Host {host}
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-For {remote_host}
-		header_up X-Ulixdesk-Proxy {$ULIXDESK_TRUSTED_PROXY_SECRET}
+		header_up X-Ulixdesk-Proxy {$ULIXDESK_PRODUCTION_PROXY_SECRET}
 	}
 }
 
 staging.desk.ulixdigital.com {
+	log {
+		output stdout
+		format json
+	}
 	reverse_proxy app-staging:3000 {
 		header_up Host {host}
 		header_up X-Forwarded-Host {host}
 		header_up X-Forwarded-Proto {scheme}
 		header_up X-Forwarded-For {remote_host}
-		header_up X-Ulixdesk-Proxy {$ULIXDESK_TRUSTED_PROXY_SECRET}
+		header_up X-Ulixdesk-Proxy {$ULIXDESK_STAGING_PROXY_SECRET}
 	}
 }

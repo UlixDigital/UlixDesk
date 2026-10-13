@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
+# node:sqlite needs Node 22.5 or newer. The node:22 image is that release line.
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
+RUN node -e "const [major,minor]=process.versions.node.split('.').map(Number); if (major<22 || (major===22 && minor<5)) { console.error('Node >= 22.5 required, got '+process.versions.node); process.exit(1); }"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -15,6 +17,7 @@ RUN npx prisma generate && npm run build
 # Prisma's migrate CLI is only needed at startup. Keep it out of the Next standalone tree.
 FROM node:22-bookworm-slim AS migrate
 WORKDIR /opt/migrate
+RUN node -e "const [major,minor]=process.versions.node.split('.').map(Number); if (major<22 || (major===22 && minor<5)) { console.error('Node >= 22.5 required, got '+process.versions.node); process.exit(1); }"
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
@@ -22,6 +25,7 @@ RUN npm init -y && npm install --omit=dev --no-package-lock prisma@6.19.3
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
+RUN node -e "const [major,minor]=process.versions.node.split('.').map(Number); if (major<22 || (major===22 && minor<5)) { console.error('Node >= 22.5 required, got '+process.versions.node); process.exit(1); }"
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV CHECKPOINT_DISABLE=1

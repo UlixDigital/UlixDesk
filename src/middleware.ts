@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { sessionGate } from "@/lib/access-decision";
 import { bearerSkipsHostCheck, hostGuardRefusal } from "@/lib/host-guard";
-import { SESSION_COOKIE, verifySessionCookie } from "@/lib/session-cookie";
+import { REQUEST_PATH_HEADER } from "@/lib/request-path";
+import { clearedSessionCookie, SESSION_COOKIE, verifySessionCookie } from "@/lib/session-cookie";
 
 export async function middleware(request: NextRequest) {
   const refused = hostGuardRefusal({
@@ -18,20 +19,32 @@ export async function middleware(request: NextRequest) {
   // A bearer call is authenticated by the route. Pages need a signed session cookie.
   const cookie = request.cookies.get(SESSION_COOKIE)?.value ?? "";
   const secret = process.env.ULIXDESK_SESSION_SECRET ?? "";
-  const hasValidSession = cookie ? Boolean(await verifySessionCookie(cookie, secret)) : false;
+  const signatureOk = cookie ? Boolean(await verifySessionCookie(cookie, secret)) : false;
   const gate = sessionGate({
     pathname: request.nextUrl.pathname,
-    hasValidSession,
+    hasValidSession: signatureOk,
     isTokenApi: tokenApi || isOpenTokenPath(request.nextUrl.pathname),
   });
+
   if (gate.type === "redirect") {
     const url = request.nextUrl.clone();
     const target = new URL(gate.to, request.url);
     url.pathname = target.pathname;
     url.search = target.search;
-    return NextResponse.redirect(url);
+    const response = NextResponse.redirect(url);
+    if (cookie && !signatureOk) clearCookie(response);
+    return response;
   }
-  return NextResponse.next();
+
+  const headers = new Headers(request.headers);
+  headers.set(REQUEST_PATH_HEADER, request.nextUrl.pathname);
+  const response = NextResponse.next({ request: { headers } });
+  if (cookie && !signatureOk) clearCookie(response);
+  return response;
+}
+
+function clearCookie(response: NextResponse) {
+  response.cookies.set(SESSION_COOKIE, "", clearedSessionCookie());
 }
 
 function isOpenTokenPath(pathname: string) {

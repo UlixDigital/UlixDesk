@@ -28,13 +28,14 @@ export function ChangePasswordForm() {
 
   return (
     <form
-      action={async (formData) => {
+      action={action}
+      onSubmit={(event) => {
+        const formData = new FormData(event.currentTarget);
         setSubmitted({
           current: String(formData.get("current") ?? ""),
           password: String(formData.get("password") ?? ""),
           confirm: String(formData.get("confirm") ?? ""),
         });
-        await action(formData);
       }}
       className="mt-8 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
     >

@@ -30,8 +30,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
+      - name: Require Node 22.5 or newer
+        run: node -e "const [major,minor]=process.versions.node.split('.').map(Number); if (major<22 || (major===22 && minor<5)) { console.error('Node >= 22.5 required, got '+process.versions.node); process.exit(1); }"
       - name: Install
         run: npm ci
       - name: Create test databases
