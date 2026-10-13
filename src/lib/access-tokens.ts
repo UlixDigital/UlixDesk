@@ -38,26 +38,27 @@ export function parseTokenName(raw: string): { ok: true; name: string } | { ok: 
   return { ok: true, name };
 }
 
-export async function createAccessToken(name: string) {
+export async function createAccessToken(name: string, userId: string) {
   const token = generateAccessToken();
   const row = await prisma.accessToken.create({
-    data: { name, tokenHash: hashAccessToken(token) },
+    data: { name, userId, tokenHash: hashAccessToken(token) },
     select: { id: true, name: true, createdAt: true, lastUsedAt: true, revokedAt: true },
   });
   return { token, record: row };
 }
 
-export async function listAccessTokens(): Promise<AccessTokenRecord[]> {
+export async function listAccessTokens(userId: string): Promise<AccessTokenRecord[]> {
   return prisma.accessToken.findMany({
+    where: { userId },
     orderBy: { createdAt: "desc" },
     select: { id: true, name: true, createdAt: true, lastUsedAt: true, revokedAt: true },
   });
 }
 
-export async function revokeAccessToken(id: string) {
+export async function revokeAccessToken(id: string, userId: string) {
   if (!id) return { ok: false as const, reason: "missing" as const };
-  const row = await prisma.accessToken.findUnique({
-    where: { id },
+  const row = await prisma.accessToken.findFirst({
+    where: { id, userId },
     select: { id: true, revokedAt: true },
   });
   if (!row) return { ok: false as const, reason: "missing" as const };
@@ -76,8 +77,11 @@ export async function revokeAccessToken(id: string) {
 export async function findUsableAccessToken(token: string) {
   if (!TOKEN_PATTERN.test(token)) return null;
   const tokenHash = hashAccessToken(token);
-  const row = await prisma.accessToken.findUnique({ where: { tokenHash } });
-  if (!row || row.revokedAt) return null;
+  const row = await prisma.accessToken.findUnique({
+    where: { tokenHash },
+    include: { user: { select: { id: true, deactivatedAt: true } } },
+  });
+  if (!row || row.revokedAt || row.user.deactivatedAt) return null;
   const computed = Buffer.from(tokenHash, "hex");
   const stored = Buffer.from(row.tokenHash, "hex");
   if (computed.length !== stored.length || !timingSafeEqual(computed, stored)) return null;

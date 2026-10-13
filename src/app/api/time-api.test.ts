@@ -8,7 +8,9 @@ import { apiCodes } from "@/lib/api-errors";
 import { createProject } from "@/lib/projects";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
-import { WORKSPACE_TIMER_ID } from "@/lib/time-entries";
+import { createSession } from "@/lib/session";
+import { SESSION_COOKIE } from "@/lib/session-cookie";
+import { createTestUser } from "@/lib/test-actor";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 
@@ -16,9 +18,15 @@ const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
 const extensionOrigin = `chrome-extension://${EXTENSION_ID}`;
 const previousExtensionIds = process.env.ULIXDESK_EXTENSION_IDS;
 
-beforeEach(() => {
+let userId = "";
+let sessionCookie = "";
+
+beforeEach(async () => {
   process.env.ULIXDESK_EXTENSION_IDS = EXTENSION_ID;
-  return resetTestDatabase();
+  await resetTestDatabase();
+  const user = await createTestUser("member", "api@ulix.test");
+  userId = user.id;
+  sessionCookie = (await createSession(user.id)).cookie;
 });
 
 afterAll(async () => {
@@ -27,14 +35,26 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+function sessionHeaders(extra?: HeadersInit) {
+  const headers = new Headers(extra);
+  headers.set("cookie", `${SESSION_COOKIE}=${sessionCookie}`);
+  return headers;
+}
+
 function post(url: string, body: unknown, origin?: string) {
-  const headers = new Headers({ "content-type": "application/json" });
+  const headers = sessionHeaders({ "content-type": "application/json" });
   if (origin) headers.set("origin", origin);
   return new Request(url, {
     method: "POST",
     headers,
     body: JSON.stringify(body),
   });
+}
+
+function get(url: string, origin?: string) {
+  const headers = sessionHeaders();
+  if (origin) headers.set("origin", origin);
+  return new Request(url, { headers });
 }
 
 function stopRequest(origin?: string) {
@@ -60,7 +80,7 @@ describe("extension API", () => {
       data: { archivedAt: new Date() },
     });
 
-    const response = await listProjects(new Request("http://localhost/api/projects"));
+    const response = await listProjects(get("http://localhost/api/projects"));
     expect(response.status).toBe(200);
     const body = await response.json();
     expect(body.projects).toEqual([
@@ -76,7 +96,7 @@ describe("extension API", () => {
       billable: true,
     });
 
-    const missing = await getTimer(new Request("http://localhost/api/timer"));
+    const missing = await getTimer(get("http://localhost/api/timer"));
     expect(await missing.json()).toEqual({ timer: null });
 
     const started = await startRoute(
@@ -92,7 +112,7 @@ describe("extension API", () => {
       billable: true,
     });
 
-    const current = await getTimer(new Request("http://localhost/api/timer"));
+    const current = await getTimer(get("http://localhost/api/timer"));
     const currentBody = await current.json();
     expect(currentBody.timer.id).toBe(startedBody.timer.id);
 
@@ -119,12 +139,15 @@ describe("extension API", () => {
     const bad = await startRoute(
       new Request("http://localhost/api/timer/start", {
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: sessionHeaders({ "content-type": "application/json" }),
         body: "not-json",
       }),
     );
     expect(bad.status).toBe(400);
-    expect((await bad.json()).error).toBe(timeCopy.invalidJson);
+    expect(await bad.json()).toEqual({
+      error: timeCopy.invalidJson,
+      code: apiCodes.INVALID_JSON,
+    });
 
     const unknown = await startRoute(
       post("http://localhost/api/timer/start", { projectId: "missing-project" }),
@@ -151,6 +174,19 @@ describe("extension API", () => {
     const idle = await stopRoute(stopRequest());
     expect(idle.status).toBe(404);
     expect((await idle.json()).error).toBe(timeCopy.timerNone);
+
+    const brokenStop = await stopRoute(
+      new Request("http://localhost/api/timer/stop", {
+        method: "POST",
+        headers: sessionHeaders({ "content-type": "application/json" }),
+        body: "{",
+      }),
+    );
+    expect(brokenStop.status).toBe(400);
+    expect(await brokenStop.json()).toEqual({
+      error: timeCopy.invalidJsonBody,
+      code: apiCodes.INVALID_JSON,
+    });
   });
 
   it("stops a persisted timer and reports a 24-hour cap", async () => {
@@ -164,7 +200,7 @@ describe("extension API", () => {
     const entry = await prisma.timeEntry.create({
       data: {
         projectId: project.id,
-        userId: null,
+        userId,
         startedAt,
         endedAt: null,
         billable: false,
@@ -173,10 +209,10 @@ describe("extension API", () => {
       },
     });
     await prisma.runningTimer.create({
-      data: { id: WORKSPACE_TIMER_ID, timeEntryId: entry.id },
+      data: { id: userId, timeEntryId: entry.id },
     });
 
-    const before = await getTimer(new Request("http://localhost/api/timer"));
+    const before = await getTimer(get("http://localhost/api/timer"));
     expect((await before.json()).timer.id).toBe(entry.id);
 
     const stopped = await stopRoute(stopRequest());
@@ -186,8 +222,8 @@ describe("extension API", () => {
     expect(body.entry.durationMs).toBe(24 * 60 * 60 * 1000);
     expect(body.entry.source).toBe("timer");
     expect(body.warnings).toContain(timeCopy.timerCapped);
-    expect((await getTimer(new Request("http://localhost/api/timer"))).status).toBe(200);
-    expect(await (await getTimer(new Request("http://localhost/api/timer"))).json()).toEqual({ timer: null });
+    expect((await getTimer(get("http://localhost/api/timer"))).status).toBe(200);
+    expect(await (await getTimer(get("http://localhost/api/timer"))).json()).toEqual({ timer: null });
   });
 
   it("treats localhost, 127.0.0.1, and ::1 on the same port as this app", async () => {
@@ -272,7 +308,7 @@ describe("extension API", () => {
       clientId: null,
       billable: true,
     });
-    const created = await createAccessToken("Work laptop");
+    const created = await createAccessToken("Work laptop", userId);
     const stored = await prisma.accessToken.findUniqueOrThrow({ where: { id: created.record.id } });
     expect(stored.tokenHash).toBe(hashAccessToken(created.token));
     expect(stored.tokenHash).not.toBe(created.token);
@@ -310,6 +346,7 @@ describe("extension API", () => {
       ),
     );
     expect(started.status).toBe(201);
+    expect(await prisma.runningTimer.findUnique({ where: { id: userId } })).not.toBeNull();
     expect(started.headers.get("access-control-allow-origin")).toBe(extensionOrigin);
     expect((await started.json()).timer.note).toBe("From Chrome");
     expect(
@@ -367,7 +404,7 @@ describe("extension API", () => {
     });
     expect(await prisma.runningTimer.count()).toBe(1);
 
-    await revokeAccessToken(created.record.id);
+    await revokeAccessToken(created.record.id, userId);
     const revoked = await getTimer(
       new Request("http://localhost/api/timer", {
         headers: {
@@ -424,7 +461,7 @@ describe("extension API", () => {
     expect(denied.status).toBe(403);
     expect(denied.headers.get("access-control-allow-origin")).toBeNull();
     expect(await denied.json()).toEqual({
-      error: timeCopy.originForbidden,
+      error: timeCopy.originDenied,
       code: apiCodes.ORIGIN_FORBIDDEN,
     });
 

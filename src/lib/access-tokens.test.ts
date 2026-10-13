@@ -12,9 +12,15 @@ import {
 } from "@/lib/access-tokens";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { createTestUser } from "@/lib/test-actor";
 import { formatTokenTimestamp, tokenCopy } from "@/lib/token-copy";
 
-beforeEach(resetTestDatabase);
+let userId = "";
+
+beforeEach(async () => {
+  await resetTestDatabase();
+  userId = (await createTestUser("member", "token@ulix.test")).id;
+});
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -22,7 +28,7 @@ afterAll(async () => {
 
 describe("access tokens", () => {
   it("creates a token, stores only its hash, and verifies that hash", async () => {
-    const created = await createAccessToken("Work laptop");
+    const created = await createAccessToken("Work laptop", userId);
     expect(created.token).toMatch(/^ulixdesk_[A-Za-z0-9_-]{43}$/);
     expect(created.record.name).toBe("Work laptop");
     expect(created.record.lastUsedAt).toBeNull();
@@ -40,7 +46,7 @@ describe("access tokens", () => {
   });
 
   it("revokes a token and records last use only for a live one", async () => {
-    const created = await createAccessToken("Work laptop");
+    const created = await createAccessToken("Work laptop", userId);
     const usedAt = new Date("2026-10-10T05:36:00.000Z");
     await markAccessTokenUsed(created.record.id, usedAt);
     const used = await prisma.accessToken.findUniqueOrThrow({ where: { id: created.record.id } });
@@ -58,13 +64,13 @@ describe("access tokens", () => {
     });
     expect(refreshed.lastUsedAt?.toISOString()).toBe(later.toISOString());
 
-    const revoked = await revokeAccessToken(created.record.id);
+    const revoked = await revokeAccessToken(created.record.id, userId);
     expect(revoked).toEqual({ ok: true, already: false });
-    expect(await revokeAccessToken(created.record.id)).toEqual({ ok: true, already: true });
+    expect(await revokeAccessToken(created.record.id, userId)).toEqual({ ok: true, already: true });
     expect(await findUsableAccessToken(created.token)).toBeNull();
-    expect(await revokeAccessToken("missing")).toEqual({ ok: false, reason: "missing" });
+    expect(await revokeAccessToken("missing", userId)).toEqual({ ok: false, reason: "missing" });
 
-    const listed = await listAccessTokens();
+    const listed = await listAccessTokens(userId);
     expect(listed).toHaveLength(1);
     expect(listed[0]?.revokedAt).not.toBeNull();
     expect(listed[0]?.name).toBe("Work laptop");

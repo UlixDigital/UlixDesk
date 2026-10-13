@@ -84,6 +84,7 @@ export function timesheetsHref(input: {
   date?: string;
   projectId?: string;
   clientId?: string;
+  user?: string;
   notice?: TimesheetNotice | null;
 } = {}) {
   const params = new URLSearchParams();
@@ -91,6 +92,7 @@ export function timesheetsHref(input: {
   if (input.date) params.set("date", input.date);
   if (input.projectId) params.set("project", input.projectId);
   if (input.clientId) params.set("client", input.clientId);
+  if (input.user && input.user !== "me") params.set("user", input.user);
   if (input.notice) params.set("notice", input.notice);
   const query = params.toString();
   return query ? `/timesheets?${query}` : "/timesheets";

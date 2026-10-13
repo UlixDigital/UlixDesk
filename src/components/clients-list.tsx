@@ -7,9 +7,11 @@ import { ui } from "@/lib/ui";
 export function ClientsList({
   clients,
   archived,
+  canManage = true,
 }: {
   clients: ClientRecord[];
   archived: boolean;
+  canManage?: boolean;
 }) {
   return (
     <section aria-label={archived ? "Archived clients" : "Active clients"}>
@@ -32,18 +34,22 @@ export function ClientsList({
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap items-center gap-2">
-              <Link
-                href={`/clients/${client.id}/edit`}
-                className={ui.secondaryButton}
-              >
-                Edit
-                <span className="sr-only"> {client.name}</span>
-              </Link>
-              {archived ? (
-                <RestoreButton id={client.id} name={client.name} />
-              ) : (
-                <ArchiveButton id={client.id} name={client.name} />
-              )}
+              {canManage ? (
+                <>
+                  <Link
+                    href={`/clients/${client.id}/edit`}
+                    className={ui.secondaryButton}
+                  >
+                    Edit
+                    <span className="sr-only"> {client.name}</span>
+                  </Link>
+                  {archived ? (
+                    <RestoreButton id={client.id} name={client.name} />
+                  ) : (
+                    <ArchiveButton id={client.id} name={client.name} />
+                  )}
+                </>
+              ) : null}
             </div>
           </li>
         ))}

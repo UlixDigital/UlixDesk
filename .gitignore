@@ -33,10 +33,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# local env overrides (the committed .env only points at local SQLite)
+# Local env. Copy .env.example to .env. Do not commit .env.
+.env
 .env*.local
+/env/*.env
+!/env/*.env.example
 
-# sqlite databases
+# sqlite databases left over from earlier slices
 *.db
 *.db-journal
 *.db-wal

@@ -56,7 +56,7 @@ export function derivePopup(input: {
   projectId: string;
   note: string;
   now: number;
-  archivedNotice: boolean;
+  projectNotice: string | null;
   startedHere: boolean;
   alert: string | null;
   loading: boolean;
@@ -88,7 +88,7 @@ export function derivePopup(input: {
     projects: input.projects,
     projectId: known ? input.projectId : "",
     note: input.note,
-    notice: input.archivedNotice ? popupCopy.projectGone : null,
+    notice: input.projectNotice,
     helper: known ? popupCopy.idle : popupCopy.chooseProject,
     alert: input.alert,
   };

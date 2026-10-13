@@ -13,6 +13,8 @@ import {
 } from "@/lib/client-display";
 import { countClientsByStatus, loadClientLists } from "@/lib/clients";
 import { cn } from "@/lib/cn";
+import { getCurrentUser } from "@/lib/session";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { ui } from "@/lib/ui";
 
 export const metadata: Metadata = {
@@ -32,6 +34,8 @@ export default async function ClientsPage({
     countClientsByStatus(),
   ]);
   const clients = lists[status];
+  const actor = await getCurrentUser();
+  const canManage = actor ? canManageWorkspace(actor.role) : false;
   const empty = emptyStateKind({
     status,
     query,
@@ -50,10 +54,12 @@ export default async function ClientsPage({
             Companies and contacts you track time for.
           </p>
         </div>
-        <Link href="/clients/new" className={ui.primaryButton}>
-          <PlusIcon className="h-4 w-4" />
-          Add client
-        </Link>
+        {canManage ? (
+          <Link href="/clients/new" className={ui.primaryButton}>
+            <PlusIcon className="h-4 w-4" />
+            Add client
+          </Link>
+        ) : null}
       </div>
 
       <ClientSearch status={status} query={query} />
@@ -84,7 +90,7 @@ export default async function ClientsPage({
       {empty ? (
         <EmptyState kind={empty} query={query} status={status} />
       ) : (
-        <ClientsList clients={clients} archived={status === "archived"} />
+        <ClientsList clients={clients} archived={status === "archived"} canManage={canManage} />
       )}
     </div>
   );

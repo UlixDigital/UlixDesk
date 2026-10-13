@@ -1,0 +1,111 @@
+# One small VPS runs staging and production.
+# One Postgres container with two databases uses less RAM than two Postgres
+# processes. Each app has its own database role, so staging cannot read
+# production. Apps and Postgres publish no host ports. Only Caddy publishes
+# 80 and 443.
+name: ulixdesk
+
+x-logging: &logging
+  logging:
+    driver: json-file
+    options:
+      max-size: "10m"
+      max-file: "3"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./env/postgres.env
+    volumes:
+      - ulixdesk_pg:/var/lib/postgresql/data
+      - ./docker/postgres/init-prod.sh:/docker-entrypoint-initdb.d/10-databases.sh:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    mem_limit: 512m
+    networks: [data]
+    <<: *logging
+
+  app-staging:
+    image: ${ULIXDESK_IMAGE_REPOSITORY:-ulixdesk}:${STAGING_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      CHECKPOINT_DISABLE: "1"
+      PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+    env_file:
+      - ./env/staging.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 384m
+    networks: [web, data]
+    <<: *logging
+
+  app-production:
+    image: ${ULIXDESK_IMAGE_REPOSITORY:-ulixdesk}:${PRODUCTION_IMAGE_TAG:-local}
+    restart: unless-stopped
+    environment:
+      CHECKPOINT_DISABLE: "1"
+      PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+    env_file:
+      - ./env/production.env
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 384m
+    networks: [web, data]
+    <<: *logging
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    env_file:
+      - ./env/caddy.env
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - ulixdesk_caddy_data:/data
+      - ulixdesk_caddy_config:/config
+    depends_on:
+      - app-staging
+      - app-production
+    mem_limit: 64m
+    networks: [web]
+    <<: *logging
+
+  backup:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file:
+      - ./env/postgres.env
+    environment:
+      PGHOST: postgres
+    volumes:
+      - ulixdesk_backups:/backup
+      - ./docker/backup/loop.sh:/loop.sh:ro
+    entrypoint: ["/bin/sh", "/loop.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    mem_limit: 64m
+    networks: [data]
+    <<: *logging
+
+networks:
+  web:
+  data:
+
+volumes:
+  ulixdesk_pg:
+  ulixdesk_caddy_data:
+  ulixdesk_caddy_config:
+  ulixdesk_backups:

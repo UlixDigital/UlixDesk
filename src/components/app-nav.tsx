@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, ClockIcon, FolderIcon, KeyIcon } from "@/components/icons";
+import { BuildingIcon, ClockIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 
 const items = [
@@ -12,12 +12,15 @@ const items = [
   { href: "/settings", label: "Settings", icon: KeyIcon },
 ];
 
-export function AppNav() {
+export function AppNav({ showTeam = false }: { showTeam?: boolean }) {
   const pathname = usePathname();
+  const links = showTeam
+    ? [...items.slice(0, 3), { href: "/team", label: "Team", icon: UsersIcon }, items[3]]
+    : items;
 
   return (
     <nav aria-label="Primary" className="flex flex-col gap-1 px-3 pb-4">
-      {items.map((item) => {
+      {links.map((item) => {
         const current =
           pathname === item.href || pathname.startsWith(`${item.href}/`);
         const Icon = item.icon;

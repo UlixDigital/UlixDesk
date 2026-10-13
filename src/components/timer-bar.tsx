@@ -1,13 +1,16 @@
 import { TimerControls } from "@/components/timer-controls";
+import { getCurrentUser } from "@/lib/session";
 import {
   getRunningTimer,
   listActiveProjectsForPicker,
 } from "@/lib/time-entries";
+import { canManageWorkspace } from "@/lib/users-validation";
 
 export async function TimerBar() {
+  const user = await getCurrentUser();
   const [projects, timer] = await Promise.all([
     listActiveProjectsForPicker(),
-    getRunningTimer(),
+    user ? getRunningTimer(user.id) : Promise.resolve(null),
   ]);
 
   return (
@@ -32,6 +35,7 @@ export async function TimerBar() {
               : null
           }
           serverNow={Date.now()}
+          canManage={user ? canManageWorkspace(user.role) : false}
         />
       </div>
     </header>

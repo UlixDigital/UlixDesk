@@ -25,6 +25,7 @@ export const popupCopy = {
   idle: "No timer running",
   chooseProject: "Choose a project to start the timer.",
   projectGone: "That project is no longer active. Choose another project.",
+  projectMissing: "That project no longer exists. Choose another project.",
   alreadyRunning: "A timer is already running.",
   timerRunning: "Timer running",
   projectLabel: "Project",

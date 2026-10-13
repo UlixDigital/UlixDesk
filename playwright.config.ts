@@ -1,5 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
-import { e2eDatabaseUrl, e2eOrigin, e2ePort } from "./e2e/env";
+import { e2eDatabaseUrl, e2eEmail, e2eOrigin, e2ePassword, e2ePort, e2eSessionSecret } from "./e2e/env";
 
 process.env.DATABASE_URL = e2eDatabaseUrl;
 
@@ -17,9 +17,8 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    // Plugin setup starts the server before globalSetup, so the test database
-    // has to exist before Next opens SQLite. Reset and migrate here.
-    command: `rm -f prisma/e2e.db prisma/e2e.db-journal prisma/e2e.db-wal prisma/e2e.db-shm && npx prisma migrate deploy && npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
+    // Reset the e2e database before Next starts. The URL is ulixdesk_e2e only.
+    command: `node --input-type=module -e "import { Client } from 'pg'; const c = new Client({ connectionString: process.env.DATABASE_URL }); await c.connect(); await c.query('DROP SCHEMA IF EXISTS public CASCADE'); await c.query('CREATE SCHEMA public'); await c.end();" && npx prisma migrate deploy && node scripts/bootstrap-owner.mjs && npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
     url: e2eOrigin,
     reuseExistingServer: false,
     timeout: 120_000,
@@ -28,6 +27,10 @@ export default defineConfig({
       DATABASE_URL: e2eDatabaseUrl,
       ULIXDESK_APP_HOSTS: "desk.example.com",
       ULIXDESK_EXTENSION_IDS: "cjlaoflbipaehclleojofopapalhiooe",
+      ULIXDESK_SESSION_SECRET: e2eSessionSecret,
+      ULIXDESK_BOOTSTRAP_EMAIL: e2eEmail,
+      ULIXDESK_BOOTSTRAP_PASSWORD: e2ePassword,
+      ULIXDESK_BOOTSTRAP_NAME: "E2E Owner",
     },
   },
 });

@@ -5,7 +5,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { chromium, expect, test } from "@playwright/test";
 import { acceptChromePermissionDialog } from "./chrome-allow";
-import { e2eDatabaseUrl, e2eOrigin } from "./env";
+import { e2eDatabaseUrl, e2eEmail, e2eOrigin } from "./env";
 
 if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
   throw new Error(`e2e must use ${e2eDatabaseUrl}, got ${process.env.DATABASE_URL ?? "(unset)"}`);
@@ -17,13 +17,18 @@ test.afterAll(async () => {
   await prisma.$disconnect();
 });
 
+test.skip(Boolean(process.env.CI), "The unpacked extension needs a display, xdotool, and ffmpeg.");
+
 test("loads the unpacked extension and starts and stops a timer", async () => {
   const project = await prisma.project.create({
     data: { name: "Extension E2E Project", billable: true },
   });
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: e2eEmail } });
   const token = `ulixdesk_${randomBytes(32).toString("base64url")}`;
   const tokenHash = createHash("sha256").update(token).digest("hex");
-  await prisma.accessToken.create({ data: { name: "E2E extension", tokenHash } });
+  await prisma.accessToken.create({
+    data: { name: "E2E extension", tokenHash, userId: owner.id },
+  });
   const userDataDir = await mkdtemp(path.join(os.tmpdir(), "ulixdesk-ext-"));
   const extensionDir = path.resolve("extension/dist");
   const context = await chromium.launchPersistentContext(userDataDir, {

@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { gateMutation } from "@/lib/auth";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import {
   createManualEntry,
@@ -36,12 +38,15 @@ export async function saveTimeEntryAction(
   formData: FormData,
 ): Promise<TimeEntryFormState> {
   const values = parseTimeEntryFormData(formData);
+  const gate = await gateMutation();
+  if (!gate.ok) return { errors: { form: gate.error }, values };
   const now = new Date();
   const result = validateTimeEntryInput(values, now);
   if (!result.ok) return { errors: result.errors, values: result.values };
 
   const id = String(formData.get("id") ?? "");
-  const existing = id ? await getTimeEntry(id) : null;
+  const scope = canManageWorkspace(gate.user.role) ? null : gate.user.id;
+  const existing = id ? await getTimeEntry(id, scope) : null;
   if (id && (!existing || !existing.endedAt)) {
     return { errors: { form: timeCopy.entryGone }, values };
   }
@@ -60,13 +65,18 @@ export async function saveTimeEntryAction(
   let saved: { overlap: boolean; clientId: string | null };
   try {
     if (!existing) {
-      const created = await createManualEntry(result.data, now);
+      const created = await createManualEntry(result.data, now, gate.user.id);
       saved = {
         overlap: created.overlap,
         clientId: created.entry.project.client?.id ?? null,
       };
     } else {
-      const updated = await updateManualEntry(existing.id, result.data, now);
+      const updated = await updateManualEntry(
+        existing.id,
+        result.data,
+        now,
+        existing.userId ?? gate.user.id,
+      );
       if (!updated) return { errors: { form: timeCopy.entryGone }, values };
       saved = {
         overlap: updated.overlap,
@@ -88,10 +98,13 @@ export async function saveTimeEntryAction(
 }
 
 export async function deleteTimeEntryAction(formData: FormData) {
+  const gate = await gateMutation();
+  if (!gate.ok) redirect("/timesheets");
   const id = String(formData.get("id") ?? "");
   const date = String(formData.get("date") ?? "");
   if (!id) return;
-  const deleted = await deleteTimeEntry(id);
+  const scope = canManageWorkspace(gate.user.role) ? null : gate.user.id;
+  const deleted = await deleteTimeEntry(id, scope);
   if (!deleted.ok) {
     if (deleted.reason === "running") {
       redirect(timesheetsHref({ date: date || undefined, notice: "running" }));
@@ -106,10 +119,13 @@ export async function startTimerAction(
   _previous: TimerActionState,
   formData: FormData,
 ): Promise<TimerActionState> {
+  const gate = await gateMutation();
+  if (!gate.ok) return { error: gate.error, warnings: [] };
   const result = await startTimer({
     projectId: String(formData.get("projectId") ?? ""),
     note: "",
     now: new Date(),
+    userId: gate.user.id,
   });
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };
@@ -124,7 +140,9 @@ export async function stopTimerAction(
 ): Promise<TimerActionState> {
   // useActionState always passes the form body. Stopping does not read it.
   void formData;
-  const result = await stopTimer(new Date());
+  const gate = await gateMutation();
+  if (!gate.ok) return { error: gate.error, warnings: [] };
+  const result = await stopTimer(new Date(), gate.user.id);
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };
   }

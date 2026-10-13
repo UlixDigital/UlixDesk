@@ -30,7 +30,7 @@ const base = {
   projectId: "website",
   note: "",
   now: Date.parse("2026-10-10T05:01:02.000Z"),
-  archivedNotice: false,
+  projectNotice: null,
   startedHere: false,
   alert: null,
   loading: false,
@@ -81,7 +81,7 @@ describe("popup state", () => {
     });
     expect(projectOptionLabel(project)).toBe("Website · Acme");
 
-    const gone = derivePopup({ ...base, projectId: "old", archivedNotice: true });
+    const gone = derivePopup({ ...base, projectId: "old", projectNotice: popupCopy.projectGone });
     expect(gone).toMatchObject({
       kind: "idle",
       projectId: "",
@@ -93,7 +93,7 @@ describe("popup state", () => {
       ...base,
       projects: [],
       projectId: "old",
-      archivedNotice: true,
+      projectNotice: popupCopy.projectGone,
     });
     expect(onlyChoice.kind).toBe("no-projects");
   });

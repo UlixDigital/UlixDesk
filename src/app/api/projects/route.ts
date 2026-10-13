@@ -9,8 +9,8 @@ export function OPTIONS(request: Request) {
 }
 
 export async function GET(request: Request) {
-  const refused = await authorizeApiRequest(request, { requireJson: false });
-  if (refused) return refused;
+  const actor = await authorizeApiRequest(request, { requireJson: false });
+  if (actor instanceof Response) return actor;
   const projects = await listActiveProjectsForPicker();
   return jsonApi(request, { projects: projects.map(serializeProject) });
 }

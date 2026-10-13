@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
+import { popupCopy } from "./copy";
 import { fetchProjects, fetchTimer, startTimer, stopTimer, type FetchLike } from "./api";
 
 const config = { serverUrl: "http://127.0.0.1:3000/", token: "ulixdesk_secret" };
@@ -68,6 +69,14 @@ describe("extension API client", () => {
       ok: false,
       reason: "archived",
       message: timeCopy.projectInactive,
+    });
+
+    const missing: FetchLike = async () =>
+      jsonResponse({ error: "That project no longer exists.", code: "PROJECT_NOT_FOUND" }, 404);
+    expect(await startTimer(config, "gone", "", missing)).toEqual({
+      ok: false,
+      reason: "missing",
+      message: popupCopy.projectMissing,
     });
 
     const archivedWithoutCode: FetchLike = async () =>

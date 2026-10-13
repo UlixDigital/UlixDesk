@@ -9,8 +9,11 @@ import {
   TimesheetNav,
   WeeklyTimesheet,
 } from "@/components/timesheet-views";
+import { getCurrentUser } from "@/lib/session";
 import { cn } from "@/lib/cn";
 import { listClientsForFilter } from "@/lib/projects";
+import { listActiveUsers } from "@/lib/users";
+import { canManageWorkspace } from "@/lib/users-validation";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { timeCopy } from "@/lib/time-copy";
 import {
@@ -51,6 +54,7 @@ export default async function TimesheetsPage({
     project?: string;
     client?: string;
     notice?: string;
+    user?: string;
   }>;
 }) {
   const timeZone = await getRequestTimeZone();
@@ -71,6 +75,19 @@ export default async function TimesheetsPage({
   const client = clients.find((item) => item.id === (params.client ?? "").trim()) ?? null;
   const projectId = project?.id ?? "";
   const clientId = client?.id ?? "";
+  const actor = await getCurrentUser();
+  if (!actor) return null;
+  const manager = canManageWorkspace(actor.role);
+  const people = manager ? await listActiveUsers() : [];
+  const requestedUser = (params.user ?? "").trim();
+  const viewedUserId = !manager
+    ? actor.id
+    : requestedUser === "all"
+      ? null
+      : people.some((person) => person.id === requestedUser)
+        ? requestedUser
+        : actor.id;
+  const userParam = viewedUserId === null ? "all" : viewedUserId === actor.id ? "" : viewedUserId;
   const now = new Date();
   const range = rangeFor(view, date, timeZone);
   const [entries, runningRecord] = await Promise.all([
@@ -79,8 +96,9 @@ export default async function TimesheetsPage({
       rangeEnd: range.end,
       projectId: projectId || undefined,
       clientId: clientId || undefined,
+      userId: viewedUserId,
     }),
-    view === "day" ? getRunningTimer() : Promise.resolve(null),
+    view === "day" && viewedUserId ? getRunningTimer(viewedUserId) : Promise.resolve(null),
   ]);
   const filtered = Boolean(projectId || clientId);
   const notice = parseNotice(params.notice);
@@ -126,7 +144,11 @@ export default async function TimesheetsPage({
             Timesheets
           </h1>
           <p className="mt-1 text-sm text-slate-600">
-            Time tracked against your projects. Weeks run Monday through Sunday.
+            {viewedUserId === actor.id
+              ? "Your time. Weeks run Monday through Sunday."
+              : viewedUserId === null
+                ? "Everyone's time. Weeks run Monday through Sunday."
+                : "Time for the person you selected. Weeks run Monday through Sunday."}
           </p>
         </div>
         <Link href={addTimeFor(date, projectId)} className={ui.primaryButton}>
@@ -138,12 +160,12 @@ export default async function TimesheetsPage({
       <div className="mt-6 border-b border-slate-200">
         <nav aria-label="Timesheet view" className="-mb-px flex gap-6">
           <ViewTab
-            href={timesheetsHref({ view: "day", date, projectId, clientId })}
+            href={timesheetsHref({ view: "day", date, projectId, clientId, user: userParam })}
             label="Daily"
             current={view === "day"}
           />
           <ViewTab
-            href={timesheetsHref({ view: "week", date, projectId, clientId })}
+            href={timesheetsHref({ view: "week", date, projectId, clientId, user: userParam })}
             label="Weekly"
             current={view === "week"}
           />
@@ -165,6 +187,14 @@ export default async function TimesheetsPage({
           name: item.name,
           archived: item.archivedAt !== null,
         }))}
+        user={userParam}
+        people={
+          manager
+            ? people
+                .filter((person) => person.id !== actor.id)
+                .map((person) => ({ id: person.id, name: person.name }))
+            : []
+        }
       />
 
       {notice === "overlap" ? (
@@ -190,6 +220,7 @@ export default async function TimesheetsPage({
         today={today}
         projectId={projectId}
         clientId={clientId}
+        user={userParam}
         heading={view === "week" ? formatWeekHeading(date) : formatDayHeading(date)}
       />
 
@@ -217,6 +248,7 @@ export default async function TimesheetsPage({
           totalMs={weekly.totalMs}
           projectId={projectId}
           clientId={clientId}
+          user={userParam}
         />
       ) : null}
     </div>

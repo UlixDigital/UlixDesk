@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
+import { gateManager } from "@/lib/auth";
 import { clientsHref } from "@/lib/client-display";
 import {
   archiveClient,
@@ -21,6 +22,8 @@ export async function saveClientAction(
   formData: FormData,
 ): Promise<ClientFormState> {
   const values = parseClientFormData(formData);
+  const gate = await gateManager();
+  if (!gate.ok) return { errors: { form: gate.error }, values };
   const result = validateClientInput(values);
   if (!result.ok) {
     return { errors: result.errors, values: result.values };
@@ -71,6 +74,8 @@ export async function saveClientAction(
 }
 
 export async function archiveClientAction(formData: FormData) {
+  const gate = await gateManager();
+  if (!gate.ok) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await archiveClient(id);
@@ -78,6 +83,8 @@ export async function archiveClientAction(formData: FormData) {
 }
 
 export async function restoreClientAction(formData: FormData) {
+  const gate = await gateManager();
+  if (!gate.ok) return;
   const id = String(formData.get("id") ?? "");
   if (!id) return;
   await restoreClient(id);

@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { signIn } from "./auth";
 import { e2eDatabaseUrl, e2eOrigin } from "./env";
 
 if (process.env.DATABASE_URL !== e2eDatabaseUrl) {
@@ -17,8 +18,10 @@ test("submits before JavaScript with POST instead of putting fields in the URL",
 }) => {
   const context = await browser.newContext({ javaScriptEnabled: false });
   const page = await context.newPage();
+  await signIn(context, prisma);
   await page.goto("/projects/new");
-  await expect(page.locator("form")).toHaveAttribute("method", /post/i);
+  const projectForm = page.locator("form").filter({ has: page.locator("#project-name") });
+  await expect(projectForm).toHaveAttribute("method", /post/i);
 
   await page.getByRole("button", { name: "Create project" }).click();
   const blankUrl = new URL(page.url());
@@ -31,8 +34,10 @@ test("submits before JavaScript with POST instead of putting fields in the URL",
   await page.locator("#project-name").fill(name);
   await page.getByRole("button", { name: "Create project" }).click();
   expect(new URL(page.url()).search).toBe("");
-  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
-  await expect(page.getByRole("link", { name: new RegExp(`^${name}\\b`) }).first()).toBeVisible();
+  // The projects list streams behind the loading shell. Without JavaScript that
+  // shell stays on screen, so the proof is the saved row and the header picker.
+  await expect(page.locator("#timer-project")).toContainText(name);
+  expect(await prisma.project.findFirst({ where: { name } })).not.toBeNull();
 
   await context.addCookies([
     { name: "ulixdesk-timezone", value: "UTC", url: e2eOrigin },

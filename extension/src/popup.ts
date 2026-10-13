@@ -14,7 +14,7 @@ let timer: ApiTimer | null = null;
 let failure: ClientFailure | null = null;
 let projectId = "";
 let note = "";
-let archivedNotice = false;
+let projectNotice: string | null = null;
 let startedHere = false;
 let alertMessage: string | null = null;
 let loading = true;
@@ -31,7 +31,7 @@ function requestBadgeRefresh() {
 async function load() {
   loading = true;
   startedHere = false;
-  archivedNotice = false;
+  projectNotice = null;
   render();
   const settings = await readSettings();
   serverUrl = settings.serverUrl;
@@ -64,7 +64,7 @@ async function load() {
     projects &&
     !projects.some((project) => project.id === settings.lastProjectId)
   ) {
-    archivedNotice = projects.length > 0;
+    projectNotice = projects.length > 0 ? popupCopy.projectGone : null;
     projectId = "";
     await writeSettings({ lastProjectId: "" });
   }
@@ -84,7 +84,7 @@ function render() {
     projectId,
     note,
     now: Date.now(),
-    archivedNotice,
+    projectNotice,
     startedHere,
     alert: alertMessage,
     loading,
@@ -203,7 +203,7 @@ function idleForm(model: Extract<PopupModel, { kind: "idle" }>) {
   select.value = model.projectId;
   select.addEventListener("change", () => {
     projectId = select.value;
-    archivedNotice = false;
+    projectNotice = null;
     alertMessage = null;
     void writeSettings({ lastProjectId: projectId });
     render();
@@ -267,7 +267,7 @@ async function onStart() {
   if (result.ok) {
     timer = result.timer;
     note = "";
-    archivedNotice = false;
+    projectNotice = null;
     startedHere = true;
     alertMessage = null;
     failure = null;
@@ -277,7 +277,14 @@ async function onStart() {
     alertMessage = null;
     failure = null;
   } else if (result.reason === "archived") {
-    archivedNotice = true;
+    projectNotice = popupCopy.projectGone;
+    projectId = "";
+    alertMessage = null;
+    await writeSettings({ lastProjectId: "" });
+    const refreshed = await fetchProjects({ serverUrl, token });
+    if (refreshed.ok) projects = refreshed.projects;
+  } else if (result.reason === "missing") {
+    projectNotice = popupCopy.projectMissing;
     projectId = "";
     alertMessage = null;
     await writeSettings({ lastProjectId: "" });

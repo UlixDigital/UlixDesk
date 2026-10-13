@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { TimeEntryForm } from "@/components/time-entry-form";
 import { NoActiveProjects, TimezonePending } from "@/components/timesheet-empty-state";
+import { requireUser } from "@/lib/auth";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
 import { timesheetsHref } from "@/lib/timesheet";
@@ -34,7 +35,8 @@ export default async function NewTimeEntryPage({
   const projectId = projects.some((project) => project.id === requestedProject)
     ? requestedProject
     : "";
-  const overlaps = await listOverlapCandidates(new Date());
+  const user = await requireUser();
+  const overlaps = await listOverlapCandidates(new Date(), user.id);
 
   return (
     <TimeEntryForm

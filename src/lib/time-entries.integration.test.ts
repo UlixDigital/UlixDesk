@@ -3,6 +3,7 @@ import { createClient } from "@/lib/clients";
 import { prisma } from "@/lib/db";
 import { createProject } from "@/lib/projects";
 import { resetTestDatabase } from "@/lib/reset-test-db";
+import { createTestUser } from "@/lib/test-actor";
 import { timeCopy } from "@/lib/time-copy";
 import {
   createManualEntry,
@@ -18,7 +19,12 @@ import {
 import { buildDailyTimesheet, buildWeeklyTimesheet } from "@/lib/timesheet";
 import { timerFailureMessage } from "@/lib/time-copy";
 
-beforeEach(resetTestDatabase);
+let userId = "";
+
+beforeEach(async () => {
+  await resetTestDatabase();
+  userId = (await createTestUser("member", "timer@ulix.test")).id;
+});
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -54,6 +60,7 @@ describe("manual entries", () => {
         note: null,
       },
       now,
+      userId,
     );
     const second = await createManualEntry(
       {
@@ -64,6 +71,7 @@ describe("manual entries", () => {
         note: "Overlap",
       },
       now,
+      userId,
     );
 
     expect(first.overlap).toBe(false);
@@ -74,6 +82,7 @@ describe("manual entries", () => {
         startedAt: new Date("2026-10-09T16:30:00.000Z"),
         endedAt: new Date("2026-10-09T17:00:00.000Z"),
         now,
+        userId,
       }),
     ).toBe(false);
   });
@@ -90,6 +99,7 @@ describe("manual entries", () => {
         note: null,
       },
       now,
+      userId,
     );
     const updated = await updateManualEntry(
       created.entry.id,
@@ -101,6 +111,7 @@ describe("manual entries", () => {
         note: "Edited",
       },
       now,
+      userId,
     );
     expect(updated?.overlap).toBe(false);
     expect(updated?.entry.billable).toBe(true);
@@ -113,6 +124,7 @@ describe("timers", () => {
   it("stores one running timer that is still there on the next read", async () => {
     const project = await makeProject("Website", false);
     const started = await startTimer({
+      userId,
       projectId: project.id,
       note: "Focus",
       now: new Date("2026-10-09T15:00:00.000Z"),
@@ -122,13 +134,14 @@ describe("timers", () => {
     expect(started.timer.endedAt).toBeNull();
     expect(started.timer.billable).toBe(false);
     expect(started.timer.source).toBe("timer");
-    expect(started.timer.userId).toBeNull();
+    expect(started.timer.userId).toBe(userId);
 
-    const again = await getRunningTimer();
+    const again = await getRunningTimer(userId);
     expect(again?.id).toBe(started.timer.id);
     expect(again?.project.name).toBe("Website");
 
     const second = await startTimer({
+      userId,
       projectId: project.id,
       note: "",
       now: new Date("2026-10-09T15:05:00.000Z"),
@@ -146,6 +159,7 @@ describe("timers", () => {
       data: { archivedAt: new Date("2026-10-01T00:00:00.000Z") },
     });
     const inactive = await startTimer({
+      userId,
       projectId: project.id,
       note: "",
       now: new Date("2026-10-09T15:00:00.000Z"),
@@ -155,6 +169,7 @@ describe("timers", () => {
     expect(timerFailureMessage(inactive.code)).toBe(timeCopy.projectInactive);
 
     const missing = await startTimer({
+      userId,
       projectId: "missing-project",
       note: "",
       now: new Date("2026-10-09T15:00:00.000Z"),
@@ -165,16 +180,17 @@ describe("timers", () => {
 
     const active = await makeProject("Support");
     const started = await startTimer({
+      userId,
       projectId: active.id,
       note: "",
       now: new Date("2026-10-09T15:00:00.000Z"),
     });
     expect(started.ok).toBe(true);
-    const tooSoon = await stopTimer(new Date("2026-10-09T15:00:00.500Z"));
+    const tooSoon = await stopTimer(new Date("2026-10-09T15:00:00.500Z"), userId);
     expect(tooSoon.ok).toBe(false);
     if (tooSoon.ok) return;
     expect(timerFailureMessage(tooSoon.code)).toBe(timeCopy.timerShort);
-    expect((await getRunningTimer())?.id).toBe(
+    expect((await getRunningTimer(userId))?.id).toBe(
       started.ok ? started.timer.id : "",
     );
   });
@@ -182,22 +198,23 @@ describe("timers", () => {
   it("caps a timer that ran longer than 24 hours and keeps the rest", async () => {
     const project = await makeProject("Website");
     const startedAt = new Date("2026-10-08T12:00:00.000Z");
-    await startTimer({ projectId: project.id, note: "", now: startedAt });
-    const stopped = await stopTimer(new Date("2026-10-09T13:30:00.000Z"));
+    await startTimer({ userId, projectId: project.id, note: "", now: startedAt });
+    const stopped = await stopTimer(new Date("2026-10-09T13:30:00.000Z"), userId);
     expect(stopped.ok).toBe(true);
     if (!stopped.ok) return;
     expect(stopped.capped).toBe(true);
     expect(stopped.entry.endedAt?.toISOString()).toBe("2026-10-09T12:00:00.000Z");
     expect(stopped.entry.source).toBe("timer");
-    expect(await getRunningTimer()).toBeNull();
+    expect(await getRunningTimer(userId)).toBeNull();
 
     const exact = await startTimer({
+      userId,
       projectId: project.id,
       note: "",
       now: new Date("2026-10-10T12:00:00.000Z"),
     });
     expect(exact.ok).toBe(true);
-    const onTheDot = await stopTimer(new Date("2026-10-11T12:00:00.000Z"));
+    const onTheDot = await stopTimer(new Date("2026-10-11T12:00:00.000Z"), userId);
     expect(onTheDot.ok).toBe(true);
     if (!onTheDot.ok) return;
     expect(onTheDot.capped).toBe(false);
@@ -206,13 +223,14 @@ describe("timers", () => {
   it("lets only one of two concurrent stops save the entry", async () => {
     const project = await makeProject("Website");
     const started = await startTimer({
+      userId,
       projectId: project.id,
       note: "",
       now: new Date("2026-10-09T12:00:00.000Z"),
     });
     expect(started.ok).toBe(true);
     const now = new Date("2026-10-09T13:00:00.000Z");
-    const [first, second] = await Promise.all([stopTimer(now), stopTimer(now)]);
+    const [first, second] = await Promise.all([stopTimer(now, userId), stopTimer(now, userId)]);
     const results = [first, second];
     const saved = results.filter((result) => result.ok);
     const missed = results.filter((result) => !result.ok);
@@ -222,7 +240,7 @@ describe("timers", () => {
     expect(timerFailureMessage(missed[0].code)).toBe(timeCopy.timerNone);
     expect(await prisma.timeEntry.count({ where: { endedAt: { not: null } } })).toBe(1);
     expect(await prisma.runningTimer.count()).toBe(0);
-    expect(await getRunningTimer()).toBeNull();
+    expect(await getRunningTimer(userId)).toBeNull();
   });
 
   it("warns when a stopped timer overlaps another entry", async () => {
@@ -237,13 +255,15 @@ describe("timers", () => {
         note: null,
       },
       now,
+      userId,
     );
     await startTimer({
+      userId,
       projectId: project.id,
       note: "",
       now: new Date("2026-10-09T15:30:00.000Z"),
     });
-    const stopped = await stopTimer(new Date("2026-10-09T16:30:00.000Z"));
+    const stopped = await stopTimer(new Date("2026-10-09T16:30:00.000Z"), userId);
     expect(stopped.ok).toBe(true);
     if (!stopped.ok) return;
     expect(stopped.overlap).toBe(true);
@@ -265,6 +285,7 @@ describe("tracked totals", () => {
         note: null,
       },
       now,
+      userId,
     );
     await createManualEntry(
       {
@@ -275,8 +296,10 @@ describe("tracked totals", () => {
         note: null,
       },
       now,
+      userId,
     );
     await startTimer({
+      userId,
       projectId: website.id,
       note: "",
       now: new Date("2026-10-10T17:00:00.000Z"),
@@ -288,7 +311,7 @@ describe("tracked totals", () => {
 
     const rangeStart = new Date("2026-10-05T07:00:00.000Z");
     const rangeEnd = new Date("2026-10-12T07:00:00.000Z");
-    const entries = await listEntriesOverlapping({ rangeStart, rangeEnd });
+    const entries = await listEntriesOverlapping({ rangeStart, rangeEnd, userId });
     const daily = buildDailyTimesheet({
       date: "2026-10-09",
       timeZone: "America/Los_Angeles",
@@ -301,6 +324,6 @@ describe("tracked totals", () => {
       entries,
     });
     expect(weekly.totalMs).toBe(2 * 60 * 60 * 1000);
-    expect(await getRunningTimer()).not.toBeNull();
+    expect(await getRunningTimer(userId)).not.toBeNull();
   });
 });

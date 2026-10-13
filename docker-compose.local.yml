@@ -1,0 +1,16 @@
+# Local proof of the production stack. Hostnames are *.localhost and Caddy
+# uses its internal certificate. Does not talk to a real server.
+# Usage is in docs/DEPLOY.md.
+name: ulixdesk-local
+
+services:
+  app-staging:
+    build: .
+    image: ulixdesk:local
+  app-production:
+    image: ulixdesk:local
+  caddy:
+    volumes:
+      - ./docker/Caddyfile.local:/etc/caddy/Caddyfile:ro
+      - ulixdesk_caddy_data:/data
+      - ulixdesk_caddy_config:/config
