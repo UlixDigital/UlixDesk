@@ -32,6 +32,10 @@ services:
   app-staging:
     image: ${ULIXDESK_STAGING_IMAGE:-ulixdesk:local}
     restart: unless-stopped
+    environment:
+      CHECKPOINT_DISABLE: "1"
+      PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
     env_file:
       - ./env/staging.env
     depends_on:
@@ -44,6 +48,10 @@ services:
   app-production:
     image: ${ULIXDESK_PRODUCTION_IMAGE:-ulixdesk:local}
     restart: unless-stopped
+    environment:
+      CHECKPOINT_DISABLE: "1"
+      PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
     env_file:
       - ./env/production.env
     depends_on:

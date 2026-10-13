@@ -100,7 +100,7 @@ Database passwords are letters and numbers only, because the first-boot SQL scri
 3. Open staging, sign in as the bootstrap owner, and add the team.
 4. Run **Deploy production** with that same commit SHA.
 
-The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next.
+The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next. The image turns Prisma telemetry off (`CHECKPOINT_DISABLE`) and points migrate at the query and schema engines already in the image, so a start does not download anything.
 
 ### Bootstrap owner
 

@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { TimerControls } from "@/components/timer-controls";
 import { TimeEntryForm } from "@/components/time-entry-form";
 import { ProjectForm } from "@/components/project-form";
+import { signInAs } from "@/lib/test-actor";
 import { timeCopy } from "@/lib/time-copy";
 import { emptyProjectFormValues, type ProjectFormState } from "@/lib/project-validation";
 import { emptyTimeEntryFormValues } from "@/lib/time-validation";
@@ -75,10 +76,17 @@ async function submit(form: HTMLFormElement) {
   await act(async () => {
     form.requestSubmit();
   });
+  const started = Date.now();
+  while (Date.now() - started < 2000 && document.body.textContent?.includes("Saving")) {
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    });
+  }
 }
 
 describe("controlled selects after a failed save", () => {
   it("keeps the time entry project when the save is rejected", async () => {
+    await signInAs("member", "form-reset@ulix.test");
     await render(
       createElement(TimeEntryForm, {
         mode: "create",

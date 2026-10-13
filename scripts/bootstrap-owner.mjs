@@ -1,9 +1,12 @@
+import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
 import { hash } from "@node-rs/argon2";
+import { assignLegacyWorkspaceToOwner } from "./lib/assign-legacy.mjs";
 
 /** Argon2id. Keep this in step with src/lib/password.ts. */
 const ARGON2ID = 2;
-import { assignLegacyWorkspaceToOwner } from "./lib/assign-legacy.mjs";
+
+loadEnvFile(new URL("../.env", import.meta.url));
 
 const prisma = new PrismaClient();
 
@@ -53,4 +56,28 @@ try {
   }
 } finally {
   await prisma.$disconnect();
+}
+
+function loadEnvFile(url) {
+  let text = "";
+  try {
+    text = readFileSync(url, "utf8");
+  } catch {
+    return;
+  }
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let value = trimmed.slice(eq + 1).trim();
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    if (process.env[key] === undefined) process.env[key] = value;
+  }
 }

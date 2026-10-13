@@ -12,11 +12,13 @@ test("sends a signed-out visit to sign-in, then accepts the owner password", asy
   await page.locator("#email").fill(e2eEmail);
   await page.locator("#password").fill("wrong-password");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("alert")).toHaveText("That email or password is incorrect.");
+  await expect(page.locator("p[role='alert']")).toHaveText(
+    "That email or password is incorrect.",
+  );
 
   await page.locator("#password").fill(e2ePassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Clients" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByText("You have signed out.")).toBeVisible();

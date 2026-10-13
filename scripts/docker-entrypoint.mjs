@@ -9,12 +9,16 @@ if (!databaseUrl) {
 
 const lockKey = process.env.ULIXDESK_MIGRATE_LOCK ?? "8675309";
 const client = new Client({ connectionString: databaseUrl });
+console.log("Connecting to the database.");
 await client.connect();
 // One session holds the lock for the whole migration. A second container waits.
+console.log("Waiting for the migration lock.");
 await client.query("SELECT pg_advisory_lock($1::bigint)", [lockKey]);
+console.log("Applying database migrations.");
 
 try {
   await run("node", ["/opt/migrate/node_modules/prisma/build/index.js", "migrate", "deploy"]);
+  console.log("Migrations applied. Checking the first owner.");
   await run("node", ["scripts/bootstrap-owner.mjs"]);
 } finally {
   await client.query("SELECT pg_advisory_unlock($1::bigint)", [lockKey]).catch(() => undefined);

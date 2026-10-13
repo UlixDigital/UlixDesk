@@ -21,13 +21,17 @@ dump_once() {
   echo "Backup finished at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 }
 
+# Alpine's date is BusyBox and does not support GNU `date -d`.
 seconds_until_0315() {
-  now=$(date -u +%s)
-  today=$(date -u -d 'today 03:15' +%s)
-  if [ "$now" -lt "$today" ]; then
-    echo $((today - now))
+  hour=$(date -u +%H)
+  minute=$(date -u +%M)
+  second=$(date -u +%S)
+  now_sod=$((10#$hour * 3600 + 10#$minute * 60 + 10#$second))
+  target=$((3 * 3600 + 15 * 60))
+  if [ "$now_sod" -lt "$target" ]; then
+    echo $((target - now_sod))
   else
-    echo $((today + 86400 - now))
+    echo $((86400 - now_sod + target))
   fi
 }
 

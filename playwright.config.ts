@@ -17,9 +17,8 @@ export default defineConfig({
     trace: "retain-on-failure",
   },
   webServer: {
-    // Plugin setup starts the server before globalSetup, so the test database
-    // has to exist before Next opens SQLite. Reset and migrate here.
-    command: `npx prisma migrate reset --force --skip-seed && node scripts/bootstrap-owner.mjs && npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
+    // Reset the e2e database before Next starts. The URL is ulixdesk_e2e only.
+    command: `node --input-type=module -e "import { Client } from 'pg'; const c = new Client({ connectionString: process.env.DATABASE_URL }); await c.connect(); await c.query('DROP SCHEMA IF EXISTS public CASCADE'); await c.query('CREATE SCHEMA public'); await c.end();" && npx prisma migrate deploy && node scripts/bootstrap-owner.mjs && npm run dev -- --hostname 127.0.0.1 --port ${e2ePort}`,
     url: e2eOrigin,
     reuseExistingServer: false,
     timeout: 120_000,
