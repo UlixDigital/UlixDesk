@@ -102,14 +102,19 @@ Load it in Chrome:
 2. Turn on Developer mode.
 3. Choose Load unpacked and select the `extension/dist` folder.
 
-Connect it:
+Sign in:
 
-1. In the app, open Settings and create a token on Extension access. Copy the token. UlixDesk shows it once and stores only a hash.
-2. Open the extension options (right-click the toolbar button, then Options).
-3. Enter the server URL, for example `http://127.0.0.1:3000`, and paste the token.
-4. Choose Save. The token is stored in `chrome.storage.local` on that computer. It is not stored in Chrome sync, and the extension does not write it to the console.
-5. Choose Grant permission and allow that server. The extension requests only that origin.
-6. Choose Test connection. A success says the token can read projects.
+1. Click the toolbar button.
+2. The server defaults to `https://desk.ulixdigital.com`. Choose **Use staging** for `https://staging.desk.ulixdigital.com`, or **Custom server** and enter an origin such as `http://127.0.0.1:3000`.
+3. Enter the UlixDesk email and password, then choose **Sign in**.
+4. Chrome asks for permission to talk to that server. Choose Allow. The extension requests only that origin.
+5. The popup shows the person's name and email. **Sign out** revokes that sign-in.
+
+The password is not stored. `chrome.storage.local` keeps the server URL, a short-lived access token, a refresh token, when the access token expires, and the name and email. It is not stored in Chrome sync, and the extension does not write it to the console.
+
+To point a local build at your machine, choose **Custom server** and use `http://127.0.0.1:3000` (or the port `npm run dev` is using). See [extension/README.md](extension/README.md).
+
+An access token is still available under Extension access, as an advanced fallback. Open the extension options, paste the token, choose Save, Grant permission, and Test connection. Saving a token there replaces a popup sign-in on that browser.
 
 The unpacked manifest includes a public `key`, so Chrome assigns the same extension id on every computer: `cjlaoflbipaehclleojofopapalhiooe`. That id is already in `.env` as `ULIXDESK_EXTENSION_IDS`. To confirm it, open `chrome://extensions`, turn on Developer mode, and read the ID under the extension name. For any other build, put that id in `ULIXDESK_EXTENSION_IDS` (comma-separated if more than one).
 
@@ -127,7 +132,7 @@ The host is trusted only when it is loopback (`localhost`, `127.0.0.1`, `::1`) o
 
 On OVH, set `ULIXDESK_APP_HOSTS` to each environment's public hostname before the process starts. Production might be `desk.example.com` and staging `staging.example.com`. Without that variable, the site answers only on loopback.
 
-These four routes, and only these routes, answer CORS for chrome-extension origins whose id is in `ULIXDESK_EXTENSION_IDS`. `OPTIONS` returns `204` with `Access-Control-Allow-Origin` set to that exact origin, `Access-Control-Allow-Methods: GET, POST, OPTIONS`, and `Access-Control-Allow-Headers: Authorization, Content-Type`. Other origins, including other `chrome-extension://` ids and `https://` websites, get `403` and no CORS headers. Actual responses echo an allowlisted extension origin the same way, including on `401` and `403`, so the extension can read the error. CORS is not opened to arbitrary web origins. Error JSON keeps the human `error` string and adds a `code`.
+`GET /api/projects`, `GET /api/timer`, `POST /api/timer/start`, `POST /api/timer/stop`, `GET /api/extension/session`, `POST /api/extension/session`, `POST /api/extension/session/refresh`, and `POST /api/extension/session/revoke` answer CORS for chrome-extension origins whose id is in `ULIXDESK_EXTENSION_IDS`. Only these routes do. `OPTIONS` returns `204` with `Access-Control-Allow-Origin` set to that exact origin, `Access-Control-Allow-Methods: GET, POST, OPTIONS`, and `Access-Control-Allow-Headers: Authorization, Content-Type`. Other origins, including other `chrome-extension://` ids and `https://` websites, get `403` and no CORS headers. Actual responses echo an allowlisted extension origin the same way, including on `401` and `403`, so the extension can read the error. CORS is not opened to arbitrary web origins. Error JSON keeps the human `error` string and adds a `code`.
 
 ### `GET /api/projects`
 
@@ -216,6 +221,32 @@ No JSON fields. Send `Content-Type: application/json`. The same origin rule as s
 - `404` `{ "error": "No timer is running.", "code": "NOT_RUNNING" }`
 - `409` `{ "error": "Let the timer run for at least a second before stopping.", "code": "TOO_SHORT" }`
 
+### Extension sign-in
+
+`POST /api/extension/session` checks the email and password with the same Argon2id verifier and the same rate limit as the web sign-in form. The caller must be an allowlisted `chrome-extension://` origin. A trusted host is still required. There is no session cookie.
+
+```json
+{ "email": "owner@ulix.local", "password": "••••••••••" }
+```
+
+- `201` `{ "accessToken", "refreshToken", "accessExpiresAt", "refreshExpiresAt", "user": { "name", "email" } }`
+- `400` `{ "error": "Enter your email.", "code": "EMAIL_REQUIRED" }`
+- `400` `{ "error": "Enter a valid email.", "code": "EMAIL_INVALID" }`
+- `400` `{ "error": "Enter your password.", "code": "PASSWORD_REQUIRED" }`
+- `400` `{ "error": "The request body is not valid JSON.", "code": "INVALID_JSON" }`
+- `401` `{ "error": "That email or password is incorrect.", "code": "INVALID_LOGIN" }`
+- `403` `{ "error": "This account is deactivated. Ask an owner to restore it.", "code": "ACCOUNT_DEACTIVATED" }`
+- `429` `{ "error": "Too many sign-in attempts. Wait 15 minutes and try again.", "code": "RATE_LIMITED" }`
+- `415` `{ "error": "Content-Type must be application/json.", "code": "UNSUPPORTED_MEDIA_TYPE" }`
+- `403` `{ "error": "This origin isn't allowed to access UlixDesk.", "code": "ORIGIN_FORBIDDEN" }`
+- `403` `{ "error": "This host isn't allowed to access UlixDesk.", "code": "HOST_FORBIDDEN" }`
+
+The access token lasts 15 minutes and is sent as `Authorization: Bearer` on the timer routes. The refresh token lasts 30 days from sign-in and does not get longer when it is used. `POST /api/extension/session/refresh` with `{ "refreshToken" }` returns a new pair and retires the old refresh token. Using the previous refresh token again, after 60 seconds, revokes that sign-in (`401` `{ "error": "This sign-in was used somewhere else, so it was revoked. Sign in again.", "code": "REFRESH_REUSED" }`). An unknown, expired, or revoked refresh token is `401` `{ "error": "This sign-in is no longer valid. Sign in again.", "code": "REFRESH_INVALID" }`. A missing refresh token uses that same code with `{ "error": "Send the refresh token." }`.
+
+`POST /api/extension/session/revoke` with `{ "refreshToken" }` signs that browser out. `GET /api/extension/session` with the access token returns `{ "user": { "name", "email" } }`.
+
+Changing the password revokes every extension sign-in and signs out the person's other web browsers. The browser that changed the password stays signed in. Deactivating the account does the same, and also revokes access tokens. Setting a password from a set-password link revokes extension sign-ins too.
+
 ## What shipped in Slice 4
 
 - Extension access tokens. Settings creates a named token, shows the plaintext once, and stores a SHA-256 hash. The list shows name, created, last used, and Active or Revoked. Revoke keeps the row and stops the token.
@@ -231,6 +262,13 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - Team page: add a person, copy a one-time set-password link, reset that link, change a role, and deactivate or restore. UlixDesk does not send email.
 - Extension tokens belong to the signed-in user. PostgreSQL replaces SQLite. The production image, Caddy, backups, and GitHub workflows are described in [docs/DEPLOY.md](docs/DEPLOY.md).
 - The extension popup says “That project no longer exists. Choose another project.” when the server returns `PROJECT_NOT_FOUND`. `GET /api/projects` says “This origin isn't allowed to access UlixDesk.” for a forbidden origin. Invalid JSON on timer start uses the `INVALID_JSON` code. `http://[::1]:3000` counts as the same origin as the other loopback names on that port.
+
+## What shipped in Slice 6
+
+- The extension popup signs in with an email and password. The server defaults to production, with Use staging and a custom server for a local or staging origin. Chrome's optional host permission is requested from the Sign in click.
+- Each sign-in is a hashed access token (15 minutes) plus a rotating refresh token (30 days). Sign out, a password change, and deactivation revoke it. Extension access lists the device, when it was created, and when it was last used, and can revoke one.
+- Access tokens stay on that page as an advanced fallback.
+- Stopping a timer before one second returns `TOO_SHORT`. Expired and idle web sessions are removed with `deleteMany`. A wrong current password is rate-limited, and a password change signs out the other web sessions.
 
 ## Deferred
 

@@ -9,7 +9,7 @@ export const tokenCopy = {
   tokenRejected: "That access token is invalid or has been revoked.",
   pageTitle: "Extension access",
   pageIntro:
-    "Create an access token for the Chrome extension. UlixDesk stores only a hash of the token. The token itself is shown once, when you create it.",
+    "Sign in from the Chrome extension with your UlixDesk email and password. This page lists those sign-ins. An access token, further down, is only for pasting into the extension options.",
   newToken: "New token",
   nameLabel: "Name",
   nameHint: "A label so you can tell tokens apart, such as Work laptop.",

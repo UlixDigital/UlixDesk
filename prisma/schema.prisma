@@ -18,10 +18,11 @@ model User {
   deactivatedAt  DateTime?
   createdAt      DateTime        @default(now())
   updatedAt      DateTime        @updatedAt
-  sessions       Session[]
-  passwordSetups PasswordSetup[]
-  accessTokens   AccessToken[]
-  timeEntries    TimeEntry[]
+  sessions          Session[]
+  passwordSetups    PasswordSetup[]
+  accessTokens      AccessToken[]
+  extensionSessions ExtensionSession[]
+  timeEntries       TimeEntry[]
 
   @@index([role])
   @@index([deactivatedAt])
@@ -144,6 +145,27 @@ model AccessToken {
   createdAt  DateTime  @default(now())
   lastUsedAt DateTime?
   revokedAt  DateTime?
+
+  @@index([userId])
+  @@index([createdAt])
+}
+
+/// A Chrome extension sign-in. The access token is short-lived. The refresh
+/// token rotates. Only hashes are stored. The plaintext is never written.
+model ExtensionSession {
+  id                  String    @id @default(cuid())
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  label               String
+  accessTokenHash     String    @unique
+  refreshTokenHash    String    @unique
+  previousRefreshHash String?   @unique
+  createdAt           DateTime  @default(now())
+  lastUsedAt          DateTime?
+  accessExpiresAt     DateTime
+  refreshExpiresAt    DateTime
+  rotatedAt           DateTime  @default(now())
+  revokedAt           DateTime?
 
   @@index([userId])
   @@index([createdAt])

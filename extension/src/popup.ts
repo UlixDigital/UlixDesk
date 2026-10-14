@@ -1,8 +1,28 @@
-import { fetchProjects, fetchTimer, startTimer, stopTimer, type ApiProject, type ApiTimer, type ClientFailure } from "./api";
+import {
+  fetchProjects,
+  fetchSession,
+  fetchTimer,
+  requestExtensionSignIn,
+  startTimer,
+  stopTimer,
+  type ApiProject,
+  type ApiTimer,
+  type ClientFailure,
+} from "./api";
 import { popupCopy } from "./copy";
+import { signOutOfExtension, type EnsureResult } from "./credentials";
 import { derivePopup, projectOptionLabel, type PopupModel } from "./popup-state";
+import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
-import { hostPermissionPattern, normalizeServerUrl } from "./server-url";
+import {
+  PRODUCTION_ORIGIN,
+  STAGING_ORIGIN,
+  hostPermissionPattern,
+  normalizeServerUrl,
+  originForPreset,
+  presetForOrigin,
+  type ServerPreset,
+} from "./server-url";
 import { formatElapsed } from "./time";
 
 const app = document.querySelector("#app");
@@ -20,12 +40,51 @@ let alertMessage: string | null = null;
 let loading = true;
 let busy = false;
 let permission = false;
-let serverUrl = "";
+let serverUrl = PRODUCTION_ORIGIN;
 let token = "";
 let tick = 0;
+let signedIn = false;
+let accountName = "";
+let accountEmail = "";
+let serverPreset: ServerPreset = "production";
+let customUrl = "";
+let email = "";
+let password = "";
+let formError: string | null = null;
 
 function requestBadgeRefresh() {
   void chrome.runtime.sendMessage({ type: "refresh-badge" });
+}
+
+function requestEnsureAccess(force = false): Promise<EnsureResult> {
+  return new Promise((resolve) => {
+    chrome.runtime.sendMessage({ type: "ensure-access", force }, (result) => {
+      const failed = chrome.runtime.lastError;
+      if (failed || !result || typeof result !== "object" || !("ok" in result)) {
+        resolve({ ok: false, signedOut: false, message: popupCopy.unreachableBody });
+        return;
+      }
+      resolve(result as EnsureResult);
+    });
+  });
+}
+
+function applyStoredServer(stored: string) {
+  const trimmed = stored.trim();
+  if (!trimmed) {
+    serverPreset = "production";
+    customUrl = "";
+    serverUrl = PRODUCTION_ORIGIN;
+    return;
+  }
+  const parsed = normalizeServerUrl(trimmed);
+  serverUrl = parsed.ok ? parsed.origin : trimmed;
+  serverPreset = parsed.ok ? presetForOrigin(parsed.origin) : "custom";
+  customUrl = serverPreset === "custom" ? trimmed : "";
+}
+
+function chosenServerUrl() {
+  return originForPreset(serverPreset, customUrl);
 }
 
 async function load() {
@@ -34,15 +93,14 @@ async function load() {
   projectNotice = null;
   render();
   const settings = await readSettings();
-  serverUrl = settings.serverUrl;
-  token = settings.token;
+  applyStoredServer(settings.serverUrl);
   projectId = settings.lastProjectId;
-  const parsed = normalizeServerUrl(serverUrl);
-  permission =
-    parsed.ok &&
-    (await chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] }));
+  accountName = settings.userName;
+  accountEmail = settings.userEmail;
 
-  if (!serverUrl.trim() || !token.trim() || !permission || !parsed.ok) {
+  if (!settings.token && !settings.refreshToken) {
+    signedIn = false;
+    token = "";
     projects = null;
     timer = null;
     failure = null;
@@ -52,10 +110,86 @@ async function load() {
     return;
   }
 
-  const [projectResult, timerResult] = await Promise.all([
-    fetchProjects(settings),
-    fetchTimer(settings),
-  ]);
+  const ready = await requestEnsureAccess();
+  if (!ready.ok) {
+    if (ready.signedOut) {
+      signedIn = false;
+      token = "";
+      formError = ready.message || null;
+      loading = false;
+      render();
+      requestBadgeRefresh();
+      return;
+    }
+    signedIn = true;
+    token = settings.token;
+    failure = { ok: false, reason: "unreachable" };
+    projects = null;
+    timer = null;
+    loading = false;
+    render();
+    requestBadgeRefresh();
+    return;
+  }
+
+  signedIn = true;
+  token = ready.settings.token;
+  serverUrl = ready.settings.serverUrl || serverUrl;
+  accountName = ready.settings.userName;
+  accountEmail = ready.settings.userEmail;
+  const parsed = normalizeServerUrl(serverUrl);
+  permission =
+    parsed.ok &&
+    (await chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] }));
+
+  if (!permission || !parsed.ok) {
+    projects = null;
+    timer = null;
+    failure = null;
+    loading = false;
+    render();
+    requestBadgeRefresh();
+    return;
+  }
+
+  let projectResult = await fetchProjects(ready.settings);
+  let timerResult = await fetchTimer(ready.settings);
+  if (
+    ready.settings.refreshToken &&
+    ((!projectResult.ok && projectResult.reason === "unauthorized") ||
+      (!timerResult.ok && timerResult.reason === "unauthorized"))
+  ) {
+    const again = await requestEnsureAccess(true);
+    if (!again.ok) {
+      signedIn = !again.signedOut;
+      if (again.signedOut) {
+        signedIn = false;
+        token = "";
+        formError = again.message || null;
+      } else {
+        failure = { ok: false, reason: "unreachable" };
+      }
+      projects = null;
+      timer = null;
+      loading = false;
+      render();
+      requestBadgeRefresh();
+      return;
+    }
+    token = again.settings.token;
+    accountName = again.settings.userName;
+    accountEmail = again.settings.userEmail;
+    projectResult = await fetchProjects(again.settings);
+    timerResult = await fetchTimer(again.settings);
+  }
+
+  const who = await fetchSession({ serverUrl, token });
+  if (who.ok) {
+    accountName = who.user.name;
+    accountEmail = who.user.email;
+    await writeSettings({ userName: accountName, userEmail: accountEmail });
+  }
+
   failure = !projectResult.ok ? projectResult : !timerResult.ok ? timerResult : null;
   projects = projectResult.ok ? projectResult.projects : null;
   timer = timerResult.ok ? timerResult.timer : null;
@@ -74,7 +208,18 @@ async function load() {
 }
 
 function render() {
-  const model = derivePopup({
+  root.replaceChildren(view());
+  if (signedIn) {
+    const model = currentModel();
+    if (model.kind === "running") scheduleTick(model.startedAt);
+    else window.clearInterval(tick);
+  } else {
+    window.clearInterval(tick);
+  }
+}
+
+function currentModel(): PopupModel {
+  return derivePopup({
     serverUrl,
     token,
     permission,
@@ -89,9 +234,6 @@ function render() {
     alert: alertMessage,
     loading,
   });
-  root.replaceChildren(view(model));
-  if (model.kind === "running") scheduleTick(model.startedAt);
-  else window.clearInterval(tick);
 }
 
 function scheduleTick(startedAt: string) {
@@ -103,10 +245,15 @@ function scheduleTick(startedAt: string) {
   }, 1000);
 }
 
-function view(model: PopupModel) {
+function view() {
   const shell = el("div", "shell");
   shell.append(header());
-  shell.append(bodyFor(model));
+  if (!signedIn) {
+    shell.append(signInForm());
+    return shell;
+  }
+  shell.append(accountStrip());
+  shell.append(bodyFor(currentModel()));
   return shell;
 }
 
@@ -120,6 +267,237 @@ function header() {
   return row;
 }
 
+function accountStrip() {
+  const row = el("div", "account");
+  const text = el("div", "brand-text");
+  if (accountName || accountEmail) {
+    text.append(el("span", "account-name", accountName || accountEmail));
+    if (accountName && accountEmail) text.append(el("span", "hint", accountEmail));
+  } else {
+    text.append(el("span", "account-name", popupCopy.signedInWithToken));
+  }
+  row.append(text, button(popupCopy.signOut, "secondary", () => void onSignOut(), busy));
+  return row;
+}
+
+function signInForm() {
+  const form = document.createElement("form");
+  form.className = "stack";
+  form.addEventListener("submit", (event) => {
+    event.preventDefault();
+    onSignInClick();
+  });
+  form.append(el("h2", "state-title", popupCopy.signInTitle));
+  form.append(el("p", "state-body", popupCopy.signInIntro));
+  form.append(serverFields());
+
+  const emailField = el("label", "field");
+  emailField.append(el("span", "label", popupCopy.emailLabel));
+  const emailInput = document.createElement("input");
+  emailInput.id = "email";
+  emailInput.name = "email";
+  emailInput.type = "email";
+  emailInput.autocomplete = "username";
+  emailInput.required = true;
+  emailInput.value = email;
+  emailInput.addEventListener("input", () => {
+    email = emailInput.value;
+  });
+  emailField.append(emailInput);
+
+  const passwordField = el("label", "field");
+  passwordField.append(el("span", "label", popupCopy.passwordLabel));
+  const passwordInput = document.createElement("input");
+  passwordInput.id = "password";
+  passwordInput.name = "password";
+  passwordInput.type = "password";
+  passwordInput.autocomplete = "current-password";
+  passwordInput.required = true;
+  passwordInput.value = password;
+  passwordInput.addEventListener("input", () => {
+    password = passwordInput.value;
+  });
+  passwordField.append(passwordInput);
+
+  form.append(emailField, passwordField);
+  if (formError) form.append(noteLine(formError, "alert"));
+  const submit = button(busy ? popupCopy.signingIn : popupCopy.signIn, "primary", () => undefined);
+  submit.type = "submit";
+  submit.disabled = busy;
+  form.append(submit);
+  return form;
+}
+
+function serverFields() {
+  const wrap = el("div", "stack");
+  wrap.append(el("span", "label", popupCopy.serverLabel));
+  if (serverPreset === "custom") {
+    const input = document.createElement("input");
+    input.id = "server-url";
+    input.name = "serverUrl";
+    input.type = "url";
+    input.inputMode = "url";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.placeholder = "http://127.0.0.1:3000";
+    input.value = customUrl;
+    input.addEventListener("input", () => {
+      customUrl = input.value;
+      serverUrl = input.value.trim();
+    });
+    wrap.append(input);
+    wrap.append(el("p", "hint", popupCopy.customServerHint));
+  } else {
+    const shown = el("p", "server-url", serverPreset === "staging" ? STAGING_ORIGIN : PRODUCTION_ORIGIN);
+    shown.id = "server-url";
+    wrap.append(shown);
+  }
+  const choices = el("div", "choice-row");
+  if (serverPreset !== "production") {
+    choices.append(textButton(popupCopy.useProduction, () => void choosePreset("production")));
+  }
+  if (serverPreset !== "staging") {
+    choices.append(textButton(popupCopy.useStaging, () => void choosePreset("staging")));
+  }
+  if (serverPreset !== "custom") {
+    choices.append(textButton(popupCopy.customServer, () => void choosePreset("custom")));
+  }
+  wrap.append(choices);
+  return wrap;
+}
+
+async function choosePreset(preset: ServerPreset) {
+  serverPreset = preset;
+  formError = null;
+  if (preset === "production") serverUrl = PRODUCTION_ORIGIN;
+  if (preset === "staging") serverUrl = STAGING_ORIGIN;
+  if (preset === "custom") serverUrl = customUrl.trim();
+  const parsed = normalizeServerUrl(serverUrl);
+  if (parsed.ok) await writeSettings({ serverUrl: parsed.origin });
+  render();
+}
+
+function onSignInClick() {
+  const described = describeSignIn({
+    serverUrl: chosenServerUrl(),
+    email,
+    password,
+  });
+  if (!described.ok) {
+    formError = described.message;
+    render();
+    return;
+  }
+  const parsed = normalizeServerUrl(described.serverUrl);
+  if (!parsed.ok) return;
+  const pattern = hostPermissionPattern(parsed.origin);
+  const passwordValue = password;
+  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+    void chrome.runtime.lastError;
+    if (!granted) {
+      formError = popupCopy.permissionBody;
+      render();
+      return;
+    }
+    chrome.permissions.getAll((current) => {
+      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
+      const finish = () => {
+        void completeSignIn(described.serverUrl, described.email, passwordValue);
+      };
+      if (extras.length === 0) {
+        finish();
+        return;
+      }
+      chrome.permissions.remove({ origins: extras }, () => {
+        void chrome.runtime.lastError;
+        finish();
+      });
+    });
+  });
+}
+
+async function completeSignIn(nextServer: string, nextEmail: string, passwordValue: string) {
+  busy = true;
+  formError = null;
+  render();
+  const result = await requestExtensionSignIn({
+    serverUrl: nextServer,
+    email: nextEmail,
+    password: passwordValue,
+  });
+  busy = false;
+  if (!result.ok) {
+    formError = result.message;
+    render();
+    return;
+  }
+  password = "";
+  await writeSettings({
+    serverUrl: nextServer,
+    token: result.session.accessToken,
+    refreshToken: result.session.refreshToken,
+    accessExpiresAt: result.session.accessExpiresAt,
+    userName: result.session.user.name,
+    userEmail: result.session.user.email,
+  });
+  formError = null;
+  await load();
+}
+
+async function onSignOut() {
+  if (busy) return;
+  busy = true;
+  render();
+  const result = await signOutOfExtension();
+  busy = false;
+  if (!result.ok) {
+    formError = result.message;
+    alertMessage = result.message;
+    render();
+    return;
+  }
+  signedIn = false;
+  token = "";
+  password = "";
+  accountName = "";
+  accountEmail = "";
+  projects = null;
+  timer = null;
+  failure = null;
+  formError = null;
+  alertMessage = null;
+  render();
+  requestBadgeRefresh();
+}
+
+function grantPermission() {
+  const parsed = normalizeServerUrl(serverUrl);
+  if (!parsed.ok) return;
+  const pattern = hostPermissionPattern(parsed.origin);
+  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+    void chrome.runtime.lastError;
+    if (!granted) {
+      alertMessage = popupCopy.permissionBody;
+      render();
+      return;
+    }
+    chrome.permissions.getAll((current) => {
+      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
+      const finish = () => {
+        void load();
+      };
+      if (extras.length === 0) {
+        finish();
+        return;
+      }
+      chrome.permissions.remove({ origins: extras }, () => {
+        void chrome.runtime.lastError;
+        finish();
+      });
+    });
+  });
+}
+
 function bodyFor(model: PopupModel) {
   const panel = el("div", "panel");
   switch (model.kind) {
@@ -127,22 +505,16 @@ function bodyFor(model: PopupModel) {
       panel.append(statusBlock(popupCopy.loading, ""));
       break;
     case "not-connected":
-      panel.append(
-        statusBlock(popupCopy.notConnectedTitle, popupCopy.notConnectedBody),
-        button(popupCopy.openOptions, "primary", () => void chrome.runtime.openOptionsPage()),
-      );
+      panel.append(signInForm());
       break;
     case "permission":
       panel.append(
         statusBlock(popupCopy.permissionTitle, popupCopy.permissionBody),
-        button(popupCopy.openOptions, "primary", () => void chrome.runtime.openOptionsPage()),
+        button(popupCopy.grant, "primary", () => grantPermission()),
       );
       break;
     case "invalid-url":
-      panel.append(
-        statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody),
-        button(popupCopy.openOptions, "primary", () => void chrome.runtime.openOptionsPage()),
-      );
+      panel.append(statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody));
       break;
     case "unreachable":
       panel.append(
@@ -153,7 +525,7 @@ function bodyFor(model: PopupModel) {
     case "unauthorized":
       panel.append(
         statusBlock(popupCopy.unauthorizedTitle, popupCopy.unauthorizedBody),
-        button(popupCopy.openOptions, "primary", () => void chrome.runtime.openOptionsPage()),
+        button(popupCopy.signOut, "primary", () => void onSignOut()),
       );
       break;
     case "unexpected":
@@ -251,9 +623,7 @@ function runningView(model: Extract<PopupModel, { kind: "running" }>) {
   elapsed.prepend(elapsedLabel);
   wrap.append(elapsed);
   if (model.alert) wrap.append(noteLine(model.alert, "alert"));
-  wrap.append(
-    button(busy ? popupCopy.stopping : popupCopy.stop, "danger", () => void onStop(), busy),
-  );
+  wrap.append(button(busy ? popupCopy.stopping : popupCopy.stop, "danger", () => void onStop(), busy));
   return wrap;
 }
 
@@ -351,15 +721,25 @@ function noteLine(text: string, tone: "notice" | "helper" | "alert") {
 
 function button(
   label: string,
-  tone: "primary" | "danger",
+  tone: "primary" | "danger" | "secondary",
   onClick: () => void,
   disabled = false,
 ) {
   const node = document.createElement("button");
   node.type = "button";
-  node.className = tone === "danger" ? "button danger" : "button primary";
+  node.className =
+    tone === "danger" ? "button danger" : tone === "secondary" ? "button secondary" : "button primary";
   node.textContent = label;
   node.disabled = disabled;
+  node.addEventListener("click", onClick);
+  return node;
+}
+
+function textButton(label: string, onClick: () => void) {
+  const node = document.createElement("button");
+  node.type = "button";
+  node.className = "text-button";
+  node.textContent = label;
   node.addEventListener("click", onClick);
   return node;
 }

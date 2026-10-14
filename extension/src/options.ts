@@ -40,7 +40,14 @@ saveControl.addEventListener("click", () => {
       show("error", described?.message ?? optionsCopy.missingFields);
       return;
     }
-    await writeSettings({ serverUrl: serverUrl.trim(), token: token.trim() });
+    await writeSettings({
+      serverUrl: serverUrl.trim(),
+      token: token.trim(),
+      refreshToken: "",
+      accessExpiresAt: "",
+      userName: "",
+      userEmail: "",
+    });
     show(described.tone, described.message);
     requestBadgeRefresh();
   })();

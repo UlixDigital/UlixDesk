@@ -1,5 +1,7 @@
 import { fetchTimer } from "./api";
 import { decideBadge } from "./badge";
+import { ensureAccess } from "./credentials";
+import { popupCopy } from "./copy";
 import { readSettings } from "./storage";
 import { hostPermissionPattern, isConfigured, normalizeServerUrl } from "./server-url";
 
@@ -8,7 +10,8 @@ export const ALARM_PERIOD_MINUTES = 1;
 const BADGE_COLOR = "#0f766e";
 
 async function syncBadge() {
-  const settings = await readSettings();
+  const ready = await ensureAccess();
+  const settings = ready.ok ? ready.settings : await readSettings();
   const parsed = normalizeServerUrl(settings.serverUrl);
   const configured = isConfigured(settings) && parsed.ok;
   const permission =
@@ -66,7 +69,15 @@ chrome.alarms.onAlarm.addListener((alarm) => {
 });
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (!message || typeof message !== "object" || message.type !== "refresh-badge") return false;
+  if (!message || typeof message !== "object") return false;
+  if (message.type === "ensure-access") {
+    void ensureAccess({ force: message.force === true }).then(
+      (result) => sendResponse(result),
+      () => sendResponse({ ok: false, signedOut: false, message: popupCopy.unreachableBody }),
+    );
+    return true;
+  }
+  if (message.type !== "refresh-badge") return false;
   void syncBadge().then(
     () => sendResponse({ ok: true }),
     () => sendResponse({ ok: false }),

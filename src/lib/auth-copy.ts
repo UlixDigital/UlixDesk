@@ -8,6 +8,7 @@ export const authCopy = {
   invalidLogin: "That email or password is incorrect.",
   deactivated: "This account is deactivated. Ask an owner to restore it.",
   rateLimited: "Too many sign-in attempts. Wait 15 minutes and try again.",
+  passwordRateLimited: "Too many attempts. Wait 15 minutes and try again.",
   signedOut: "You have signed out.",
   passwordSaved: "Password saved. Sign in.",
   csrfRejected: "This request was rejected. Reload the page and try again.",
@@ -43,10 +44,12 @@ export const authCopy = {
   resetPassword: "Reset password",
   deactivate: "Deactivate",
   deactivateTitle: "Deactivate this person?",
-  deactivateBody: "They will be signed out, and their extension tokens will stop working.",
+  deactivateBody:
+    "They will be signed out, and their extension sign-ins and access tokens will stop working.",
   deactivateConfirm: "Deactivate",
   restore: "Restore access",
-  restored: "This person can sign in again. Their old extension tokens stay revoked.",
+  restored:
+    "This person can sign in again. Their old extension sign-ins and access tokens stay revoked.",
   cannotDeactivateSelf: "You can't deactivate your own account.",
   cannotChangeOwnRole: "You can't change your own role.",
   lastOwner: "UlixDesk needs at least one active owner.",

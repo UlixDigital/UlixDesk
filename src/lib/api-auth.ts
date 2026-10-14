@@ -2,6 +2,7 @@ import { findUsableAccessToken, markAccessTokenUsed, parseBearerToken } from "@/
 import { apiCodes, apiError } from "@/lib/api-errors";
 import { authCopy } from "@/lib/auth-copy";
 import { extensionCorsHeaders, withExtensionCors } from "@/lib/extension-cors";
+import { findUsableExtensionAccess, markExtensionSessionUsed } from "@/lib/extension-session";
 import { userFromCookieHeader } from "@/lib/session";
 import { tokenCopy } from "@/lib/token-copy";
 import { jsonContentTypeRefusal, originForbiddenMessage, unauthenticatedApiRefusal } from "@/lib/timer-api-guard";
@@ -45,9 +46,14 @@ export async function authorizeApiRequest(
     const token = parseBearerToken(header);
     if (!token) return jsonApi(request, apiError(tokenCopy.bearerRequired, apiCodes.BEARER_REQUIRED), 401);
     const row = await findUsableAccessToken(token);
-    if (!row) return jsonApi(request, apiError(tokenCopy.tokenRejected, apiCodes.TOKEN_INVALID), 401);
-    await markAccessTokenUsed(row.id);
-    return { userId: row.userId };
+    if (row) {
+      await markAccessTokenUsed(row.id);
+      return { userId: row.userId };
+    }
+    const session = await findUsableExtensionAccess(token);
+    if (!session) return jsonApi(request, apiError(tokenCopy.tokenRejected, apiCodes.TOKEN_INVALID), 401);
+    await markExtensionSessionUsed(session.id);
+    return { userId: session.userId };
   }
 
   const refused = unauthenticatedApiRefusal(request);

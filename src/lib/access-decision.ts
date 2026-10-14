@@ -44,6 +44,19 @@ export function safeResumePath(value: string | null) {
  * and answer 401 themselves. A signature check is not a database lookup:
  * a cookie that was revoked still passes this gate and fails in the layout.
  */
+/** API routes that answer without a session cookie. Bearer or extension sign-in handles them. */
+export function isTokenApiPath(pathname: string) {
+  return (
+    pathname === "/api/projects" ||
+    pathname === "/api/timer" ||
+    pathname === "/api/timer/start" ||
+    pathname === "/api/timer/stop" ||
+    pathname === "/api/extension/session" ||
+    pathname === "/api/extension/session/refresh" ||
+    pathname === "/api/extension/session/revoke"
+  );
+}
+
 export function sessionGate(input: {
   pathname: string;
   hasValidSession: boolean;

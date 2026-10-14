@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache";
 import { createAccessToken, parseTokenName, revokeAccessToken } from "@/lib/access-tokens";
 import { authCopy } from "@/lib/auth-copy";
 import { gateMutation } from "@/lib/auth";
+import { revokeExtensionSession } from "@/lib/extension-session";
+import { currentSessionTokenHash } from "@/lib/session";
 import { tokenCopy } from "@/lib/token-copy";
 import type { CreateTokenState } from "@/lib/token-form-state";
 import { changeOwnPassword } from "@/lib/users";
@@ -27,6 +29,7 @@ export async function changePasswordAction(
     userId: gate.user.id,
     currentPassword,
     nextPassword,
+    keepSessionTokenHash: await currentSessionTokenHash(),
   });
   if (!saved.ok) return { error: saved.error, notice: null };
   return { error: null, notice: authCopy.passwordChanged };
@@ -71,6 +74,19 @@ export async function createAccessTokenAction(
       tokenName: null,
     };
   }
+}
+
+export async function revokeExtensionSessionAction(formData: FormData) {
+  const gate = await gateMutation();
+  if (!gate.ok) return;
+  const id = String(formData.get("id") ?? "");
+  if (!id) return;
+  try {
+    await revokeExtensionSession(id, gate.user.id);
+  } catch {
+    console.error("Failed to revoke an extension sign-in");
+  }
+  revalidatePath("/settings");
 }
 
 export async function revokeAccessTokenAction(formData: FormData) {

@@ -1,5 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { sessionGate } from "@/lib/access-decision";
+import { isTokenApiPath, sessionGate } from "@/lib/access-decision";
 import { bearerSkipsHostCheck, hostGuardRefusal } from "@/lib/host-guard";
 import { REQUEST_PATH_HEADER } from "@/lib/request-path";
 import { clearedSessionCookie, SESSION_COOKIE, verifySessionCookie } from "@/lib/session-cookie";
@@ -23,7 +23,7 @@ export async function middleware(request: NextRequest) {
   const gate = sessionGate({
     pathname: request.nextUrl.pathname,
     hasValidSession: signatureOk,
-    isTokenApi: tokenApi || isOpenTokenPath(request.nextUrl.pathname),
+    isTokenApi: tokenApi || isTokenApiPath(request.nextUrl.pathname),
   });
 
   if (gate.type === "redirect") {
@@ -45,15 +45,6 @@ export async function middleware(request: NextRequest) {
 
 function clearCookie(response: NextResponse) {
   response.cookies.set(SESSION_COOKIE, "", clearedSessionCookie());
-}
-
-function isOpenTokenPath(pathname: string) {
-  return (
-    pathname === "/api/projects" ||
-    pathname === "/api/timer" ||
-    pathname === "/api/timer/start" ||
-    pathname === "/api/timer/stop"
-  );
 }
 
 export const config = {

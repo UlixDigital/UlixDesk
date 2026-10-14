@@ -3,6 +3,11 @@ import { SETUP_TTL_MS, authCopy } from "@/lib/auth-copy";
 import { prisma } from "@/lib/db";
 import { hashPassword, verifyPassword } from "@/lib/password";
 import {
+  clearPasswordFailures,
+  passwordChangeLimited,
+  recordPasswordFailure,
+} from "@/lib/rate-limit";
+import {
   assignableRoles,
   canManageTarget,
   validateEmail,
@@ -159,6 +164,10 @@ export async function setUserActive(input: {
       where: { userId: target.id, revokedAt: null },
       data: { revokedAt: now },
     }),
+    prisma.extensionSession.updateMany({
+      where: { userId: target.id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
     prisma.passwordSetup.updateMany({
       where: { userId: target.id, usedAt: null },
       data: { usedAt: now },
@@ -171,15 +180,41 @@ export async function changeOwnPassword(input: {
   userId: string;
   currentPassword: string;
   nextPassword: string;
+  keepSessionTokenHash: string | null;
+  now?: number;
 }) {
+  const nowMs = input.now ?? Date.now();
+  if (passwordChangeLimited(input.userId, nowMs).limited) {
+    return { ok: false as const, error: authCopy.passwordRateLimited };
+  }
   const user = await prisma.user.findUnique({ where: { id: input.userId } });
-  if (!user?.passwordHash) return { ok: false as const, error: authCopy.currentPasswordWrong };
+  if (!user?.passwordHash) {
+    recordPasswordFailure(input.userId, nowMs);
+    return { ok: false as const, error: authCopy.currentPasswordWrong };
+  }
   const matches = await verifyPassword(input.currentPassword, user.passwordHash);
-  if (!matches) return { ok: false as const, error: authCopy.currentPasswordWrong };
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { passwordHash: await hashPassword(input.nextPassword) },
-  });
+  if (!matches) {
+    recordPasswordFailure(input.userId, nowMs);
+    return { ok: false as const, error: authCopy.currentPasswordWrong };
+  }
+  clearPasswordFailures(input.userId);
+  const now = new Date(nowMs);
+  const passwordHash = await hashPassword(input.nextPassword);
+  await prisma.$transaction([
+    prisma.user.update({
+      where: { id: user.id },
+      data: { passwordHash },
+    }),
+    prisma.session.deleteMany({
+      where: input.keepSessionTokenHash
+        ? { userId: user.id, tokenHash: { not: input.keepSessionTokenHash } }
+        : { userId: user.id },
+    }),
+    prisma.extensionSession.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
+  ]);
   return { ok: true as const };
 }
 
@@ -204,6 +239,10 @@ export async function consumeSetupToken(token: string, password: string, now = n
       data: { usedAt: now },
     }),
     prisma.session.deleteMany({ where: { userId: row.userId } }),
+    prisma.extensionSession.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: now },
+    }),
   ]);
   return { ok: true as const };
 }

@@ -482,6 +482,38 @@ describe("extension API", () => {
     expect(read.status).toBe(403);
     expect(read.headers.get("access-control-allow-origin")).toBeNull();
   });
+
+  it("refuses to stop a timer that has run for less than a second", async () => {
+    const project = await createProject({
+      name: "Website",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    const created = await createAccessToken("Work laptop", userId);
+    const started = await startRoute(
+      bearerPost(
+        "http://localhost/api/timer/start",
+        { projectId: project.id, note: "Too soon" },
+        created.token,
+      ),
+    );
+    expect(started.status).toBe(201);
+    await prisma.timeEntry.updateMany({
+      where: { userId, note: "Too soon" },
+      data: { startedAt: new Date(Date.now() - 200) },
+    });
+
+    const stopped = await stopRoute(
+      bearerPost("http://localhost/api/timer/stop", {}, created.token),
+    );
+    expect(stopped.status).toBe(409);
+    expect(await stopped.json()).toEqual({
+      error: timeCopy.timerShort,
+      code: apiCodes.TOO_SHORT,
+    });
+    expect(await prisma.runningTimer.findUnique({ where: { id: userId } })).not.toBeNull();
+  });
 });
 
 function bearerPost(url: string, body: unknown, token: string, origin?: string) {

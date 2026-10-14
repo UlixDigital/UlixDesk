@@ -25,7 +25,7 @@ Say so in the team channel and stop using the broken page. The team can step pro
 
 Sign in as an owner or an admin. Open **Team**. Enter the person's name and email, choose Member (or Admin, or Owner if you are an owner), and press **Add team member**. UlixDesk does not email them. Copy the set-password link that appears and send it yourself. The link works once and expires in 72 hours. They open it, choose a password, and then sign in.
 
-To replace a forgotten password, press **Reset password** on that person and send the new link. The old link stops working. **Deactivate** signs them out and stops their extension tokens. **Restore access** lets them sign in again. Old extension tokens stay revoked, so they create a new one on Extension access.
+To replace a forgotten password, press **Reset password** on that person and send the new link. The old link stops working. **Deactivate** signs them out and stops their extension sign-ins and access tokens. **Restore access** lets them sign in again. Old extension sign-ins and access tokens stay revoked, so they sign in from the extension again.
 
 ## For the team
 
@@ -184,7 +184,7 @@ npm run import:sqlite -- --from /path/to/phase1.db --dry-run
 npm run import:sqlite -- --from /path/to/phase1.db
 ```
 
-`--dry-run` prints the counts and writes nothing. The import assigns every time row to the earliest active owner. Run it again and it does nothing. If Postgres already has different clients, projects, or time, it refuses. Old extension tokens are not copied. After signing in, each person creates a new token under Extension access.
+`--dry-run` prints the counts and writes nothing. The import assigns every time row to the earliest active owner. Run it again and it does nothing. If Postgres already has different clients, projects, or time, it refuses. Old extension tokens are not copied. After signing in on the web, each person signs in from the Chrome extension.
 
 `DATABASE_URL` must point at the database you mean to fill. Do not point it at production unless that database is the one you intend to fill.
 
@@ -224,17 +224,13 @@ The image reference must be `ghcr.io/<owner>/<repo>:<40-character sha>`. The pro
 
 Create the GitHub Environment named `production` and add required reviewers before the first production run. Until those reviewers exist, GitHub will not ask anyone.
 
-### Extension server URL
+### Extension
 
-The unpacked extension id is `cjlaoflbipaehclleojofopapalhiooe`. Put that in `ULIXDESK_EXTENSION_IDS` (already in the examples).
+The unpacked extension id is `cjlaoflbipaehclleojofopapalhiooe`. Put that in `ULIXDESK_EXTENSION_IDS` (already in the examples). Install steps are in [extension/README.md](../extension/README.md): Load unpacked, then sign in from the popup.
 
-In the extension options, set the server URL to the origin the person should use:
+The popup defaults to `https://desk.ulixdigital.com`. **Use staging** points it at `https://staging.desk.ulixdigital.com`. **Custom server** is for a local origin such as `http://127.0.0.1:3000`. No new environment variable is required. Sign-in uses the same email, password, and rate limit as the website.
 
-- Local: `http://127.0.0.1:3000`
-- Staging: `https://staging.desk.ulixdigital.com`
-- Production: `https://desk.ulixdigital.com`
-
-Create the access token while signed in on that same origin, under Extension access. The token belongs to that person. A timer started from the extension runs as them. Deactivating them revokes the token.
+A timer started from the extension runs as that person. **Sign out** in the popup revokes that sign-in. Deactivating them, or changing their password, revokes every extension sign-in. Extension access lists each sign-in and can revoke one. An access token on that page remains an advanced fallback.
 
 ### Try the production stack on a laptop
 
