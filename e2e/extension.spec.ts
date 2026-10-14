@@ -69,7 +69,7 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     await page.locator("#project").selectOption({ label: "Extension E2E Project" });
     await page.locator("#note").fill("From the extension");
     await page.getByRole("button", { name: "Start", exact: true }).click();
-    await expect(page.getByText("Timer running")).toBeVisible();
+    await expect(page.getByText("Timer running", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Extension E2E Project" })).toBeVisible();
     await page.waitForTimeout(1100);
     await page.getByRole("button", { name: "Stop", exact: true }).click();
@@ -124,7 +124,8 @@ test("signs in from the popup, tracks time, signs out, and drops a revoked crede
     await page.locator("#project").selectOption({ label: "Extension Sign-in Project" });
     await page.locator("#note").fill("Signed in from the popup");
     await page.getByRole("button", { name: "Start", exact: true }).click();
-    await expect(page.getByText("Timer running")).toBeVisible();
+    await expect(page.getByText("Timer running", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Extension Sign-in Project" })).toBeVisible();
 
     const running = await prisma.timeEntry.findFirstOrThrow({
       where: { projectId: project.id, note: "Signed in from the popup" },
