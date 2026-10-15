@@ -164,6 +164,219 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
   }
 });
 
+test("a member sees hours alerts only for projects they track, and cannot move time onto a capped project", async ({
+  browser,
+}) => {
+  test.setTimeout(180_000);
+  const prisma = new PrismaClient();
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
+  const member = await prisma.user.create({
+    data: {
+      email: "mem2-budget@ulix.test",
+      name: "Mem Two",
+      role: "member",
+      passwordHash: "unused",
+    },
+  });
+  await prisma.workspaceSettings.upsert({
+    where: { id: "workspace" },
+    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+    create: { id: "workspace", timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+  });
+  const client = await prisma.client.create({ data: { name: "Mem Budget Client", currency: "USD" } });
+  const tracked = await prisma.project.create({
+    data: { name: "Mem Tracked Hours", clientId: client.id, billable: true },
+  });
+  const other = await prisma.project.create({
+    data: { name: "Mem Other Hours", clientId: client.id, billable: true },
+  });
+  const cost = await prisma.project.create({
+    data: { name: "Mem Cost", clientId: client.id, billable: true },
+  });
+  const open = await prisma.project.create({
+    data: { name: "Mem Open", clientId: client.id, billable: true },
+  });
+  const capped = await prisma.project.create({
+    data: { name: "Mem Capped", clientId: client.id, billable: true },
+  });
+  const hoursForm = {
+    basis: "hours" as const,
+    amount: "1",
+    recurrence: "total" as const,
+    startsOn: "",
+    billableOnly: true,
+    alertPercent: "80",
+    hardStop: false,
+  };
+  const context = await browser.newContext();
+  const today = todayInTimeZone("Asia/Colombo");
+  const start = zonedDayStart(today, "Asia/Colombo");
+  const now = new Date(start.getTime() + 15 * 60 * 60 * 1000);
+  let moveId = "";
+  try {
+    for (const projectId of [tracked.id, other.id]) {
+      expect(
+        (
+          await saveBudget({
+            actorRole: owner.role,
+            actorId: owner.id,
+            scope: "project",
+            projectId,
+            form: hoursForm,
+          })
+        ).ok,
+      ).toBe(true);
+    }
+    await prisma.billRate.create({
+      data: {
+        scope: "client",
+        clientId: client.id,
+        amountMinor: 10_000,
+        currency: "USD",
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        createdById: owner.id,
+      },
+    });
+    expect(
+      (
+        await saveBudget({
+          actorRole: owner.role,
+          actorId: owner.id,
+          scope: "project",
+          projectId: cost.id,
+          form: {
+            basis: "cost",
+            amount: "100",
+            recurrence: "total",
+            startsOn: "",
+            billableOnly: true,
+            alertPercent: "80",
+            hardStop: false,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    expect(
+      (
+        await saveBudget({
+          actorRole: owner.role,
+          actorId: owner.id,
+          scope: "project",
+          projectId: capped.id,
+          form: { ...hoursForm, billableOnly: true, alertPercent: "", hardStop: true },
+        })
+      ).ok,
+    ).toBe(true);
+
+    await createManualEntry(
+      {
+        projectId: tracked.id,
+        startedAt: new Date(start.getTime() + 9 * 60 * 60 * 1000),
+        endedAt: new Date(start.getTime() + 9 * 60 * 60 * 1000 + 50 * 60 * 1000),
+        billable: true,
+        note: "Tracked hours",
+      },
+      now,
+      member.id,
+    );
+    await createManualEntry(
+      {
+        projectId: other.id,
+        startedAt: new Date(start.getTime() + 10 * 60 * 60 * 1000),
+        endedAt: new Date(start.getTime() + 10 * 60 * 60 * 1000 + 50 * 60 * 1000),
+        billable: true,
+        note: "Owner hours",
+      },
+      now,
+      owner.id,
+    );
+    await createManualEntry(
+      {
+        projectId: cost.id,
+        startedAt: new Date(start.getTime() + 11 * 60 * 60 * 1000),
+        endedAt: new Date(start.getTime() + 11 * 60 * 60 * 1000 + 54 * 60 * 1000),
+        billable: true,
+        note: "Cost time",
+      },
+      now,
+      member.id,
+    );
+    await createManualEntry(
+      {
+        projectId: capped.id,
+        startedAt: new Date(start.getTime() + 7 * 60 * 60 * 1000),
+        endedAt: new Date(start.getTime() + 7 * 60 * 60 * 1000 + 70 * 60 * 1000),
+        billable: true,
+        note: "Filled",
+      },
+      now,
+      owner.id,
+    );
+    const move = await createManualEntry(
+      {
+        projectId: open.id,
+        startedAt: new Date(start.getTime() + 12 * 60 * 60 * 1000),
+        endedAt: new Date(start.getTime() + 12 * 60 * 60 * 1000 + 15 * 60 * 1000),
+        billable: false,
+        note: "Move me",
+      },
+      now,
+      member.id,
+    );
+    moveId = move.entry.id;
+
+    await signIn(context, prisma, member.email);
+    const page = await context.newPage();
+
+    await page.goto(`/timesheets?notice=budget&alertProject=${cost.id}`);
+    await expect(page.getByText("This budget has used")).toHaveCount(0);
+    await expect(page.getByText(/alert at/)).toHaveCount(0);
+    expect(await page.locator("main").innerText()).not.toMatch(/\d+(\.\d+)?%/);
+
+    await page.goto(`/timesheets?notice=budget&alertProject=${other.id}`);
+    await expect(page.getByText("This budget has used")).toHaveCount(0);
+    await expect(page.getByText(/alert at/)).toHaveCount(0);
+    expect(await page.locator("main").innerText()).not.toMatch(/\d+(\.\d+)?%/);
+
+    await page.goto(`/timesheets?notice=budget&alertProject=${tracked.id}`);
+    await expect(
+      page.getByRole("status").filter({ hasText: "This budget has used 83.3% (alert at 80%)." }),
+    ).toBeVisible();
+
+    await page.goto("/timesheets");
+    await waitForHydration(page);
+    await page.locator("#timer-project").selectOption(tracked.id);
+    await page.getByRole("button", { name: "Start", exact: true }).click();
+    await expect(
+      page.getByRole("status").filter({ hasText: "This budget has used 83.3% (alert at 80%)." }),
+    ).toBeVisible();
+
+    await page.goto(`/timesheets/${moveId}/edit`);
+    await waitForHydration(page);
+    await page.locator("#entry-project").selectOption(capped.id);
+    await expect(page.locator("#entry-billable")).not.toBeChecked();
+    await page.getByRole("button", { name: "Save changes" }).click();
+    await expect(page.getByRole("alert").filter({ hasText: "reached its budget" })).toBeVisible();
+    const stayed = await prisma.timeEntry.findUniqueOrThrow({ where: { id: moveId } });
+    expect(stayed.projectId).toBe(open.id);
+    expect(stayed.billable).toBe(false);
+  } finally {
+    await context.close();
+    await deleteTimeChangesForTests(prisma);
+    await prisma.runningTimer.deleteMany({ where: { id: member.id } });
+    await prisma.timeEntry.deleteMany({ where: { project: { clientId: client.id } } });
+    await prisma.billRate.deleteMany({ where: { clientId: client.id } });
+    await prisma.budget.deleteMany({
+      where: { projectId: { in: [tracked.id, other.id, cost.id, capped.id] } },
+    });
+    await prisma.project.deleteMany({ where: { clientId: client.id } });
+    await prisma.client.delete({ where: { id: client.id } });
+    await prisma.session.deleteMany({ where: { userId: member.id } });
+    await prisma.user.delete({ where: { id: member.id } });
+    await prisma.$disconnect();
+  }
+});
+
 async function paintContinuedActivity(
   prisma: PrismaClient,
   userId: string,

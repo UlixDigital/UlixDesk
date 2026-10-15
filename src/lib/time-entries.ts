@@ -1,4 +1,4 @@
-import { BudgetReachedError, guardProjectBudget, projectBudgetAlertMessage } from "@/lib/budgets";
+import { BudgetReachedError, budgetAlertForViewer, guardProjectBudget } from "@/lib/budgets";
 import { prisma } from "@/lib/db";
 import {
   changeContext,
@@ -315,7 +315,10 @@ export async function createManualEntry(
       before: null,
       after: timeChangeSnapshot(row, row.project.client?.id ?? null),
     });
-    const warning = await projectBudgetAlertMessage(input.projectId, input.startedAt, tx);
+    const warning = await budgetAlertForViewer(
+      { userId, projectId: input.projectId, at: input.startedAt },
+      tx,
+    );
     return { row, warning };
   });
   return {
@@ -491,7 +494,11 @@ export async function startTimer(input: {
         before: null,
         after: timeChangeSnapshot(created, created.project.client?.id ?? null),
       });
-      return { timer: toRecord(created), warning: guard.warning };
+      const warning = await budgetAlertForViewer(
+        { userId: input.userId, projectId, at: input.now },
+        tx,
+      );
+      return { timer: toRecord(created), warning };
     });
 
     if ("conflict" in timer && timer.conflict) {

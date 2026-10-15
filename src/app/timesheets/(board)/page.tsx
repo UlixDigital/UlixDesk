@@ -9,7 +9,7 @@ import {
   TimesheetNav,
   WeeklyTimesheet,
 } from "@/components/timesheet-views";
-import { projectBudgetAlertMessage } from "@/lib/budgets";
+import { budgetAlertForViewer } from "@/lib/budgets";
 import { getWorkspaceTimeZone, listAllBillRates } from "@/lib/bill-rates";
 import { getCurrentUser } from "@/lib/session";
 import { attachRates } from "@/lib/rates";
@@ -109,10 +109,11 @@ export default async function TimesheetsPage({
   const notice = parseNotice(params.notice);
   const budgetWarning =
     notice === "budget" || notice === "budget-overlap"
-      ? await projectBudgetAlertMessage(
-          (params.alertProject ?? "").trim(),
-          zonedDayStart(date, timeZone),
-        )
+      ? await budgetAlertForViewer({
+          userId: actor.id,
+          projectId: params.alertProject ?? "",
+          at: zonedDayStart(date, timeZone),
+        })
       : null;
   const daily =
     view === "day"

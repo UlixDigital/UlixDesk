@@ -1,5 +1,11 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { BudgetReachedError, listBudgetReport, projectBudgetProgress, saveBudget } from "@/lib/budgets";
+import {
+  BudgetReachedError,
+  budgetAlertForViewer,
+  listBudgetReport,
+  projectBudgetProgress,
+  saveBudget,
+} from "@/lib/budgets";
 import { budgetCodes, budgetCopy } from "@/lib/budget-copy";
 import { budgetCsvHasMoney, budgetReportCsv } from "@/lib/budget-report";
 import { prisma } from "@/lib/db";
@@ -697,5 +703,282 @@ describe("budgets", () => {
       code: budgetCodes.BUDGET_AMOUNT,
       error: budgetCopy.amountTooLarge,
     });
+  });
+});
+
+describe("budgetAlertForViewer", () => {
+  const at = new Date("2026-10-15T12:00:00.000Z");
+  const hoursWarning = budgetCopy.warning("83.3%", 80);
+  const costWarning = budgetCopy.warning("90%", 80);
+
+  async function hoursProject(actorId: string, name: string) {
+    const project = await createProject({
+      name,
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    expect(
+      (
+        await saveBudget({
+          actorRole: "owner",
+          actorId,
+          scope: "project",
+          projectId: project.id,
+          form: {
+            basis: "hours",
+            amount: "1",
+            recurrence: "total",
+            startsOn: "",
+            billableOnly: true,
+            alertPercent: "80",
+            hardStop: false,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    return project;
+  }
+
+  async function trackedHours(projectId: string, userId: string) {
+    return createManualEntry(
+      {
+        projectId,
+        startedAt: new Date("2026-10-15T01:00:00.000Z"),
+        endedAt: new Date("2026-10-15T01:50:00.000Z"),
+        billable: true,
+        note: "",
+      },
+      at,
+      userId,
+    );
+  }
+
+  it("shows an hours alert to a member who has tracked that project, including the entry just created", async () => {
+    const owner = await signInAs("owner", "alert-helper-owner@ulix.test");
+    const member = await signInAs("member", "alert-helper-member@ulix.test");
+    const project = await hoursProject(owner.user.id, "Member hours");
+    expect(
+      await budgetAlertForViewer({ userId: member.user.id, projectId: project.id, at }),
+    ).toBeNull();
+
+    const added = await trackedHours(project.id, member.user.id);
+    expect(added.warnings).toEqual([hoursWarning]);
+    expect(await budgetAlertForViewer({ userId: member.user.id, projectId: project.id, at })).toBe(
+      hoursWarning,
+    );
+
+    const started = await startTimer({
+      projectId: project.id,
+      note: "",
+      now: at,
+      userId: member.user.id,
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.warning).toBe(hoursWarning);
+  });
+
+  it("returns nothing for a member on a cost budget", async () => {
+    const owner = await signInAs("owner", "alert-cost-owner@ulix.test");
+    const member = await signInAs("member", "alert-cost-member@ulix.test");
+    const client = await prisma.client.create({ data: { name: "Cost Client", currency: "USD" } });
+    const project = await createProject({
+      name: "Cost project",
+      description: null,
+      clientId: client.id,
+      billable: true,
+    });
+    await prisma.billRate.create({
+      data: {
+        scope: "client",
+        clientId: client.id,
+        amountMinor: 10_000,
+        currency: "USD",
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        createdById: owner.user.id,
+      },
+    });
+    expect(
+      (
+        await saveBudget({
+          actorRole: owner.user.role,
+          actorId: owner.user.id,
+          scope: "project",
+          projectId: project.id,
+          form: {
+            basis: "cost",
+            amount: "100",
+            recurrence: "total",
+            startsOn: "",
+            billableOnly: true,
+            alertPercent: "80",
+            hardStop: false,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    const added = await createManualEntry(
+      {
+        projectId: project.id,
+        startedAt: new Date("2026-10-15T02:00:00.000Z"),
+        endedAt: new Date("2026-10-15T02:54:00.000Z"),
+        billable: true,
+        note: "",
+      },
+      at,
+      member.user.id,
+    );
+    expect(added.warnings).toEqual([]);
+    expect(await budgetAlertForViewer({ userId: member.user.id, projectId: project.id, at })).toBeNull();
+    expect(await budgetAlertForViewer({ userId: owner.user.id, projectId: project.id, at })).toBe(costWarning);
+    const started = await startTimer({
+      projectId: project.id,
+      note: "",
+      now: at,
+      userId: member.user.id,
+    });
+    expect(started.ok).toBe(true);
+    if (!started.ok) return;
+    expect(started.warning).toBeNull();
+  });
+
+  it("returns nothing for a member on a project they have not tracked", async () => {
+    const owner = await signInAs("owner", "alert-untracked-owner@ulix.test");
+    const member = await signInAs("member", "alert-untracked-member@ulix.test");
+    const project = await hoursProject(owner.user.id, "Someone else's hours");
+    await trackedHours(project.id, owner.user.id);
+    expect(await budgetAlertForViewer({ userId: member.user.id, projectId: project.id, at })).toBeNull();
+    expect(await budgetAlertForViewer({ userId: owner.user.id, projectId: project.id, at })).toBe(hoursWarning);
+  });
+
+  it("does not let alertProject show a member a cost budget or a project they have not tracked", async () => {
+    const owner = await signInAs("owner", "alert-override-owner@ulix.test");
+    const member = await signInAs("member", "alert-override-member@ulix.test");
+    const costClient = await prisma.client.create({ data: { name: "Override Client", currency: "USD" } });
+    const costProject = await createProject({
+      name: "Override cost",
+      description: null,
+      clientId: costClient.id,
+      billable: true,
+    });
+    await prisma.billRate.create({
+      data: {
+        scope: "client",
+        clientId: costClient.id,
+        amountMinor: 10_000,
+        currency: "USD",
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        createdById: owner.user.id,
+      },
+    });
+    expect(
+      (
+        await saveBudget({
+          actorRole: owner.user.role,
+          actorId: owner.user.id,
+          scope: "project",
+          projectId: costProject.id,
+          form: {
+            basis: "cost",
+            amount: "100",
+            recurrence: "total",
+            startsOn: "",
+            billableOnly: true,
+            alertPercent: "80",
+            hardStop: false,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    await createManualEntry(
+      {
+        projectId: costProject.id,
+        startedAt: new Date("2026-10-15T03:00:00.000Z"),
+        endedAt: new Date("2026-10-15T03:54:00.000Z"),
+        billable: true,
+        note: "",
+      },
+      at,
+      member.user.id,
+    );
+    const other = await hoursProject(owner.user.id, "Override other");
+    await trackedHours(other.id, owner.user.id);
+
+    const costFromQuery = await budgetAlertForViewer({
+      userId: member.user.id,
+      projectId: costProject.id,
+      at,
+    });
+    const otherFromQuery = await budgetAlertForViewer({
+      userId: member.user.id,
+      projectId: other.id,
+      at,
+    });
+    expect(costFromQuery).toBeNull();
+    expect(otherFromQuery).toBeNull();
+    expect(JSON.stringify([costFromQuery, otherFromQuery])).not.toMatch(/%|alert at|budget/i);
+  });
+
+  it("shows cost and untracked alerts to an owner and an admin", async () => {
+    const owner = await signInAs("owner", "alert-manager-owner@ulix.test");
+    const admin = await signInAs("admin", "alert-manager-admin@ulix.test");
+    const client = await prisma.client.create({ data: { name: "Manager Client", currency: "USD" } });
+    const costProject = await createProject({
+      name: "Manager cost",
+      description: null,
+      clientId: client.id,
+      billable: true,
+    });
+    await prisma.billRate.create({
+      data: {
+        scope: "client",
+        clientId: client.id,
+        amountMinor: 10_000,
+        currency: "USD",
+        effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+        createdById: owner.user.id,
+      },
+    });
+    expect(
+      (
+        await saveBudget({
+          actorRole: owner.user.role,
+          actorId: owner.user.id,
+          scope: "project",
+          projectId: costProject.id,
+          form: {
+            basis: "cost",
+            amount: "100",
+            recurrence: "total",
+            startsOn: "",
+            billableOnly: true,
+            alertPercent: "80",
+            hardStop: false,
+          },
+        })
+      ).ok,
+    ).toBe(true);
+    await createManualEntry(
+      {
+        projectId: costProject.id,
+        startedAt: new Date("2026-10-15T04:00:00.000Z"),
+        endedAt: new Date("2026-10-15T04:54:00.000Z"),
+        billable: true,
+        note: "",
+      },
+      at,
+      owner.user.id,
+    );
+    const hours = await hoursProject(owner.user.id, "Manager hours");
+    await trackedHours(hours.id, owner.user.id);
+
+    expect(await budgetAlertForViewer({ userId: owner.user.id, projectId: costProject.id, at })).toBe(
+      costWarning,
+    );
+    expect(await budgetAlertForViewer({ userId: admin.user.id, projectId: costProject.id, at })).toBe(
+      costWarning,
+    );
+    expect(await budgetAlertForViewer({ userId: admin.user.id, projectId: hours.id, at })).toBe(hoursWarning);
   });
 });

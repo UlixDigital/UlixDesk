@@ -331,8 +331,68 @@ export async function guardProjectBudget(
   return { blocked, warning };
 }
 
+/**
+ * Owners and admins can see every project and client budget.
+ * A member can see only an hours budget on a project they have a time entry on.
+ * That includes an entry just created in this transaction and a timer that is
+ * still running. A cost budget, a client budget, or a project they have never
+ * tracked reveals nothing: no percent and no hint that a budget exists.
+ */
+export function projectBudgetVisibleToViewer(input: {
+  role: string;
+  scope: string;
+  basis: string;
+  trackedByViewer: boolean;
+}) {
+  if (canManageWorkspace(input.role)) return true;
+  return input.scope === "project" && input.basis === "hours" && input.trackedByViewer;
+}
+
+/**
+ * Alert copy for one viewer. `projectId` may come from the alertProject query,
+ * but that value cannot widen what the signed-in user is allowed to see.
+ * Members get a warning only for an hours budget on a project they have tracked,
+ * counting an entry created earlier in the same transaction.
+ */
+export async function budgetAlertForViewer(
+  input: { userId: string; projectId: string; at: Date },
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+): Promise<string | null> {
+  const projectId = input.projectId.trim();
+  if (!projectId || !input.userId) return null;
+  const user = await db.user.findUnique({
+    where: { id: input.userId },
+    select: { role: true },
+  });
+  if (!user) return null;
+  const budget = await db.budget.findUnique({
+    where: { projectId },
+    select: { scope: true, basis: true },
+  });
+  if (!budget) return null;
+  const trackedByViewer = canManageWorkspace(user.role)
+    ? true
+    : Boolean(
+        await db.timeEntry.findFirst({
+          where: { userId: input.userId, projectId },
+          select: { id: true },
+        }),
+      );
+  if (
+    !projectBudgetVisibleToViewer({
+      role: user.role,
+      scope: budget.scope,
+      basis: budget.basis,
+      trackedByViewer,
+    })
+  ) {
+    return null;
+  }
+  return projectBudgetAlertMessage(projectId, input.at, db);
+}
+
 /** Alert copy for the period that contains `at`, including completed entries. */
-export async function projectBudgetAlertMessage(
+async function projectBudgetAlertMessage(
   projectId: string,
   at: Date,
   db: Prisma.TransactionClient | typeof prisma = prisma,
@@ -623,14 +683,23 @@ export async function projectBudgetProgress(input: {
 }): Promise<BudgetProgress | null> {
   const record = await getProjectBudget(input.projectId);
   if (!record) return null;
-  const manager = canManageWorkspace(input.role);
-  if (!manager) {
-    if (record.basis !== "hours") return null;
-    const own = await prisma.timeEntry.findFirst({
-      where: { userId: input.userId, projectId: input.projectId },
-      select: { id: true },
-    });
-    if (!own) return null;
+  const trackedByViewer = canManageWorkspace(input.role)
+    ? true
+    : Boolean(
+        await prisma.timeEntry.findFirst({
+          where: { userId: input.userId, projectId: input.projectId },
+          select: { id: true },
+        }),
+      );
+  if (
+    !projectBudgetVisibleToViewer({
+      role: input.role,
+      scope: record.scope,
+      basis: record.basis,
+      trackedByViewer,
+    })
+  ) {
+    return null;
   }
   const now = input.now ?? new Date();
   const [timeZone, rates, entries] = await Promise.all([
@@ -638,9 +707,7 @@ export async function projectBudgetProgress(input: {
     listAllBillRates(),
     entriesFor(prisma, { projectId: input.projectId }),
   ]);
-  const progress = await progressFor(record, entries, rates, timeZone, now);
-  if (!canSeeMoney(input.role) && record.basis === "cost") return null;
-  return progress;
+  return progressFor(record, entries, rates, timeZone, now);
 }
 
 export async function clientBudgetProgress(input: {
@@ -713,9 +780,15 @@ export async function listBudgetReport(input: {
       );
 
   const visible = budgets.filter(({ record, project, client }) => {
-    if (!showMoney) {
-      if (record.scope !== "project" || record.basis !== "hours" || !record.projectId) return false;
-      if (!ownProjects?.has(record.projectId)) return false;
+    if (
+      !projectBudgetVisibleToViewer({
+        role: input.actor.role,
+        scope: record.scope,
+        basis: record.basis,
+        trackedByViewer: Boolean(record.projectId && ownProjects?.has(record.projectId)),
+      })
+    ) {
+      return false;
     }
     if (input.filters.kind === "projects" && record.scope !== "project") return false;
     if (input.filters.kind === "clients" && record.scope !== "client") return false;
