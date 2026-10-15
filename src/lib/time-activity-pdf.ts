@@ -260,11 +260,12 @@ function buildClient(
   return {
     name,
     ...totalsFor(lines, input.showMoney, input.workspaceCurrency),
-    groups: keys.map((key) => buildGroup(key, groups.get(key) ?? [], input)),
+    groups: keys.map((key) => buildGroup(name, key, groups.get(key) ?? [], input)),
   };
 }
 
 function buildGroup(
+  clientName: string,
   key: string,
   lines: ActivityLine[],
   input: { showMoney: boolean; workspaceCurrency: string },
@@ -279,7 +280,9 @@ function buildGroup(
   }
   const todos = [...byTodo.keys()].sort((a, b) => a.localeCompare(b, "en"));
   return {
-    id: key,
+    // The client is part of the id. Date and member repeat across clients, and
+    // the painter looks rows up by id.
+    id: `${clientName}\t${key}`,
     dateLabel: formatActivityDate(date),
     memberName,
     ...totalsFor(lines, input.showMoney, input.workspaceCurrency),

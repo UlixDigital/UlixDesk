@@ -159,6 +159,46 @@ describe("time activity layout", () => {
     expect(model.grand.billed).toBe("$200.00");
   });
 
+  it("keeps each client's group subtotals when the date and member match", async () => {
+    const model = buildTimeActivityModel({
+      from: "2026-09-28",
+      to: "2026-10-04",
+      showMoney: true,
+      workspaceCurrency: "USD",
+      lines: [
+        line({
+          clientName: "Acme",
+          durationMs: 60 * 60 * 1000,
+          billableMs: 60 * 60 * 1000,
+          amount: { currency: "USD", amountMinor: 1000 },
+        }),
+        line({
+          clientName: "Brightpath",
+          projectName: "Mobile app",
+          durationMs: 2 * 60 * 60 * 1000,
+          billableMs: 2 * 60 * 60 * 1000,
+          amount: { currency: "USD", amountMinor: 4000 },
+        }),
+      ],
+    });
+    expect(model.clients[0]?.groups[0]?.time).toBe("1:00:00");
+    expect(model.clients[0]?.groups[0]?.billed).toBe("$10.00");
+    expect(model.clients[1]?.groups[0]?.time).toBe("2:00:00");
+    expect(model.clients[1]?.groups[0]?.billed).toBe("$40.00");
+    expect(model.clients[0]?.groups[0]?.id).not.toBe(model.clients[1]?.groups[0]?.id);
+
+    const pdf = await renderTimeActivityPdf({
+      model,
+      appUrl: "https://desk.example",
+      compress: false,
+    });
+    const brightpath = pdfPlainText(pdf).slice(pdfPlainText(pdf).indexOf("Brightpath"));
+    expect(brightpath).toContain("2:00:00");
+    expect(brightpath).toContain("$40.00");
+    expect(brightpath).not.toContain("1:00:00");
+    expect(brightpath).not.toContain("$10.00");
+  });
+
   it("omits money for a member", () => {
     const model = buildTimeActivityModel({
       from: "2026-09-28",
