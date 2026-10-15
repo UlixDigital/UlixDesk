@@ -81,7 +81,7 @@ test("owners see every time change and members see only their own", async ({ bro
     await ownerPage.goto("/reports/manual-time-edits");
     const filters = ownerPage.getByRole("form", { name: "Filters" });
     await expect(ownerPage.getByRole("heading", { name: "Time edits" })).toBeVisible();
-    await expect(ownerPage.getByText("Acme").first()).toBeVisible();
+    await expect(ownerPage.getByRole("definition").filter({ hasText: "Acme" }).first()).toBeVisible();
     await expect(ownerPage.getByText("Time entries that already existed before this log have no history.")).toBeVisible();
     await expect(filters.getByLabel("From")).toBeVisible();
     await expect(filters.getByLabel("Client")).toBeVisible();
