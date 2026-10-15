@@ -165,6 +165,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
         </div>
       ) : (
         <IssuedInvoice
+          status={invoice.status}
           currency={invoice.currency}
           lines={invoice.lines}
           subtotalMinor={invoice.subtotalMinor}
@@ -185,6 +186,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
 }
 
 function IssuedInvoice({
+  status,
   currency,
   lines,
   subtotalMinor,
@@ -199,6 +201,7 @@ function IssuedInvoice({
   bankDetails,
   poNumber,
 }: {
+  status: string;
   currency: string;
   lines: Array<{
     id: string;
@@ -230,7 +233,9 @@ function IssuedInvoice({
   ];
   return (
     <div className="mt-6 space-y-6">
-      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">{invoiceCopy.readOnly}</p>
+      <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+        {status === "void" ? invoiceCopy.voidBanner : invoiceCopy.readOnly}
+      </p>
       {poNumber ? <p className="text-sm text-slate-700">PO {poNumber}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
         <table className="min-w-full text-sm">

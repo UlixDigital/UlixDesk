@@ -86,6 +86,8 @@ COPY --from=build --chown=nextjs:nodejs /app/node_modules/postgres-interval ./no
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/pg-int8 ./node_modules/pg-int8
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/xtend ./node_modules/xtend
 COPY --from=build --chown=nextjs:nodejs /opt/pdfkit-runtime/ ./node_modules/
+# nodemailer stays external (serverExternalPackages) and has no runtime dependencies.
+COPY --from=build --chown=nextjs:nodejs /app/node_modules/nodemailer ./node_modules/nodemailer
 COPY --from=migrate --chown=nextjs:nodejs /opt/migrate /opt/migrate
 USER nextjs
 EXPOSE 3000
