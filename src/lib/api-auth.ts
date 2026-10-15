@@ -4,6 +4,7 @@ import { authCopy } from "@/lib/auth-copy";
 import { extensionCorsHeaders, withExtensionCors } from "@/lib/extension-cors";
 import { findUsableExtensionAccess, markExtensionSessionUsed } from "@/lib/extension-session";
 import { userFromCookieHeader } from "@/lib/session";
+import type { ChangeSource } from "@/lib/time-change-copy";
 import { tokenCopy } from "@/lib/token-copy";
 import { jsonContentTypeRefusal, originForbiddenMessage, unauthenticatedApiRefusal } from "@/lib/timer-api-guard";
 
@@ -25,7 +26,7 @@ export function optionsResponse(request: Request) {
   return new Response(null, { status: 204, headers });
 }
 
-export type ApiActor = { userId: string };
+export type ApiActor = { userId: string; source: ChangeSource };
 
 /**
  * Bearer tokens skip the origin and host checks and act as the token's user.
@@ -48,12 +49,12 @@ export async function authorizeApiRequest(
     const row = await findUsableAccessToken(token);
     if (row) {
       await markAccessTokenUsed(row.id);
-      return { userId: row.userId };
+      return { userId: row.userId, source: "api" };
     }
     const session = await findUsableExtensionAccess(token);
     if (!session) return jsonApi(request, apiError(tokenCopy.tokenRejected, apiCodes.TOKEN_INVALID), 401);
     await markExtensionSessionUsed(session.id);
-    return { userId: session.userId };
+    return { userId: session.userId, source: "extension" };
   }
 
   const refused = unauthenticatedApiRefusal(request);
@@ -62,5 +63,5 @@ export async function authorizeApiRequest(
   if (!user) {
     return jsonApi(request, apiError(authCopy.apiAuthRequired, apiCodes.AUTH_REQUIRED), 401);
   }
-  return { userId: user.id };
+  return { userId: user.id, source: "web" };
 }

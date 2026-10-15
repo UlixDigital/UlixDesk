@@ -106,12 +106,66 @@ describe("weekly timesheet amounts", () => {
 
     expect(rated.querySelectorAll("td")[4].textContent).toContain("USD 1.67");
     expect(rated.querySelectorAll("td")[4].textContent).not.toContain(rateCopy.noAmount);
+    expect(rated.querySelectorAll("td")[4].querySelector("span")?.className).toContain(
+      "whitespace-nowrap",
+    );
+
+    const totalCell = (row: Element) => row.querySelectorAll("td")[7];
+    expect(totalCell(noRate).textContent).toContain("1h");
+    expect(totalCell(noRate).textContent).toContain("—");
+    expect(totalCell(noRate).querySelector(".sr-only")?.textContent).toContain(rateCopy.noAmount);
+    expect(totalCell(noRate).textContent).not.toContain(rateCopy.nonBillable);
+    expect(totalCell(nonBill).textContent).toContain(rateCopy.nonBillable);
+    expect(totalCell(nonBill).querySelector(".sr-only")?.textContent).toContain(rateCopy.noAmount);
+    expect(totalCell(rated).textContent).toContain("USD 1.67");
+    expect(totalCell(rated).querySelector(".whitespace-nowrap")?.textContent).toContain("USD 1.67");
 
     const footer = table.querySelectorAll("tfoot td");
     expect(footer[0].textContent?.trim()).toBe("—");
     expect(footer[0].textContent).not.toContain("0m");
     expect(footer[4].textContent).toContain("1m");
     expect(footer[5].textContent).toContain("2h");
+    expect(footer[7].textContent).toContain(rateCopy.noAmount);
+    expect(footer[7].textContent).toContain(rateCopy.nonBillable);
+
+    const stacked = document.createElement("div");
+    document.body.append(stacked);
+    const stackedRoot = createRoot(stacked);
+    const moneyRow = {
+      ...week.rows[0],
+      projectId: "multi",
+      projectName: "Multi currency",
+      totalMoney: [
+        { currency: "USD", amountMinor: 125050 },
+        { currency: "JPY", amountMinor: 1500 },
+      ],
+      dayMoney: week.rows[0].dayMs.map(() => []),
+      dayNoAmount: week.rows[0].dayMs.map(() => false),
+      dayNonBillable: week.rows[0].dayMs.map(() => false),
+    };
+    await act(async () => {
+      stackedRoot.render(
+        createElement(WeeklyTimesheet, {
+          dates: week.dates,
+          today: "2026-10-15",
+          rows: [moneyRow],
+          columnTotals: week.columnTotals,
+          columnMoney: week.columnMoney,
+          totalMs: moneyRow.totalMs,
+          moneyTotals: moneyRow.totalMoney,
+          showMoney: true,
+          canManage: true,
+          projectId: "",
+          clientId: "",
+        }),
+      );
+    });
+    const total = [...stacked.querySelectorAll("tbody td")].at(-1)!;
+    const amounts = [...total.querySelectorAll(".whitespace-nowrap")].map((node) => node.textContent);
+    expect(amounts).toEqual(["USD 1,250.50", "JPY 1,500"]);
+    expect(total.textContent).not.toContain(" · ");
+    stackedRoot.unmount();
+    stacked.remove();
 
     expect(container.querySelector('a[href^="/projects/"]')).toBeNull();
     expect(saturday(noRate).querySelector("a")?.getAttribute("href")).toContain("/timesheets?");

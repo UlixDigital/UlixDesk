@@ -9,3 +9,14 @@ export const ui = {
     "block w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-ink shadow-sm placeholder:text-slate-400 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30",
   inputError: "border-rose-400 focus:border-rose-600 focus:ring-rose-600/20",
 };
+
+/**
+ * Border color is applied on its own. `border-slate-300` and `border-rose-400`
+ * in the same class string fight in the stylesheet, and the default wins.
+ */
+export function textInputClass(invalid: boolean) {
+  return [
+    "block w-full rounded-lg border bg-white px-3 py-2 text-sm text-ink shadow-sm placeholder:text-slate-400 focus:outline-none focus:ring-2",
+    invalid ? ui.inputError : "border-slate-300 focus:border-accent focus:ring-accent/30",
+  ].join(" ");
+}

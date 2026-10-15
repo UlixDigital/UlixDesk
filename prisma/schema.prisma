@@ -23,6 +23,8 @@ model User {
   accessTokens      AccessToken[]
   extensionSessions ExtensionSession[]
   timeEntries       TimeEntry[]
+  timeChangesMade   TimeChange[] @relation("TimeChangeActor")
+  timeChangesOwned  TimeChange[] @relation("TimeChangeSubject")
   memberBillRates   BillRate[] @relation("MemberBillRate")
   billRatesCreated  BillRate[] @relation("BillRateAuthor")
 
@@ -163,6 +165,46 @@ model TimeEntry {
   @@index([userId, startedAt])
   @@index([startedAt])
   @@index([endedAt])
+}
+
+/// Append-only log of a time entry create, edit, delete, or timer start/stop.
+/// `timeEntryId` is not a foreign key, so deleting the entry keeps the row.
+/// The database rejects UPDATE and DELETE. Nothing in the app writes those.
+/// Existing entries from before this table have no rows here.
+model TimeChange {
+  id          String   @id @default(cuid())
+  timeEntryId String
+  /// added, edited, deleted, started, or stopped.
+  action      String
+  /// web, extension, or api.
+  source      String
+  actorId     String
+  actor       User     @relation("TimeChangeActor", fields: [actorId], references: [id], onDelete: Restrict)
+  /// The person whose time entry changed. Members are limited to their own id.
+  entryUserId String?
+  entryUser   User?    @relation("TimeChangeSubject", fields: [entryUserId], references: [id], onDelete: Restrict)
+  changedAt   DateTime @default(now())
+
+  beforeStartedAt  DateTime?
+  beforeEndedAt    DateTime?
+  beforeDurationMs Int?
+  beforeProjectId  String?
+  beforeClientId   String?
+  beforeNote       String?
+  beforeBillable   Boolean?
+
+  afterStartedAt  DateTime?
+  afterEndedAt    DateTime?
+  afterDurationMs Int?
+  afterProjectId  String?
+  afterClientId   String?
+  afterNote       String?
+  afterBillable   Boolean?
+
+  @@index([changedAt])
+  @@index([entryUserId, changedAt])
+  @@index([timeEntryId])
+  @@index([actorId])
 }
 
 /// One running timer per user. `id` is that user's id.

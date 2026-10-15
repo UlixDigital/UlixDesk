@@ -2,13 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, ClockIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
+import { BuildingIcon, ClockIcon, FolderIcon, HistoryIcon, KeyIcon, UsersIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { timeChangeCopy } from "@/lib/time-change-copy";
 
 const items = [
   { href: "/clients", label: "Clients", icon: BuildingIcon },
   { href: "/projects", label: "Projects", icon: FolderIcon },
   { href: "/timesheets", label: "Timesheets", icon: ClockIcon },
+  { href: "/reports/manual-time-edits", label: timeChangeCopy.navLabel, icon: HistoryIcon },
   { href: "/settings", label: "Settings", icon: KeyIcon },
 ];
 
@@ -21,7 +23,7 @@ export function AppNav({
 }) {
   const pathname = usePathname();
   const links = showTeam
-    ? [...items.slice(0, 3), { href: "/team", label: "Team", icon: UsersIcon }, items[3]]
+    ? [...items.slice(0, 4), { href: "/team", label: "Team", icon: UsersIcon }, items[4]]
     : items;
 
   return (

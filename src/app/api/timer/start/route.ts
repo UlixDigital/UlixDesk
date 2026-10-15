@@ -37,6 +37,8 @@ export async function POST(request: Request) {
     note: typeof record.note === "string" ? record.note : "",
     now: new Date(),
     userId: actor.userId,
+    actorId: actor.userId,
+    source: actor.source,
   });
 
   if (!result.ok) {
