@@ -295,8 +295,9 @@ describe("budget form parsers", () => {
   it("stores hours as seconds and rejects a blank or out-of-range alert", () => {
     expect(parseHoursAmount("1.50")).toEqual({ ok: true, seconds: 5400 });
     expect(parseHoursAmount("0.01")).toEqual({ ok: true, seconds: 36 });
-    expect(parseHoursAmount("1.555").ok).toBe(false);
-    expect(parseHoursAmount("0").ok).toBe(false);
+    expect(parseHoursAmount("1.555")).toEqual({ ok: false, reason: "precise" });
+    expect(parseHoursAmount("0")).toEqual({ ok: false, reason: "format" });
+    expect(parseHoursAmount("100001")).toEqual({ ok: false, reason: "large" });
     expect(parseAlertPercent("")).toEqual({ ok: true, percent: null });
     expect(parseAlertPercent("80")).toEqual({ ok: true, percent: 80 });
     expect(parseAlertPercent("0").ok).toBe(false);

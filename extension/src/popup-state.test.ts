@@ -90,9 +90,10 @@ describe("popup state", () => {
       elapsedLabel: "00:01:02",
       status: popupCopy.alreadyRunning,
     });
-    expect(derivePopup({ ...base, timer, startedHere: true })).toMatchObject({
+    expect(derivePopup({ ...base, timer, startedHere: true, alert: "This budget has used 83.3% (alert at 80%)." })).toMatchObject({
       kind: "running",
       status: popupCopy.timerRunning,
+      alert: "This budget has used 83.3% (alert at 80%).",
     });
   });
 

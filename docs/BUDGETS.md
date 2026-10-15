@@ -11,8 +11,8 @@ A project and a client each have at most one budget. Owners and admins create an
 | Type | `total` (lifetime), `weekly` (Monday–Sunday), or `monthly` (calendar month). Weeks and months are computed in the workspace timezone. The default timezone is Asia/Colombo. |
 | Starts on | Optional. Time before 00:00 that day is ignored. If today is before the start date, used time is zero and a hard stop does not apply. A start date inside the current week or month clips the start of that period. |
 | Billable time only | When on, non-billable time is ignored. Billable means the entry is billable and the project is billable. |
-| Alert | Optional whole percent from 1 to 99. The project and client pages, and the report, show a warning at that percent. Reaching 100% is also a warning. Email alerts are not sent yet. |
-| Hard stop | Projects only. At 100% of the budget, new timer starts and new manual entries are refused. The entry that crosses 100% is still saved. The next one is not. Editing an existing entry and stopping a timer that is already running are not blocked. Client budgets never hard-stop. |
+| Alert | Optional whole percent from 1 to 99. The project and client pages, and the report, show "This budget has used N% (alert at A%)." Starting a timer or adding time returns that same warning. Reaching 100% is also a warning on the page. Email alerts are not sent yet. |
+| Hard stop | Projects only. The check uses the budget period that contains the entry's start, in the workspace timezone, not the current period. At 100% of that period, new timer starts and new manual entries are refused. Moving an existing entry onto that project, or into that period, is refused for every role. On a project that is already at 100%, an edit that increases counted usage (a longer entry, or switching to billable on a billable-only budget) is refused. An edit that keeps usage the same or reduces it is allowed. The entry that crosses 100% is still saved. Stopping a timer that is already running is not blocked. A client budget cannot set a hard stop. |
 
 Usage counts completed entries only. A running timer is not usage. An entry that overlaps the period is clipped to the period, then rounded once with the same half-up rule as bill rates.
 
@@ -28,7 +28,7 @@ The hard-stop error is the same for everyone and contains no amount:
 
 > This project has reached its budget. New time can't be started or added until the budget resets or someone raises it.
 
-The web app, the Chrome extension, and `POST /api/timer/start` all use that check. The API returns `409` and `BUDGET_REACHED`. The extension shows the server message as an alert.
+The web app, the Chrome extension, and `POST /api/timer/start` all use that check. Manual adds and edits use the same check in the server action. The API returns `409` and `BUDGET_REACHED` when the stop applies. When a start or a manual add is allowed and the alert percent is crossed, the response includes `warnings`. The web header and the extension popup show the first warning.
 
 ## Report
 

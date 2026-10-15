@@ -1,4 +1,4 @@
-import { BudgetReachedError, projectBudgetReached } from "@/lib/budgets";
+import { BudgetReachedError, guardProjectBudget, projectBudgetAlertMessage } from "@/lib/budgets";
 import { prisma } from "@/lib/db";
 import {
   changeContext,
@@ -290,9 +290,11 @@ export async function createManualEntry(
   });
   const context = changeContext(userId, now, change);
   const created = await prisma.$transaction(async (tx) => {
-    if (await projectBudgetReached(tx, input.projectId, now)) {
-      throw new BudgetReachedError();
-    }
+    const guard = await guardProjectBudget(tx, {
+      projectId: input.projectId,
+      at: input.startedAt,
+    });
+    if (guard.blocked) throw new BudgetReachedError();
     const row = await tx.timeEntry.create({
       data: {
         projectId: input.projectId,
@@ -313,9 +315,14 @@ export async function createManualEntry(
       before: null,
       after: timeChangeSnapshot(row, row.project.client?.id ?? null),
     });
-    return row;
+    const warning = await projectBudgetAlertMessage(input.projectId, input.startedAt, tx);
+    return { row, warning };
   });
-  return { entry: toRecord(created), overlap };
+  return {
+    entry: toRecord(created.row),
+    overlap,
+    warnings: created.warning ? [created.warning] : [],
+  };
 }
 
 export async function updateManualEntry(
@@ -339,6 +346,27 @@ export async function updateManualEntry(
       include: entryInclude,
     });
     if (!existing || !existing.endedAt) return null;
+    const guard = await guardProjectBudget(tx, {
+      projectId: input.projectId,
+      at: input.startedAt,
+      excludeEntryId: existing.id,
+      edit: {
+        projectChanged: existing.projectId !== input.projectId,
+        previous: {
+          startedAt: existing.startedAt,
+          endedAt: existing.endedAt,
+          billable: existing.billable,
+          userId: existing.userId,
+        },
+        next: {
+          startedAt: input.startedAt,
+          endedAt: input.endedAt,
+          billable: input.billable,
+          userId: existing.userId,
+        },
+      },
+    });
+    if (guard.blocked) throw new BudgetReachedError();
     const row = await tx.timeEntry.update({
       where: { id },
       data: {
@@ -406,7 +434,7 @@ export async function startTimer(input: {
   actorId?: string;
   source?: ChangeContext["source"];
 }): Promise<
-  | { ok: true; timer: TimeEntryRecord }
+  | { ok: true; timer: TimeEntryRecord; warning: string | null }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
 > {
   const projectId = input.projectId.trim();
@@ -437,9 +465,8 @@ export async function startTimer(input: {
       });
       if (!project) return { missing: true as const };
       if (project.archivedAt) return { inactive: true as const };
-      if (await projectBudgetReached(tx, projectId, input.now)) {
-        return { budget: true as const };
-      }
+      const guard = await guardProjectBudget(tx, { projectId, at: input.now });
+      if (guard.blocked) return { budget: true as const };
 
       const created = await tx.timeEntry.create({
         data: {
@@ -464,7 +491,7 @@ export async function startTimer(input: {
         before: null,
         after: timeChangeSnapshot(created, created.project.client?.id ?? null),
       });
-      return { timer: toRecord(created) };
+      return { timer: toRecord(created), warning: guard.warning };
     });
 
     if ("conflict" in timer && timer.conflict) {
@@ -473,7 +500,7 @@ export async function startTimer(input: {
     if ("missing" in timer) return { ok: false, code: "project-missing" };
     if ("inactive" in timer) return { ok: false, code: "project-inactive" };
     if ("budget" in timer) return { ok: false, code: "budget-reached" };
-    return { ok: true, timer: timer.timer };
+    return { ok: true, timer: timer.timer, warning: timer.warning };
   } catch (error) {
     const running = await getRunningTimer(input.userId);
     if (running) return { ok: false, code: "already-running", timer: running };

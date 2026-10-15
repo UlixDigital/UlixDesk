@@ -3,14 +3,16 @@ import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { saveBudget } from "../src/lib/budgets";
 import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry } from "../src/lib/time-entries";
 import { todayInTimeZone, zonedDayStart } from "../src/lib/time-zone";
 import { signIn } from "./auth";
 
-const artifacts = path.join(process.cwd(), "artifacts", "slice-12");
+function artifactDir(testInfo: TestInfo) {
+  return process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
+}
 
 async function waitForHydration(page: Page) {
   await page.waitForFunction(() => {
@@ -20,19 +22,19 @@ async function waitForHydration(page: Page) {
   });
 }
 
-async function shot(page: Page, name: string) {
-  await mkdir(artifacts, { recursive: true });
-  await page.screenshot({ path: path.join(artifacts, `${name}.png`), fullPage: true });
+async function shot(page: Page, dir: string, name: string) {
+  await mkdir(dir, { recursive: true });
+  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
 }
 
-async function shotLocator(page: Page, selector: string, name: string) {
-  await mkdir(artifacts, { recursive: true });
-  await page.locator(selector).screenshot({ path: path.join(artifacts, `${name}.png`) });
+async function shotLocator(page: Page, dir: string, selector: string, name: string) {
+  await mkdir(dir, { recursive: true });
+  await page.locator(selector).screenshot({ path: path.join(dir, `${name}.png`) });
 }
 
 test("an owner sets a budget, sees the warning, and cannot start past a hard stop", async ({
   browser,
-}) => {
+}, testInfo) => {
   test.setTimeout(180_000);
   const prisma = new PrismaClient();
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
@@ -53,6 +55,7 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
   const website = await prisma.project.create({
     data: { name: "Budget Website", clientId: acme.id, billable: true },
   });
+  const shots = artifactDir(testInfo);
   const ownerContext = await browser.newContext();
   const memberContext = await browser.newContext();
   try {
@@ -64,7 +67,7 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await page.locator("#budget-alert").fill("80");
     await page.getByRole("button", { name: "Save budget" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Budget saved." })).toBeVisible();
-    await shotLocator(page, "#budget-settings", "budget-settings");
+    await shotLocator(page, shots, "#budget-settings", "budget-settings");
 
     const today = todayInTimeZone("Asia/Colombo");
     const start = zonedDayStart(today, "Asia/Colombo");
@@ -81,8 +84,8 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     );
     await page.reload();
     await expect(page.locator("#budget-progress")).toHaveAttribute("data-budget-warning", "true");
-    await expect(page.getByRole("alert").filter({ hasText: "of its alert" })).toBeVisible();
-    await shotLocator(page, "#budget-progress", "budget-progress-warning");
+    await expect(page.getByRole("alert").filter({ hasText: "This budget has used 83.3% (alert at 80%)." })).toBeVisible();
+    await shotLocator(page, shots, "#budget-progress", "budget-progress-warning");
 
     await page.locator("#budget-amount").fill("0.50");
     await page.locator("#budget-hard-stop").check();
@@ -94,7 +97,7 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await page.locator("#timer-project").selectOption(website.id);
     await page.getByRole("button", { name: "Start", exact: true }).click();
     await expect(page.getByRole("alert").filter({ hasText: "reached its budget" })).toBeVisible();
-    await shot(page, "budget-timer-blocked");
+    await shot(page, shots, "budget-timer-blocked");
 
     expect(
       (
@@ -121,11 +124,11 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await expect(page.getByRole("row", { name: /Budget Website/ })).toContainText("Reached");
     await expect(page.getByRole("row", { name: /Acme Budget/ })).toContainText("No rate");
     await expect(page.getByRole("row", { name: /Acme Budget/ })).toContainText("—");
-    await shot(page, "budgets-report");
+    await shot(page, shots, "budgets-report");
 
     const pdf = await page.request.get("/reports/budgets/export?format=pdf");
     expect(pdf.ok()).toBeTruthy();
-    await rasterPdf(Buffer.from(await pdf.body()), "budgets-pdf", 1);
+    await rasterPdf(Buffer.from(await pdf.body()), shots, "budgets-pdf", 1);
 
     await signIn(memberContext, prisma, member.email);
     const memberPage = await memberContext.newPage();
@@ -147,7 +150,7 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await paintContinuedActivity(prisma, owner.id, acme.id, start);
     const activity = await page.request.get("/reports/time-activity/export?format=pdf");
     expect(activity.ok()).toBeTruthy();
-    await rasterContinued(Buffer.from(await activity.body()), "time-activity-continued");
+    await rasterContinued(Buffer.from(await activity.body()), shots);
   } finally {
     await ownerContext.close();
     await memberContext.close();
@@ -186,9 +189,9 @@ async function paintContinuedActivity(
   }
 }
 
-async function rasterPdf(pdf: Buffer, name: string, pageNumber: number) {
-  await mkdir(artifacts, { recursive: true });
-  const pdfPath = path.join(artifacts, `${name}.pdf`);
+async function rasterPdf(pdf: Buffer, dir: string, name: string, pageNumber: number) {
+  await mkdir(dir, { recursive: true });
+  const pdfPath = path.join(dir, `${name}.pdf`);
   await writeFile(pdfPath, pdf);
   execFileSync("pdftoppm", [
     "-f",
@@ -200,13 +203,14 @@ async function rasterPdf(pdf: Buffer, name: string, pageNumber: number) {
     "-r",
     "110",
     pdfPath,
-    path.join(artifacts, name),
+    path.join(dir, name),
   ]);
 }
 
-async function rasterContinued(pdf: Buffer, name: string) {
-  await mkdir(artifacts, { recursive: true });
-  const pdfPath = path.join(artifacts, `${name}.pdf`);
+async function rasterContinued(pdf: Buffer, dir: string) {
+  await mkdir(dir, { recursive: true });
+  const name = "time-activity-continued";
+  const pdfPath = path.join(dir, `${name}.pdf`);
   await writeFile(pdfPath, pdf);
   const info = execFileSync("pdfinfo", [pdfPath], { encoding: "utf8" });
   const count = Number(/Pages:\s+(\d+)/.exec(info)?.[1] ?? "1");
@@ -227,5 +231,5 @@ async function rasterContinued(pdf: Buffer, name: string) {
     }
   }
   expect(chosen).toBeGreaterThan(1);
-  await rasterPdf(pdf, name, chosen);
+  await rasterPdf(pdf, dir, name, chosen);
 }

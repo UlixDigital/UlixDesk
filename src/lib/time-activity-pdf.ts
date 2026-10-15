@@ -728,15 +728,19 @@ function drawDataRow(
   shade: boolean,
   italicTodo: boolean,
 ) {
+  // The next shaded row starts on this row's bottom edge. A rule drawn on
+  // that edge is covered by the next fill, so date groups lose their dividers.
+  // Keep a 1pt gap inside the row and stroke the rule in the middle of it.
+  const gap = shade ? 1 : 0;
   if (shade) {
     doc.save();
-    doc.rect(MARGIN, y, contentWidth(doc), height).fill(GREY);
+    doc.rect(MARGIN, y, contentWidth(doc), Math.max(height - gap, 1)).fill(GREY);
     doc.restore();
   }
   doc.save();
   doc
-    .moveTo(MARGIN, y + height)
-    .lineTo(MARGIN + contentWidth(doc), y + height)
+    .moveTo(MARGIN, y + height - gap / 2)
+    .lineTo(MARGIN + contentWidth(doc), y + height - gap / 2)
     .strokeColor(LINE)
     .lineWidth(0.4)
     .stroke();

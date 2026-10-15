@@ -171,6 +171,9 @@ describe("timesheet totals and day boundaries", () => {
     expect(timesheetsHref({ view: "week", date: "2026-10-09", notice: "overlap" })).toBe(
       "/timesheets?view=week&date=2026-10-09&notice=overlap",
     );
+    expect(timesheetsHref({ date: "2026-10-15", notice: "budget", alertProject: "website" })).toBe(
+      "/timesheets?date=2026-10-15&notice=budget&alertProject=website",
+    );
   });
 
   it("warns when a rolled entry is longer than 12 hours and keeps the short hint at 12 hours", () => {

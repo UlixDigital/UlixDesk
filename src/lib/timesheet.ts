@@ -81,14 +81,16 @@ export type WeeklyRow = {
   totalMoney: MoneyTotal[];
 };
 
-export type TimesheetNotice = "overlap" | "running";
+export type TimesheetNotice = "overlap" | "running" | "budget" | "budget-overlap";
 
 export function parseTimesheetView(value: string | undefined): TimesheetView {
   return value === "week" ? "week" : "day";
 }
 
 export function parseNotice(value: string | undefined): TimesheetNotice | null {
-  if (value === "overlap" || value === "running") return value;
+  if (value === "overlap" || value === "running" || value === "budget" || value === "budget-overlap") {
+    return value;
+  }
   return null;
 }
 
@@ -99,6 +101,7 @@ export function timesheetsHref(input: {
   clientId?: string;
   user?: string;
   notice?: TimesheetNotice | null;
+  alertProject?: string | null;
 } = {}) {
   const params = new URLSearchParams();
   if (input.view === "week") params.set("view", "week");
@@ -107,6 +110,7 @@ export function timesheetsHref(input: {
   if (input.clientId) params.set("client", input.clientId);
   if (input.user && input.user !== "me") params.set("user", input.user);
   if (input.notice) params.set("notice", input.notice);
+  if (input.alertProject) params.set("alertProject", input.alertProject);
   const query = params.toString();
   return query ? `/timesheets?${query}` : "/timesheets";
 }

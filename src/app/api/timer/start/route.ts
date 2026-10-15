@@ -58,5 +58,12 @@ export async function POST(request: Request) {
     );
   }
 
-  return jsonApi(request, { timer: serializeTimer(result.timer) }, 201);
+  return jsonApi(
+    request,
+    {
+      timer: serializeTimer(result.timer),
+      warnings: result.warning ? [result.warning] : [],
+    },
+    201,
+  );
 }

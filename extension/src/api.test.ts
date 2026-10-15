@@ -102,6 +102,14 @@ describe("extension API client", () => {
       reason: "budget",
       message: timeCopy.budgetReached,
     });
+
+    const warned: FetchLike = async () =>
+      jsonResponse({ timer, warnings: ["This budget has used 83.3% (alert at 80%)."] }, 201);
+    expect(await startTimer(config, "website", "", warned)).toEqual({
+      ok: true,
+      timer,
+      warnings: ["This budget has used 83.3% (alert at 80%)."],
+    });
   });
 
   it("reads a timer and a stopped entry", async () => {

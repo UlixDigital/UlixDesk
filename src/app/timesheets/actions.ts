@@ -64,7 +64,7 @@ export async function saveTimeEntryAction(
     return { errors: { projectId: timeCopy.projectInactive }, values };
   }
 
-  let saved: { overlap: boolean; clientId: string | null };
+  let saved: { overlap: boolean; clientId: string | null; warnings: string[]; projectId: string };
   const change = { actorId: gate.user.id, source: "web" as const, changedAt: now };
   try {
     if (!existing) {
@@ -72,6 +72,8 @@ export async function saveTimeEntryAction(
       saved = {
         overlap: created.overlap,
         clientId: created.entry.project.client?.id ?? null,
+        warnings: created.warnings,
+        projectId: created.entry.projectId,
       };
     } else {
       const updated = await updateManualEntry(
@@ -85,6 +87,8 @@ export async function saveTimeEntryAction(
       saved = {
         overlap: updated.overlap,
         clientId: updated.entry.project.client?.id ?? null,
+        warnings: [],
+        projectId: updated.entry.projectId,
       };
     }
   } catch (error) {
@@ -96,10 +100,18 @@ export async function saveTimeEntryAction(
   }
 
   revalidateTimeViews(saved.clientId);
+  const notice = saved.warnings.length
+    ? saved.overlap
+      ? "budget-overlap"
+      : "budget"
+    : saved.overlap
+      ? "overlap"
+      : null;
   redirect(
     timesheetsHref({
       date: result.data.date,
-      notice: saved.overlap ? "overlap" : null,
+      notice,
+      alertProject: saved.warnings.length ? saved.projectId : null,
     }),
   );
 }
@@ -145,7 +157,7 @@ export async function startTimerAction(
     return { error: timerFailureMessage(result.code), warnings: [] };
   }
   revalidateTimeViews(result.timer.project.client?.id ?? null);
-  return { error: null, warnings: [] };
+  return { error: null, warnings: result.warning ? [result.warning] : [] };
 }
 
 export async function stopTimerAction(

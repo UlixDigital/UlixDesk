@@ -37,7 +37,7 @@ export type ClientFailure =
 export type ProjectsResult = { ok: true; projects: ApiProject[] } | ClientFailure;
 export type TimerResult = { ok: true; timer: ApiTimer | null } | ClientFailure;
 export type StartResult =
-  | { ok: true; timer: ApiTimer }
+  | { ok: true; timer: ApiTimer; warnings: string[] }
   | { ok: false; reason: "already-running"; timer: ApiTimer; message: string }
   | { ok: false; reason: "archived"; message: string }
   | { ok: false; reason: "missing"; message: string }
@@ -228,7 +228,10 @@ export async function startTimer(
   if (!result.body || typeof result.body !== "object" || !isTimer((result.body as { timer?: unknown }).timer)) {
     return { ok: false, reason: "invalid-response", message: "The server returned an unexpected response." };
   }
-  return { ok: true, timer: (result.body as { timer: ApiTimer }).timer };
+  const warnings = Array.isArray((result.body as { warnings?: unknown }).warnings)
+    ? (result.body as { warnings: unknown[] }).warnings.filter((item): item is string => typeof item === "string")
+    : [];
+  return { ok: true, timer: (result.body as { timer: ApiTimer }).timer, warnings };
 }
 
 export async function stopTimer(

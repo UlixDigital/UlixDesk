@@ -27,7 +27,7 @@ export const budgetCopy = {
   alertHint: "Optional. Show a warning in the app at this percent. Email alerts come later.",
   hardStopLabel: "Stop new time at 100%",
   hardStopHint:
-    "Block new timers and manual entries on this project once the budget is used up. A timer that is already running can still be stopped.",
+    "Block new timers and manual entries on this project once the budget is used up. Moving time onto this project, or increasing counted time, is blocked too. A timer that is already running can still be stopped.",
   save: "Save budget",
   saving: "Saving…",
   remove: "Remove budget",
@@ -40,7 +40,7 @@ export const budgetCopy = {
   billableNote: "Counts billable time only.",
   allTimeNote: "Counts billable and non-billable time.",
   unratedNote: "Some billable time has no bill rate in this currency, so the cost shows —.",
-  warning: (percent: string) => `This budget has reached ${percent} of its alert.`,
+  warning: (used: string, alert: number) => `This budget has used ${used} (alert at ${alert}%).`,
   reached: "This budget is used up.",
   notStarted: "This budget has not started yet.",
   memberEmpty: "Hours budgets for projects you track time on show here.",
@@ -83,6 +83,8 @@ export const budgetCopy = {
   basisInvalid: "Choose hours or cost.",
   amountRequired: "Enter an amount greater than zero.",
   amountHours: "Enter hours with at most two decimal places.",
+  amountTooLarge: "Enter a smaller amount.",
+  clientHardStop: "A client budget can't stop new time. Set a hard stop on a project instead.",
   recurrenceInvalid: "Choose total, weekly, or monthly.",
   startInvalid: "Enter a real start date.",
   startRange: "Start date must be from 2000 to 2100.",
@@ -101,6 +103,7 @@ export const budgetCodes = {
   BUDGET_START: "BUDGET_START",
   BUDGET_ALERT: "BUDGET_ALERT",
   BUDGET_CURRENCY: "BUDGET_CURRENCY",
+  BUDGET_HARD_STOP: "BUDGET_HARD_STOP",
 } as const;
 
 export type BudgetCode = (typeof budgetCodes)[keyof typeof budgetCodes];

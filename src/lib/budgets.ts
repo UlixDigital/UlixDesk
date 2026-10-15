@@ -1,5 +1,5 @@
 import type { Prisma } from "@prisma/client";
-import { budgetCodes, budgetCopy, type BudgetCode } from "@/lib/budget-copy";
+import { budgetCodes, budgetCopy, budgetNoAmount, type BudgetCode } from "@/lib/budget-copy";
 import {
   budgetFigures,
   budgetPeriodLabel,
@@ -18,10 +18,12 @@ import {
   type BudgetRecurrence,
   type BudgetSpec,
   type BudgetUse,
+  type BudgetWindow,
 } from "@/lib/budget-period";
 import { getWorkspaceCurrency, getWorkspaceTimeZone, listAllBillRates } from "@/lib/bill-rates";
 import { prisma } from "@/lib/db";
 import { formatMoneyNumber, parseRateInput } from "@/lib/money";
+import { rateCopy } from "@/lib/rate-copy";
 import { pickRate, utcDateKey, type BillRateRecord } from "@/lib/rates";
 import { canManageWorkspace, canSeeMoney } from "@/lib/users-validation";
 
@@ -264,32 +266,170 @@ async function entriesFor(
   });
 }
 
+type CountedEntry = {
+  startedAt: Date;
+  endedAt: Date;
+  billable: boolean;
+  userId: string | null;
+};
+
+export type ProjectBudgetEdit = {
+  /** The entry is moving onto `projectId` from a different project. */
+  projectChanged: boolean;
+  previous: CountedEntry;
+  next: CountedEntry;
+};
+
 /**
- * True when a project hard stop is already at 100%. Locks the budget row so
- * two manual entries cannot both pass. Running timers are not usage.
- * The entry that crosses 100% is still allowed. The next one is not.
+ * Hard stop for one project, using the budget period that contains `at`
+ * (the entry's start), not "today". Locks a hard-stop row so two writes
+ * cannot both pass. Running timers are not usage.
+ *
+ * A new entry is blocked only when the period is already at 100%. The entry
+ * that crosses 100% is allowed. An edit that stays on the same project and
+ * the same period is blocked only when that period is already at 100% and
+ * the edit increases counted usage. Moving the entry onto a project, or into
+ * a period, that is already at 100% is blocked even when the entry itself
+ * would not count.
  */
-export async function projectBudgetReached(
+export async function guardProjectBudget(
   tx: Prisma.TransactionClient,
-  projectId: string,
-  now: Date,
-) {
-  const locked = await tx.$queryRaw<Array<{ id: string }>>`
+  input: {
+    projectId: string;
+    at: Date;
+    excludeEntryId?: string;
+    edit?: ProjectBudgetEdit;
+  },
+): Promise<{ blocked: boolean; warning: string | null }> {
+  await tx.$queryRaw<Array<{ id: string }>>`
     SELECT "id" FROM "Budget"
-    WHERE "projectId" = ${projectId} AND "hardStop" = true
+    WHERE "projectId" = ${input.projectId} AND "hardStop" = true
     FOR UPDATE
   `;
-  if (locked.length === 0) return false;
-  const row = await tx.budget.findUnique({ where: { projectId } });
+  const loaded = await loadProjectBudget(tx, input.projectId, input.at, input.excludeEntryId);
+  if (!loaded) return { blocked: false, warning: null };
+
+  const { spec, window, usageWithout, warning, project, rates, timeZone } = loaded;
+  if (!input.edit) {
+    return { blocked: periodReached(spec, usageWithout, window), warning };
+  }
+
+  const previousWindow = budgetWindow({
+    recurrence: spec.recurrence,
+    startsOn: spec.startsOn,
+    timeZone,
+    now: input.edit.previous.startedAt,
+  });
+  if (input.edit.projectChanged || !sameWindow(previousWindow, window)) {
+    return { blocked: periodReached(spec, usageWithout, window), warning };
+  }
+
+  const oldCounted = countedAmount(spec, [entrySlice(input.edit.previous, project, rates, timeZone)], window);
+  const nextCounted = countedAmount(spec, [entrySlice(input.edit.next, project, rates, timeZone)], window);
+  const blocked =
+    periodReached(spec, usageWithout + oldCounted, window) && nextCounted > oldCounted;
+  return { blocked, warning };
+}
+
+/** Alert copy for the period that contains `at`, including completed entries. */
+export async function projectBudgetAlertMessage(
+  projectId: string,
+  at: Date,
+  db: Prisma.TransactionClient | typeof prisma = prisma,
+) {
+  const loaded = await loadProjectBudget(db, projectId, at);
+  return loaded?.warning ?? null;
+}
+
+async function loadProjectBudget(
+  db: Prisma.TransactionClient | typeof prisma,
+  projectId: string,
+  at: Date,
+  excludeEntryId?: string,
+) {
+  const row = await db.budget.findUnique({ where: { projectId } });
   const record = row ? toRecord(row) : null;
-  if (!record || !record.hardStop) return false;
-  const [timeZone, rates, entries] = await Promise.all([
-    getWorkspaceTimeZone(),
-    tx.billRate.findMany(),
-    entriesFor(tx, { projectId }),
+  if (!record) return null;
+  const timeZone = await getWorkspaceTimeZone();
+  const [rates, entries, project] = await Promise.all([
+    db.billRate.findMany(),
+    entriesFor(db, {
+      projectId,
+      ...(excludeEntryId ? { id: { not: excludeEntryId } } : {}),
+    }),
+    db.project.findUnique({
+      where: { id: projectId },
+      select: { id: true, billable: true, clientId: true },
+    }),
   ]);
-  const slices = slicesFor(entries, rateRecords(rates), timeZone).get(projectId) ?? [];
-  return evaluateBudget(record, slices, timeZone, now).figures.blocks;
+  if (!project) return null;
+  const rateList = rateRecords(rates);
+  const slices = slicesFor(entries, rateList, timeZone).get(projectId) ?? [];
+  const spec = specOf(record);
+  const window = budgetWindow({
+    recurrence: spec.recurrence,
+    startsOn: spec.startsOn,
+    timeZone,
+    now: at,
+  });
+  const use = measureBudgetUse(spec, slices, window);
+  return {
+    spec,
+    window,
+    project,
+    rates: rateList,
+    timeZone,
+    usageWithout: countedAmount(spec, slices, window),
+    warning: alertText(budgetFigures(spec, use), record.alertPercent),
+  };
+}
+
+function alertText(figures: BudgetFigures, alertPercent: number | null) {
+  if (alertPercent === null || figures.notStarted) return null;
+  if (figures.percentLabel === budgetNoAmount || figures.percentTenths === null) return null;
+  if (figures.percentTenths < alertPercent * 10) return null;
+  return budgetCopy.warning(figures.percentLabel, alertPercent);
+}
+
+function periodReached(spec: BudgetSpec, used: number, window: BudgetWindow) {
+  if (!spec.hardStop || window.notStarted) return false;
+  const limit = spec.basis === "hours" ? spec.amount * 1000 : spec.amount;
+  return limit > 0 && used >= limit;
+}
+
+function countedAmount(spec: BudgetSpec, entries: BudgetEntrySlice[], window: BudgetWindow) {
+  const use = measureBudgetUse(spec, entries, window);
+  if (use.notStarted) return 0;
+  return spec.basis === "hours" ? use.includedMs : use.costMinor;
+}
+
+function sameWindow(left: BudgetWindow, right: BudgetWindow) {
+  return left.startMs === right.startMs && left.endMs === right.endMs && left.notStarted === right.notStarted;
+}
+
+function entrySlice(
+  entry: CountedEntry,
+  project: { id: string; billable: boolean; clientId: string | null },
+  rates: BillRateRecord[],
+  timeZone: string,
+): BudgetEntrySlice {
+  const rate = pickRate(
+    rates,
+    {
+      projectId: project.id,
+      clientId: project.clientId,
+      userId: entry.userId,
+      startedAt: entry.startedAt,
+    },
+    timeZone,
+  );
+  return {
+    startedAtMs: entry.startedAt.getTime(),
+    endedAtMs: entry.endedAt.getTime(),
+    billable: entry.billable && project.billable,
+    rateMinor: rate?.amountMinor ?? null,
+    rateCurrency: rate?.currency ?? null,
+  };
 }
 
 export async function getProjectBudget(projectId: string) {
@@ -333,6 +473,9 @@ export async function saveBudget(input: {
   if (!canManageWorkspace(input.actorRole)) {
     return fail(budgetCodes.BUDGET_FORBIDDEN, budgetCopy.forbidden);
   }
+  if (input.scope === "client" && input.form.hardStop) {
+    return fail(budgetCodes.BUDGET_HARD_STOP, budgetCopy.clientHardStop);
+  }
   if (!isBudgetBasis(input.form.basis)) return fail(budgetCodes.BUDGET_BASIS, budgetCopy.basisInvalid);
   if (!isBudgetRecurrence(input.form.recurrence)) {
     return fail(budgetCodes.BUDGET_RECURRENCE, budgetCopy.recurrenceInvalid);
@@ -348,15 +491,30 @@ export async function saveBudget(input: {
   let currency: string | null = null;
   if (input.form.basis === "hours") {
     const hours = parseHoursAmount(input.form.amount);
-    if (!hours.ok) return fail(budgetCodes.BUDGET_AMOUNT, budgetCopy.amountHours);
+    if (!hours.ok) {
+      const message =
+        hours.reason === "precise"
+          ? budgetCopy.amountHours
+          : hours.reason === "large"
+            ? budgetCopy.amountTooLarge
+            : budgetCopy.amountRequired;
+      return fail(budgetCodes.BUDGET_AMOUNT, message);
+    }
     amount = hours.seconds;
   } else {
     currency = await costCurrencyFor(input);
     if (!currency) return fail(budgetCodes.BUDGET_CURRENCY, budgetCopy.currencyMissing);
     const parsed = parseRateInput(input.form.amount, currency);
-    if (!parsed.ok || parsed.amountMinor <= 0) {
-      return fail(budgetCodes.BUDGET_AMOUNT, budgetCopy.amountRequired);
+    if (!parsed.ok) {
+      if (parsed.code === "RATE_TOO_PRECISE") {
+        return fail(budgetCodes.BUDGET_AMOUNT, parsed.error);
+      }
+      return fail(
+        budgetCodes.BUDGET_AMOUNT,
+        parsed.error === rateCopy.amountTooLarge ? budgetCopy.amountTooLarge : budgetCopy.amountRequired,
+      );
     }
+    if (parsed.amountMinor <= 0) return fail(budgetCodes.BUDGET_AMOUNT, budgetCopy.amountRequired);
     amount = parsed.amountMinor;
   }
 

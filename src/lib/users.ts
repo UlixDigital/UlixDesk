@@ -200,25 +200,52 @@ export async function changeOwnPassword(input: {
   clearPasswordFailures(input.userId);
   const now = new Date(nowMs);
   const passwordHash = await hashPassword(input.nextPassword);
-  await prisma.$transaction([
-    prisma.user.update({
+  await prisma.$transaction(async (tx) => {
+    await tx.user.update({
       where: { id: user.id },
       data: { passwordHash },
-    }),
-    prisma.session.deleteMany({
-      where: input.keepSessionTokenHash
-        ? { userId: user.id, tokenHash: { not: input.keepSessionTokenHash } }
-        : { userId: user.id },
-    }),
-    prisma.extensionSession.updateMany({
+    });
+    const keep = input.keepSessionTokenHash;
+    const current = keep
+      ? await tx.session.findUnique({ where: { tokenHash: keep } })
+      : null;
+    const kept =
+      current && current.userId === user.id
+        ? current
+        : keep
+          ? await tx.session.findFirst({
+              where: {
+                userId: user.id,
+                previousTokenHash: keep,
+                previousTokenExpiresAt: { gt: now },
+              },
+            })
+          : null;
+    await tx.session.deleteMany({
+      where: kept ? { userId: user.id, id: { not: kept.id } } : { userId: user.id },
+    });
+    if (kept && keep) {
+      // Promoting the grace hash to the current hash in one update drops the
+      // old grace token. The presented cookie still matches, so this browser
+      // stays signed in. Every other session, including its grace token, is gone.
+      await tx.session.update({
+        where: { id: kept.id },
+        data: {
+          tokenHash: keep,
+          previousTokenHash: null,
+          previousTokenExpiresAt: null,
+        },
+      });
+    }
+    await tx.extensionSession.updateMany({
       where: { userId: user.id, revokedAt: null },
       data: { revokedAt: now },
-    }),
-    prisma.accessToken.updateMany({
+    });
+    await tx.accessToken.updateMany({
       where: { userId: user.id, revokedAt: null },
       data: { revokedAt: now },
-    }),
-  ]);
+    });
+  });
   return { ok: true as const };
 }
 

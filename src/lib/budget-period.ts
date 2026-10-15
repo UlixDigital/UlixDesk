@@ -307,19 +307,22 @@ export function budgetStatus(figures: BudgetFigures) {
   return budgetCopy.statusOnTrack;
 }
 
+export type HoursAmountFailure = "format" | "precise" | "large";
+
 /** Decimal hours, up to two places, stored as whole seconds. */
 export function parseHoursAmount(
   raw: string,
-): { ok: true; seconds: number } | { ok: false } {
+): { ok: true; seconds: number } | { ok: false; reason: HoursAmountFailure } {
   const trimmed = raw.trim();
-  if (!/^\d+(\.\d+)?$/.test(trimmed)) return { ok: false };
+  if (!/^\d+(\.\d+)?$/.test(trimmed)) return { ok: false, reason: "format" };
   const [whole, frac = ""] = trimmed.split(".");
-  if (frac.length > 2) return { ok: false };
+  if (frac.length > 2) return { ok: false, reason: "precise" };
   const hours = Number(whole);
   const hundredths = Number(frac.padEnd(2, "0"));
-  if (!Number.isSafeInteger(hours) || hours > HOURS_AMOUNT_MAX) return { ok: false };
+  if (!Number.isSafeInteger(hours) || hours > HOURS_AMOUNT_MAX) return { ok: false, reason: "large" };
   const seconds = hours * 3600 + hundredths * 36;
-  if (seconds <= 0 || seconds > HOURS_AMOUNT_MAX * 3600) return { ok: false };
+  if (seconds > HOURS_AMOUNT_MAX * 3600) return { ok: false, reason: "large" };
+  if (seconds <= 0) return { ok: false, reason: "format" };
   return { ok: true, seconds };
 }
 

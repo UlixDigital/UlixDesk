@@ -639,7 +639,7 @@ async function onStart() {
     note = "";
     projectNotice = null;
     startedHere = true;
-    alertMessage = null;
+    alertMessage = result.warnings[0] ?? null;
     failure = null;
   } else if (result.reason === "already-running") {
     timer = result.timer;

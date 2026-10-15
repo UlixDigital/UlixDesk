@@ -44,9 +44,13 @@ export function BudgetProgressView({ progress }: { progress: BudgetProgress }) {
       {figures.notStarted ? (
         <p className="mt-2 text-sm text-slate-700">{budgetCopy.notStarted}</p>
       ) : null}
-      {figures.warning ? (
+      {figures.reached ? (
         <p role="alert" className="mt-2 text-sm font-medium text-amber-950">
-          {figures.reached ? budgetCopy.reached : budgetCopy.warning(figures.percentLabel)}
+          {budgetCopy.reached}
+        </p>
+      ) : figures.warning && progress.record.alertPercent !== null ? (
+        <p role="alert" className="mt-2 text-sm font-medium text-amber-950">
+          {budgetCopy.warning(figures.percentLabel, progress.record.alertPercent)}
         </p>
       ) : null}
     </div>

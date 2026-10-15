@@ -5,6 +5,7 @@ import { OPTIONS as startOptions, POST as startRoute } from "@/app/api/timer/sta
 import { OPTIONS as stopOptions, POST as stopRoute } from "@/app/api/timer/stop/route";
 import { createAccessToken, hashAccessToken, revokeAccessToken } from "@/lib/access-tokens";
 import { apiCodes } from "@/lib/api-errors";
+import { budgetCopy } from "@/lib/budget-copy";
 import { createProject } from "@/lib/projects";
 import { prisma } from "@/lib/db";
 import { resetTestDatabase } from "@/lib/reset-test-db";
@@ -111,6 +112,7 @@ describe("extension API", () => {
       source: "timer",
       billable: true,
     });
+    expect(startedBody.warnings).toEqual([]);
 
     const current = await getTimer(get("http://localhost/api/timer"));
     const currentBody = await current.json();
@@ -550,6 +552,43 @@ describe("extension API", () => {
       error: timeCopy.budgetReached,
       code: apiCodes.BUDGET_REACHED,
     });
+  });
+
+  it("returns an alert warning when a timer starts on a project past its alert", async () => {
+    const project = await createProject({
+      name: "Alerted",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    await prisma.budget.create({
+      data: {
+        scope: "project",
+        projectId: project.id,
+        basis: "hours",
+        amount: 3600,
+        recurrence: "total",
+        billableOnly: true,
+        alertPercent: 80,
+        hardStop: false,
+        createdById: userId,
+      },
+    });
+    await prisma.timeEntry.create({
+      data: {
+        projectId: project.id,
+        userId,
+        startedAt: new Date("2026-10-15T01:00:00.000Z"),
+        endedAt: new Date("2026-10-15T01:50:00.000Z"),
+        billable: true,
+        source: "manual",
+      },
+    });
+    const started = await startRoute(post("http://localhost/api/timer/start", { projectId: project.id }));
+    expect(started.status).toBe(201);
+    const body = await started.json();
+    expect(body.warnings).toEqual([budgetCopy.warning("83.3%", 80)]);
+    expect(body.timer.projectId).toBe(project.id);
   });
 });
 
