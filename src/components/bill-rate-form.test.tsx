@@ -9,13 +9,6 @@ import { ui } from "@/lib/ui";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-const idle: RateFormState = {
-  error: null,
-  code: null,
-  notice: null,
-  values: { amount: "", effectiveFrom: "2026-10-15", userId: "" },
-};
-
 describe("bill rate field errors", () => {
   it("marks the rate input invalid and points at the error", async () => {
     const container = document.createElement("div");
