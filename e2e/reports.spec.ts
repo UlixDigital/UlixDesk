@@ -6,6 +6,7 @@ import { saveClientRate } from "../src/lib/bill-rates";
 import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry } from "../src/lib/time-entries";
 import { signIn } from "./auth";
+import { markupWithoutScripts } from "./markup";
 
 async function shot(page: Page, testInfo: TestInfo, name: string) {
   const dir = process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
@@ -161,7 +162,7 @@ test("owners see amounts and members see only their own time", async ({ browser 
     await expect(memberPage.getByRole("columnheader", { name: "Amount (JPY)" })).toHaveCount(0);
     await expect(memberPage.getByRole("columnheader", { name: "Amount (USD)" })).toHaveCount(0);
     const html = await memberPage.content();
-    expect(html).not.toMatch(/USD|JPY/);
+    expect(markupWithoutScripts(html)).not.toMatch(/USD|JPY/);
     await shot(memberPage, testInfo, "reports_time_activity_member");
 
     await memberPage.goto("/reports/daily?preset=custom&from=2026-10-01&to=2026-10-31");

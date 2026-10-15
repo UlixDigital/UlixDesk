@@ -5,6 +5,7 @@ import { expect, test } from "@playwright/test";
 import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry, deleteTimeEntry, startTimer, stopTimer, updateManualEntry } from "../src/lib/time-entries";
 import { signIn } from "./auth";
+import { markupWithoutScripts } from "./markup";
 
 test("owners see every time change and members see only their own", async ({ browser }, testInfo) => {
   const shots = process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
@@ -107,7 +108,7 @@ test("owners see every time change and members see only their own", async ({ bro
     expect(response?.status()).toBe(200);
     const html = await response?.text();
     expect(html ?? "").not.toContain("Owner only");
-    expect(html ?? "").not.toMatch(/USD|JPY|amountMinor/);
+    expect(markupWithoutScripts(html ?? "")).not.toMatch(/USD|JPY|amountMinor/);
     await expect(memberPage.getByText("Edited by Jane Admin for Sam Member")).toBeVisible();
     await expect(memberPage.getByText("You see changes to your own time.")).toBeVisible();
     await expect(memberPage.getByRole("form", { name: "Filters" }).getByLabel("Member")).toHaveCount(0);

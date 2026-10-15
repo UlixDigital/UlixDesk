@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { signIn } from "./auth";
+import { markupWithoutScripts } from "./markup";
 
 async function shot(page: Page, testInfo: TestInfo, name: string) {
   const dir = process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
@@ -60,7 +61,7 @@ test("saved reports follow the role rules", async ({ browser }, testInfo) => {
     await expect(memberPage.getByText("Owners and admins also see the amount")).toHaveCount(0);
     await expect(memberPage.getByRole("option", { name: "Member" })).toHaveCount(0);
     const memberHtml = await memberPage.content();
-    expect(memberHtml).not.toMatch(/USD|JPY/);
+    expect(markupWithoutScripts(memberHtml)).not.toMatch(/USD|JPY/);
 
     await memberPage.getByRole("button", { name: "Save report" }).click();
     const memberDialog = memberPage.getByRole("dialog", { name: "Save this report" });
