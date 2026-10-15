@@ -32,6 +32,10 @@ function sumPayments(rows: Array<{ amountMinor: number }>) {
   return rows.reduce((sum, row) => sum + row.amountMinor, 0);
 }
 
+function changedPaymentId(change: Change) {
+  return change.kind === "record" ? null : change.paymentId;
+}
+
 function paidOnKey(value: Date) {
   return value.toISOString().slice(0, 10);
 }
@@ -98,10 +102,8 @@ async function applyPaymentChange(input: { actor: Actor; invoiceId: string; chan
       return fail(invoiceCopy.paymentAdjustStatus);
     }
 
-    const target =
-      input.change.kind === "record"
-        ? null
-        : (payments.find((payment) => payment.id === input.change.paymentId) ?? null);
+    const paymentId = changedPaymentId(input.change);
+    const target = paymentId ? (payments.find((payment) => payment.id === paymentId) ?? null) : null;
     if (input.change.kind !== "record" && !target) return fail(invoiceCopy.paymentMissing);
 
     const others =

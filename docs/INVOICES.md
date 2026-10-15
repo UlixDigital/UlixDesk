@@ -33,7 +33,7 @@ Reopen stays available only for an open or void invoice with no payment recorded
 
 Void sets `InvoiceTime.active` to false. The edit lock ignores void, so the time can be changed or deleted, and a project can be moved to another client. The overlap constraint `InvoiceTime_no_overlap` only covers active windows, so the time can be billed on another invoice. Reopen of a void invoice sets `active` back to true inside the same transaction. That is the check against `InvoiceTime_no_overlap`. Reopen is refused, and the void invoice stays void, when a billed entry was deleted, the entry now belongs to another client, another invoice took the window, or the entry was edited so the slice no longer fits.
 
-Every transition writes `InvoiceStatusEvent`: actor, from, to, timestamp, and reason. Issue uses "Marked as issued", or "Issued when the invoice was sent" when sending a draft. Void and reopen ask for a reason.
+Every transition writes `InvoiceStatusEvent`: actor, from, to, timestamp, and reason. A payment that leaves the status unchanged still writes a row, so a partial payment is `open` to `open`. Issue uses "Marked as issued", or "Issued when the invoice was sent" when sending a draft. Void and reopen ask for a reason.
 
 Deleting a draft is not a status change. The number stays in `InvoiceNumber`.
 
