@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import type { RateFormState } from "@/app/rates/actions";
 import { cn } from "@/lib/cn";
 import { moneyPlaceholder } from "@/lib/money";
-import { effectiveFromHint, rateCopy } from "@/lib/rate-copy";
+import { effectiveFromHint, rateCodes, rateCopy } from "@/lib/rate-copy";
 import { ui } from "@/lib/ui";
 
 type SaveAction = (previous: RateFormState, formData: FormData) => Promise<RateFormState>;
@@ -39,6 +39,11 @@ export function BillRateForm({
   const amountId = projectId ? "project-rate-amount" : members ? "member-rate-amount" : "client-rate-amount";
   const dateId = projectId ? "project-rate-date" : members ? "member-rate-date" : "client-rate-date";
   const memberId = "member-rate-user";
+  const errorId = `${amountId}-error`;
+  const amountInvalid =
+    state.code === rateCodes.RATE_INVALID || state.code === rateCodes.RATE_TOO_PRECISE;
+  const dateInvalid = state.code === rateCodes.RATE_DATE_INVALID;
+  const memberInvalid = state.code === rateCodes.RATE_MEMBER_REQUIRED;
 
   return (
     <form action={formAction} className="mt-4 space-y-4" noValidate>
@@ -46,6 +51,7 @@ export function BillRateForm({
       {projectId ? <input type="hidden" name="projectId" value={projectId} readOnly /> : null}
       {state.error ? (
         <p
+          id={errorId}
           role="alert"
           data-error-code={state.code ?? undefined}
           className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800"
@@ -68,7 +74,9 @@ export function BillRateForm({
             name="userId"
             value={userId}
             onChange={(event) => setUserId(event.target.value)}
-            className={cn(ui.input, "mt-1.5")}
+            aria-invalid={memberInvalid || undefined}
+            aria-describedby={memberInvalid ? errorId : undefined}
+            className={cn(ui.input, "mt-1.5", memberInvalid && ui.inputError)}
           >
             <option value="">{rateCopy.memberPlaceholder}</option>
             {members.map((member) => (
@@ -94,8 +102,11 @@ export function BillRateForm({
             placeholder={moneyPlaceholder(currency)}
             value={amount}
             onChange={(event) => setAmount(event.target.value)}
-            aria-describedby={`${amountId}-currency`}
-            className={cn(ui.input, "mt-1.5")}
+            aria-invalid={amountInvalid || undefined}
+            aria-describedby={
+              amountInvalid ? `${amountId}-currency ${errorId}` : `${amountId}-currency`
+            }
+            className={cn(ui.input, "mt-1.5", amountInvalid && ui.inputError)}
           />
           <p id={`${amountId}-currency`} className="mt-1.5 text-xs text-slate-500">
             {currency}
@@ -112,8 +123,9 @@ export function BillRateForm({
             required
             value={effectiveFrom}
             onChange={(event) => setEffectiveFrom(event.target.value)}
-            aria-describedby={`${dateId}-hint`}
-            className={cn(ui.input, "mt-1.5")}
+            aria-invalid={dateInvalid || undefined}
+            aria-describedby={dateInvalid ? `${dateId}-hint ${errorId}` : `${dateId}-hint`}
+            className={cn(ui.input, "mt-1.5", dateInvalid && ui.inputError)}
           />
           <p id={`${dateId}-hint`} className="mt-1.5 text-xs text-slate-500">
             {effectiveFromHint(timeZone)}

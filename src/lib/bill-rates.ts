@@ -112,6 +112,7 @@ export async function listAllBillRates(): Promise<BillRateRecord[]> {
 
 export type RateHistoryItem = {
   id: string;
+  userId: string | null;
   userName: string | null;
   amountMinor: number;
   currency: string;
@@ -135,6 +136,7 @@ export async function listRateHistory(input: {
   });
   return rows.map((row) => ({
     id: row.id,
+    userId: row.userId,
     userName: row.scope === "member" ? (row.user?.name ?? null) : null,
     amountMinor: row.amountMinor,
     currency: row.currency,
@@ -147,7 +149,9 @@ function parseEffectiveFrom(value: string): { ok: true; date: Date } | RateFailu
   const date = value.trim();
   if (!isRealCalendarDate(date)) return fail(rateCodes.RATE_DATE_INVALID, rateCopy.dateInvalid);
   const year = Number(date.slice(0, 4));
-  if (year < 2000 || year > 2100) return fail(rateCodes.RATE_DATE_INVALID, rateCopy.dateInvalid);
+  if (year < 2000 || year > 2100) {
+    return fail(rateCodes.RATE_DATE_INVALID, rateCopy.dateOutOfRange);
+  }
   return { ok: true, date: new Date(`${date}T00:00:00.000Z`) };
 }
 

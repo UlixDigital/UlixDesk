@@ -202,6 +202,39 @@ describe("bill rate storage", () => {
     expect(await prisma.billRate.count()).toBe(0);
   });
 
+  it("names the allowed years when a real date is outside 2000 through 2100", async () => {
+    const owner = await createTestUser("owner", "dates@ulix.test");
+    const client = await createClient({
+      name: "Acme",
+      address: null,
+      phone: null,
+      emails: [],
+    });
+    expect(
+      await saveClientRate({
+        clientId: client.id,
+        amountRaw: "50",
+        effectiveFrom: "1999-12-31",
+        createdById: owner.id,
+      }),
+    ).toMatchObject({
+      ok: false,
+      code: rateCodes.RATE_DATE_INVALID,
+      error: "Choose a date from 2000 through 2100.",
+    });
+    expect(
+      await saveClientRate({
+        clientId: client.id,
+        amountRaw: "50",
+        effectiveFrom: "not-a-date",
+        createdById: owner.id,
+      }),
+    ).toMatchObject({
+      ok: false,
+      error: "Enter the date this rate starts.",
+    });
+  });
+
   it("rejects an unknown timezone and lets an owner save a daylight-saving zone", async () => {
     expect(await setWorkspaceTimeZone("Not/AZone")).toMatchObject({
       ok: false,
@@ -211,6 +244,19 @@ describe("bill rate storage", () => {
     expect(await setWorkspaceTimeZone("America/New_York")).toEqual({ ok: true });
     expect(await getWorkspaceTimeZone()).toBe("America/New_York");
     expect(await getWorkspaceCurrency()).toBe("USD");
+  });
+
+  it("keeps the previous timezone when a rejected zone is submitted", async () => {
+    await signInAs("owner", "zone-owner@ulix.test");
+    const result = await saveWorkspaceTimeZoneAction(
+      { error: null, code: null, notice: null, timeZone: "Asia/Colombo" },
+      form({ timeZone: "Mars/Olympus" }),
+    );
+    expect(result).toMatchObject({
+      code: rateCodes.TIMEZONE_INVALID,
+      timeZone: "Asia/Colombo",
+    });
+    expect(await getWorkspaceTimeZone()).toBe("Asia/Colombo");
   });
 
   it("refuses a member who tries to change the workspace timezone", async () => {

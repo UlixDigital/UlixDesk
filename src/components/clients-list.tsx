@@ -30,13 +30,17 @@ export function ClientsList({
             className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5"
           >
             <div className="min-w-0">
-              <Link
-                href={`/clients/${client.id}/edit`}
-                className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              >
-                {client.name}
-                <span className="sr-only">, edit client</span>
-              </Link>
+              {canManage ? (
+                <Link
+                  href={`/clients/${client.id}/edit`}
+                  className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  {client.name}
+                  <span className="sr-only">, edit client</span>
+                </Link>
+              ) : (
+                <p className="text-base font-semibold break-words text-ink">{client.name}</p>
+              )}
               <p className="mt-1 line-clamp-2 text-sm text-slate-600">
                 {clientSummary(client)}
               </p>

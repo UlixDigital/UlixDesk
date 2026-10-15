@@ -242,6 +242,7 @@ export default async function TimesheetsPage({
           moneyTotals={daily.moneyTotals}
           unrated={daily.unrated}
           showMoney={canSeeMoney(actor.role)}
+          canManage={manager}
           running={running}
           serverNow={now.getTime()}
         />
@@ -256,6 +257,7 @@ export default async function TimesheetsPage({
           moneyTotals={weekly.moneyTotals}
           unrated={weekly.unrated}
           showMoney={canSeeMoney(actor.role)}
+          canManage={manager}
           projectId={projectId}
           clientId={clientId}
           user={userParam}

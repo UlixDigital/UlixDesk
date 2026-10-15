@@ -109,7 +109,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
                   timeZone={timeZone}
                   projectId={project.id}
                 />
-                <RateHistory rows={projectRates} empty={rateCopy.historyEmpty} />
+                <RateHistory rows={projectRates} empty={rateCopy.historyEmpty} today={today} />
               </>
             ) : (
               <p className="mt-2 text-sm text-slate-600">{rateCopy.projectNeedsClient}</p>

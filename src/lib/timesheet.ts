@@ -74,6 +74,10 @@ export type WeeklyRow = {
   continuesToNext: boolean[];
   totalMs: number;
   dayMoney: MoneyTotal[][];
+  /** A positive slice on that day has no bill amount (no rate, or not billable). */
+  dayNoAmount: boolean[];
+  /** A positive slice on that day is non-billable. */
+  dayNonBillable: boolean[];
   totalMoney: MoneyTotal[];
 };
 
@@ -319,6 +323,12 @@ export function buildWeeklyTimesheet(input: {
     const continuesToNext = dayMs.map(
       (value, index) => value > 0 && entry.endedAt > ranges[index].end,
     );
+    const dayNoAmount = dayMs.map(
+      (value, index) => value > 0 && dayAmounts[index] === null,
+    );
+    const dayNonBillable = dayMs.map(
+      (value) => value > 0 && (!entry.projectBillable || !entry.billable),
+    );
     const existing = grouped.get(entry.projectId);
     if (!existing) {
       grouped.set(entry.projectId, {
@@ -331,6 +341,8 @@ export function buildWeeklyTimesheet(input: {
         continuesToNext,
         totalMs: added,
         dayMoney: dayAmounts.map((amount) => (amount ? [amount] : [])),
+        dayNoAmount,
+        dayNonBillable,
         totalMoney: sumMoney(dayAmounts),
       });
       continue;
@@ -338,6 +350,12 @@ export function buildWeeklyTimesheet(input: {
     existing.dayMs = existing.dayMs.map((value, index) => value + dayMs[index]);
     existing.dayMoney = existing.dayMoney.map((amounts, index) =>
       sumMoney([...amounts, dayAmounts[index]]),
+    );
+    existing.dayNoAmount = existing.dayNoAmount.map(
+      (value, index) => value || dayNoAmount[index],
+    );
+    existing.dayNonBillable = existing.dayNonBillable.map(
+      (value, index) => value || dayNonBillable[index],
     );
     existing.totalMoney = sumMoney([...existing.totalMoney, ...dayAmounts]);
     existing.continuesFromPrevious = existing.continuesFromPrevious.map(

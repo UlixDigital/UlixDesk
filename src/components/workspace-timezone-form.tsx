@@ -42,6 +42,7 @@ export function WorkspaceTimeZoneForm({ timeZone }: { timeZone: string }) {
           <select
             id="workspace-timezone"
             name="timeZone"
+            key={`${state.timeZone}:${state.code ?? ""}`}
             defaultValue={state.timeZone}
             className={cn(ui.input, "mt-1.5")}
           >

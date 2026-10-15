@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSharedNow } from "@/components/shared-now";
 import { StatusBadge } from "@/components/status-badge";
+import { rateCopy } from "@/lib/rate-copy";
 import { timeCopy } from "@/lib/time-copy";
 import { formatElapsed, type RunningDailyEntry } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
@@ -11,10 +12,12 @@ export function RunningEntryRow({
   entry,
   date,
   serverNow,
+  canManage = true,
 }: {
   entry: RunningDailyEntry;
   date: string;
   serverNow: number;
+  canManage?: boolean;
 }) {
   const now = useSharedNow(serverNow);
 
@@ -31,12 +34,16 @@ export function RunningEntryRow({
       </div>
       <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-2">
-          <Link
-            href={`/projects/${entry.projectId}/edit`}
-            className="text-sm font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-          >
-            {entry.projectName}
-          </Link>
+          {canManage ? (
+            <Link
+              href={`/projects/${entry.projectId}/edit`}
+              className="text-sm font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+            >
+              {entry.projectName}
+            </Link>
+          ) : (
+            <span className="text-sm font-semibold break-words text-ink">{entry.projectName}</span>
+          )}
           {entry.projectArchived ? <StatusBadge status="Archived" /> : null}
           <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-accent">
             {timeCopy.runningBadge}
@@ -45,7 +52,7 @@ export function RunningEntryRow({
         <p className="mt-1 text-sm text-slate-600">
           {entry.clientName ?? "No client"}
           {" · "}
-          {entry.billable ? "Billable" : "Non-billable"}
+          {entry.billable ? rateCopy.billablePrefix : rateCopy.nonBillable}
         </p>
         {entry.note ? (
           <p className="mt-1 line-clamp-2 text-sm break-words text-slate-600">{entry.note}</p>

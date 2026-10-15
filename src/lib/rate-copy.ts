@@ -34,6 +34,7 @@ export const rateCopy = {
   historyTitle: "Rate history",
   historyEmpty: "No bill rate yet. Time is tracked, and the amount stays blank until you set one.",
   historyRule: "The latest save for a date is the one that applies.",
+  currentBadge: "Current",
   projectRateTitle: "Bill rate override",
   projectRateBody:
     "Optional. This rate is in the client's currency and wins over the member rate and the client rate.",
@@ -56,6 +57,8 @@ export const rateCopy = {
   amountWhole: "This currency uses whole numbers only.",
   amountTooLarge: "Enter a smaller hourly rate.",
   dateInvalid: "Enter the date this rate starts.",
+  dateOutOfRange: "Choose a date from 2000 through 2100.",
+  nonBillable: "Non-billable",
   clientRequired: "Link a client before setting a bill rate.",
   memberRequired: "Choose a member.",
   clientGone: "This client no longer exists.",

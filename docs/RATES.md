@@ -24,7 +24,7 @@ Three scopes, all in the client's currency at the time they are saved:
 2. Member override, on the client page, for one person and that client.
 3. Client default, on the client page.
 
-Precedence is project, then member, then client. A later effective date wins inside one scope. Saving the same date again adds a row. The latest save for that date is the one that applies. History lists every save.
+Precedence is project, then member, then client. A later effective date wins inside one scope. Saving the same date again adds a row. The latest save for that date is the one that applies. History keeps that latest save for each date and marks the rate in effect today as Current.
 
 `effectiveFrom` is a calendar date. The rate applies to time whose start is on or after 00:00 in the workspace timezone that day. The default zone is `Asia/Colombo`. An entry that starts at 23:59 local the day before keeps the previous rate. 00:00 local and 03:00 local on the effective date use the new rate, even when those instants are still the previous UTC day. Timesheet days use the same timezone, including across a daylight-saving change.
 
@@ -57,6 +57,7 @@ Rate, currency, and timezone actions return a human `error` and one of these `co
 | `RATE_TOO_PRECISE` | This currency uses whole numbers only. |
 | `RATE_TOO_PRECISE` | This currency allows N decimal places. |
 | `RATE_DATE_INVALID` | Enter the date this rate starts. |
+| `RATE_DATE_INVALID` | Choose a date from 2000 through 2100. |
 | `RATE_CLIENT_REQUIRED` | Link a client before setting a bill rate. |
 | `RATE_MEMBER_REQUIRED` | Choose a member. |
 | `RATE_NOT_FOUND` | This client no longer exists. |

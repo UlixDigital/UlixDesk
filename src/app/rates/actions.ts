@@ -188,7 +188,12 @@ export async function saveWorkspaceTimeZoneAction(
   try {
     const saved = await setWorkspaceTimeZone(timeZone);
     if (!saved.ok) {
-      return { error: saved.error, code: saved.code, notice: null, timeZone };
+      return {
+        error: saved.error,
+        code: saved.code,
+        notice: null,
+        timeZone: saved.code === rateCodes.TIMEZONE_INVALID ? previous.timeZone : timeZone,
+      };
     }
   } catch (error) {
     console.error("Failed to save the workspace timezone", error);

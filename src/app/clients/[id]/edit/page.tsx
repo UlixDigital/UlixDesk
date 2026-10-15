@@ -99,7 +99,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
               timeZone={timeZone}
               clientId={client.id}
             />
-            <RateHistory rows={clientRates} empty={rateCopy.historyEmpty} />
+            <RateHistory rows={clientRates} empty={rateCopy.historyEmpty} today={today} />
           </section>
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6">
             <h2 className="text-lg font-semibold text-ink">{rateCopy.memberRateTitle}</h2>
@@ -112,7 +112,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
               clientId={client.id}
               members={members.map((member) => ({ id: member.id, name: member.name }))}
             />
-            <RateHistory rows={memberRates} empty={rateCopy.memberHistoryEmpty} />
+            <RateHistory rows={memberRates} empty={rateCopy.memberHistoryEmpty} today={today} />
           </section>
           <TrackedTime milliseconds={trackedMs} money={money} />
           <ClientProjects clientName={client.name} projects={projects} />

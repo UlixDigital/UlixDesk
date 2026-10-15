@@ -310,6 +310,19 @@ describe("timesheet totals and day boundaries", () => {
     expect(daily.rows.find((row) => row.id === "missing")?.amount).toBeNull();
     expect(daily.rows.find((row) => row.id === "off")?.amount).toBeNull();
     expect(daily.rows.find((row) => row.id === "off")?.billable).toBe(false);
+
+    const week = buildWeeklyTimesheet({ date: "2026-10-09", timeZone: "UTC", entries: rows });
+    const missing = week.rows.find((row) => row.projectId === "project-3");
+    const off = week.rows.find((row) => row.projectId === "project-4");
+    const usd = week.rows.find((row) => row.projectId === "project-1");
+    expect(missing?.dayNoAmount[4]).toBe(true);
+    expect(missing?.dayNonBillable[4]).toBe(false);
+    expect(missing?.dayMoney[4]).toEqual([]);
+    expect(off?.dayNoAmount[4]).toBe(true);
+    expect(off?.dayNonBillable[4]).toBe(true);
+    expect(usd?.dayNoAmount[4]).toBe(false);
+    expect(usd?.dayNonBillable[4]).toBe(false);
+    expect(usd?.dayMoney[4]).toEqual([{ currency: "USD", amountMinor: 5000 }]);
   });
 });
 
