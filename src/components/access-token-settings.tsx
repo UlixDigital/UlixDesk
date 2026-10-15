@@ -4,9 +4,11 @@ import { useActionState, useEffect, useId, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { useRouter } from "next/navigation";
 import { createAccessTokenAction, revokeAccessTokenAction } from "@/app/settings/actions";
+import { ExtensionSignIns } from "@/components/extension-sign-ins";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { KeyIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { extensionSessionCopy } from "@/lib/extension-session-copy";
 import { formatTokenTimestamp, revokeTokenBody, tokenCopy } from "@/lib/token-copy";
 import { emptyCreateTokenState } from "@/lib/token-form-state";
 import { ui } from "@/lib/ui";
@@ -19,11 +21,21 @@ type TokenRow = {
   revokedAt: string | null;
 };
 
+type SessionRow = {
+  id: string;
+  label: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+};
+
 export function AccessTokenSettings({
   tokens,
+  sessions,
   timeZone,
 }: {
   tokens: TokenRow[];
+  sessions: SessionRow[];
   timeZone: string;
 }) {
   const router = useRouter();
@@ -48,6 +60,13 @@ export function AccessTokenSettings({
         {tokenCopy.pageTitle}
       </h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">{tokenCopy.pageIntro}</p>
+
+      <ExtensionSignIns sessions={sessions} timeZone={timeZone} />
+
+      <h2 className="mt-10 text-lg font-semibold text-slate-900">
+        {extensionSessionCopy.advancedTitle}
+      </h2>
+      <p className="mt-2 max-w-2xl text-sm text-slate-600">{extensionSessionCopy.advancedIntro}</p>
 
       {state.token ? (
         <TokenReveal token={state.token} name={state.tokenName ?? ""} />

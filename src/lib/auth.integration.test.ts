@@ -15,7 +15,7 @@ import { GET as listProjects } from "@/app/api/projects/route";
 import { loginAction } from "@/app/login/actions";
 import { createAccessTokenAction } from "@/app/settings/actions";
 import { saveClientAction } from "@/app/clients/actions";
-import { sessionGate } from "@/lib/access-decision";
+import { isTokenApiPath, sessionGate } from "@/lib/access-decision";
 import { createAccessToken, findUsableAccessToken, revokeAccessToken } from "@/lib/access-tokens";
 import { authCopy } from "@/lib/auth-copy";
 import { authenticateLogin, loginUser, logoutUser } from "@/lib/auth";
@@ -159,6 +159,16 @@ describe("protected routes and roles", () => {
     expect(sessionGate({ pathname: "/api/timer/start", hasValidSession: false, isTokenApi: true })).toEqual({
       type: "allow",
     });
+    expect(isTokenApiPath("/api/extension/session")).toBe(true);
+    expect(isTokenApiPath("/api/extension/session/refresh")).toBe(true);
+    expect(isTokenApiPath("/api/extension/session/revoke")).toBe(true);
+    expect(
+      sessionGate({
+        pathname: "/api/extension/session",
+        hasValidSession: false,
+        isTokenApi: isTokenApiPath("/api/extension/session"),
+      }),
+    ).toEqual({ type: "allow" });
     expect(sessionGate({ pathname: "/clients", hasValidSession: true, isTokenApi: false })).toEqual({
       type: "allow",
     });

@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { settingsFromStored } from "./storage";
+import { LOCAL_SETTING_KEYS, settingsFromStored } from "./storage";
 
 const extensionRoot = path.resolve("extension");
 
@@ -39,9 +39,21 @@ describe("extension manifest and storage", () => {
     ).toEqual({
       serverUrl: "http://127.0.0.1:3000",
       token: "ulixdesk_secret",
+      refreshToken: "",
+      accessExpiresAt: "",
+      userName: "",
+      userEmail: "",
       lastProjectId: "website",
     });
-    expect(settingsFromStored({})).toEqual({ serverUrl: "", token: "", lastProjectId: "" });
+    expect(settingsFromStored({})).toEqual({
+      serverUrl: "",
+      token: "",
+      refreshToken: "",
+      accessExpiresAt: "",
+      userName: "",
+      userEmail: "",
+      lastProjectId: "",
+    });
 
     const sources = readdirSync(path.join(extensionRoot, "src")).filter(
       (file) => file.endsWith(".ts") && !file.endsWith(".test.ts"),
@@ -57,5 +69,6 @@ describe("extension manifest and storage", () => {
     const storage = readFileSync(path.join(extensionRoot, "src", "storage.ts"), "utf8");
     expect(storage).toContain("chrome.storage.local");
     expect(storage).not.toContain("chrome.storage.sync");
+    expect(LOCAL_SETTING_KEYS).not.toContain("password");
   });
 });

@@ -12,6 +12,7 @@ type Bucket = { failures: number; resetAt: number };
 
 const ipBuckets = new Map<string, Bucket>();
 const pairBuckets = new Map<string, Bucket>();
+const passwordBuckets = new Map<string, Bucket>();
 
 function pairKey(ip: string, email: string) {
   return `${ip}\n${normalizeEmail(email)}`;
@@ -53,7 +54,22 @@ export function clearLoginFailures(ip: string, email: string) {
   pairBuckets.delete(pairKey(ip, email));
 }
 
+/** Wrong current-password attempts on the signed-in change-password form. Keyed by user id. */
+export function passwordChangeLimited(userId: string, now = Date.now()) {
+  return limited(passwordBuckets, userId, now) ?? { limited: false as const };
+}
+
+export function recordPasswordFailure(userId: string, now = Date.now()) {
+  bump(passwordBuckets, userId, now);
+  if (passwordBuckets.size > 5000) passwordBuckets.clear();
+}
+
+export function clearPasswordFailures(userId: string) {
+  passwordBuckets.delete(userId);
+}
+
 export function resetLoginRateLimits() {
   ipBuckets.clear();
   pairBuckets.clear();
+  passwordBuckets.clear();
 }

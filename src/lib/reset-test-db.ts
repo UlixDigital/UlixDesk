@@ -7,6 +7,7 @@ export async function resetTestDatabase() {
   await prisma.runningTimer.deleteMany();
   await prisma.session.deleteMany();
   await prisma.passwordSetup.deleteMany();
+  await prisma.extensionSession.deleteMany();
   await prisma.accessToken.deleteMany();
   await prisma.timeEntry.deleteMany();
   await prisma.project.deleteMany();

@@ -124,11 +124,11 @@ export async function readSession(now = new Date()): Promise<SessionRead> {
     },
   });
   if (!session || session.expiresAt <= now || session.user.deactivatedAt) {
-    if (session) await prisma.session.delete({ where: { id: session.id } }).catch(() => undefined);
+    if (session) await prisma.session.deleteMany({ where: { id: session.id } });
     return { status: "anonymous", hadCookie: true };
   }
   if (now.getTime() - session.lastSeenAt.getTime() > IDLE_MS) {
-    await prisma.session.delete({ where: { id: session.id } });
+    await prisma.session.deleteMany({ where: { id: session.id } });
     return { status: "anonymous", hadCookie: true };
   }
 
@@ -189,6 +189,17 @@ export async function rotateSessionIfDue(now = new Date()): Promise<
     throw error;
   }
   return { ok: true, cookie: rotatedCookie, expiresAt: session.expiresAt };
+}
+
+/** Hash of the current session token, so a password change can keep this browser signed in. */
+export async function currentSessionTokenHash() {
+  const cookie = await readSessionCookie();
+  if (!cookie) return null;
+  const secret = process.env.ULIXDESK_SESSION_SECRET ?? "";
+  if (sessionSecretProblem(secret, process.env.ULIXDESK_APP_HOSTS ?? "")) return null;
+  const token = await verifySessionCookie(cookie, secret);
+  if (!token) return null;
+  return sha256(token);
 }
 
 export async function userFromCookieHeader(cookieHeader: string | null, now = new Date()) {

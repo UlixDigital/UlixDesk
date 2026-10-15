@@ -256,3 +256,157 @@ export async function stopTimer(
 export function testConnection(config: ConnectionConfig, fetchImpl: FetchLike = fetch) {
   return fetchProjects(config, fetchImpl);
 }
+
+export type SessionUser = { name: string; email: string };
+
+export type SessionTokens = {
+  accessToken: string;
+  refreshToken: string;
+  accessExpiresAt: string;
+  refreshExpiresAt: string;
+  user: SessionUser;
+};
+
+export type SessionCallResult =
+  | { ok: true; session: SessionTokens }
+  | { ok: false; reason: "invalid-url" | "unreachable" | "invalid-response"; message: string; code: null }
+  | { ok: false; reason: "rejected"; message: string; code: string | null };
+
+export type RevokeResult =
+  | { ok: true }
+  | { ok: false; reason: "invalid-url" | "unreachable" | "invalid-response"; message: string; code: null }
+  | { ok: false; reason: "rejected"; message: string; code: string | null };
+
+function isSessionUser(value: unknown): value is SessionUser {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return typeof record.name === "string" && typeof record.email === "string";
+}
+
+function isSessionTokens(value: unknown): value is SessionTokens {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.accessToken === "string" &&
+    typeof record.refreshToken === "string" &&
+    typeof record.accessExpiresAt === "string" &&
+    typeof record.refreshExpiresAt === "string" &&
+    isSessionUser(record.user)
+  );
+}
+
+type PostJsonResult =
+  | { ok: true; status: number; body: unknown }
+  | { ok: false; reason: "invalid-url" | "unreachable" | "invalid-response"; message: string; code: null; status: number }
+  | { ok: false; reason: "rejected"; message: string; code: string | null; status: number };
+
+function sessionFailure(result: Extract<PostJsonResult, { ok: false }>): Extract<SessionCallResult, { ok: false }> {
+  if (result.reason === "rejected") {
+    return { ok: false, reason: "rejected", message: result.message, code: result.code };
+  }
+  return { ok: false, reason: result.reason, message: result.message, code: null };
+}
+
+async function postJson(
+  serverUrl: string,
+  path: string,
+  body: unknown,
+  fetchImpl: FetchLike,
+): Promise<PostJsonResult> {
+  const base = normalizeServerUrl(serverUrl);
+  if (!base.ok) {
+    return { ok: false, reason: "invalid-url", message: popupCopy.invalidUrlBody, code: null, status: 0 };
+  }
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base.origin}${path}`, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      cache: "no-store",
+      credentials: "omit",
+    });
+  } catch {
+    return { ok: false, reason: "unreachable", message: popupCopy.unreachableBody, code: null, status: 0 };
+  }
+  const payload = await readBody(response);
+  if (payload === undefined) {
+    return {
+      ok: false,
+      reason: "invalid-response",
+      message: popupCopy.unexpectedBody,
+      code: null,
+      status: response.status,
+    };
+  }
+  if (!response.ok) {
+    return {
+      ok: false,
+      reason: "rejected",
+      message: errorMessage(payload),
+      code: errorCode(payload),
+      status: response.status,
+    };
+  }
+  return { ok: true, status: response.status, body: payload };
+}
+
+export async function requestExtensionSignIn(
+  input: { serverUrl: string; email: string; password: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<SessionCallResult> {
+  const result = await postJson(
+    input.serverUrl,
+    "/api/extension/session",
+    { email: input.email, password: input.password },
+    fetchImpl,
+  );
+  if (!result.ok) return sessionFailure(result);
+  if (!isSessionTokens(result.body)) {
+    return { ok: false, reason: "invalid-response", message: popupCopy.unexpectedBody, code: null };
+  }
+  return { ok: true, session: result.body };
+}
+
+export async function refreshSession(
+  input: { serverUrl: string; refreshToken: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<SessionCallResult> {
+  const result = await postJson(
+    input.serverUrl,
+    "/api/extension/session/refresh",
+    { refreshToken: input.refreshToken },
+    fetchImpl,
+  );
+  if (!result.ok) return sessionFailure(result);
+  if (!isSessionTokens(result.body)) {
+    return { ok: false, reason: "invalid-response", message: popupCopy.unexpectedBody, code: null };
+  }
+  return { ok: true, session: result.body };
+}
+
+export async function revokeSession(
+  input: { serverUrl: string; refreshToken: string },
+  fetchImpl: FetchLike = fetch,
+): Promise<RevokeResult> {
+  const result = await postJson(
+    input.serverUrl,
+    "/api/extension/session/revoke",
+    { refreshToken: input.refreshToken },
+    fetchImpl,
+  );
+  if (!result.ok) return sessionFailure(result);
+  return { ok: true };
+}
+
+export async function fetchSession(
+  config: ConnectionConfig,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ ok: true; user: SessionUser } | ClientFailure> {
+  const result = await requestJson(config, "/api/extension/session", { method: "GET" }, fetchImpl);
+  if (!result.ok) return clientFailure(result);
+  if (!result.body || typeof result.body !== "object" || !isSessionUser((result.body as { user?: unknown }).user)) {
+    return { ok: false, reason: "invalid-response", message: popupCopy.unexpectedBody };
+  }
+  return { ok: true, user: (result.body as { user: SessionUser }).user };
+}

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 import { popupCopy } from "./copy";
-import { fetchProjects, fetchTimer, startTimer, stopTimer, type FetchLike } from "./api";
+import { fetchProjects, fetchTimer, requestExtensionSignIn, startTimer, stopTimer, type FetchLike } from "./api";
 
 const config = { serverUrl: "http://127.0.0.1:3000/", token: "ulixdesk_secret" };
 const timer = {
@@ -125,5 +125,34 @@ describe("extension API client", () => {
 
     const statusOnly: FetchLike = async () => jsonResponse({ error: timeCopy.timerShort }, 409);
     expect(await stopTimer(config, statusOnly)).toMatchObject({ ok: false, reason: "http" });
+  });
+
+  it("posts the password once and does not put it on the URL or in the saved session", async () => {
+    const password = "local-owner-password";
+    let sentUrl = "";
+    let sentBody = "";
+    const fetchImpl: FetchLike = async (url, init) => {
+      sentUrl = url;
+      sentBody = String(init?.body ?? "");
+      return jsonResponse(
+        {
+          accessToken: "ulixdesk_a_access",
+          refreshToken: "ulixdesk_r_refresh",
+          accessExpiresAt: "2026-10-14T05:15:00.000Z",
+          refreshExpiresAt: "2026-11-13T05:00:00.000Z",
+          user: { name: "Local Owner", email: "owner@ulix.local" },
+        },
+        201,
+      );
+    };
+    const result = await requestExtensionSignIn(
+      { serverUrl: "http://127.0.0.1:3000", email: "owner@ulix.local", password },
+      fetchImpl,
+    );
+    expect(sentUrl).toBe("http://127.0.0.1:3000/api/extension/session");
+    expect(sentUrl).not.toContain(password);
+    expect(sentBody).toContain(password);
+    expect(result.ok).toBe(true);
+    expect(JSON.stringify(result)).not.toContain(password);
   });
 });

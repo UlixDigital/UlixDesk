@@ -1,3 +1,20 @@
+export const PRODUCTION_ORIGIN = "https://desk.ulixdigital.com";
+export const STAGING_ORIGIN = "https://staging.desk.ulixdigital.com";
+
+export type ServerPreset = "production" | "staging" | "custom";
+
+export function presetForOrigin(origin: string): ServerPreset {
+  if (origin === PRODUCTION_ORIGIN) return "production";
+  if (origin === STAGING_ORIGIN) return "staging";
+  return "custom";
+}
+
+export function originForPreset(preset: ServerPreset, customUrl: string) {
+  if (preset === "production") return PRODUCTION_ORIGIN;
+  if (preset === "staging") return STAGING_ORIGIN;
+  return customUrl.trim();
+}
+
 export type ServerUrlResult =
   | { ok: true; origin: string }
   | { ok: false; reason: "empty" | "invalid" };

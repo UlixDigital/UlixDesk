@@ -1,8 +1,20 @@
-export const LOCAL_SETTING_KEYS = ["serverUrl", "token", "lastProjectId"] as const;
+export const LOCAL_SETTING_KEYS = [
+  "serverUrl",
+  "token",
+  "refreshToken",
+  "accessExpiresAt",
+  "userName",
+  "userEmail",
+  "lastProjectId",
+] as const;
 
 export type ExtensionSettings = {
   serverUrl: string;
   token: string;
+  refreshToken: string;
+  accessExpiresAt: string;
+  userName: string;
+  userEmail: string;
   lastProjectId: string;
 };
 
@@ -10,6 +22,10 @@ export function settingsFromStored(stored: Record<string, unknown>): ExtensionSe
   return {
     serverUrl: stringValue(stored.serverUrl),
     token: stringValue(stored.token),
+    refreshToken: stringValue(stored.refreshToken),
+    accessExpiresAt: stringValue(stored.accessExpiresAt),
+    userName: stringValue(stored.userName),
+    userEmail: stringValue(stored.userEmail),
     lastProjectId: stringValue(stored.lastProjectId),
   };
 }
@@ -30,4 +46,15 @@ export async function writeSettings(patch: Partial<ExtensionSettings>) {
     if (value !== undefined) next[key] = value;
   }
   await chrome.storage.local.set(next);
+}
+
+/** Removes the sign-in. The server URL and the last project stay. The password is never stored. */
+export async function clearCredential() {
+  await writeSettings({
+    token: "",
+    refreshToken: "",
+    accessExpiresAt: "",
+    userName: "",
+    userEmail: "",
+  });
 }
