@@ -1,12 +1,14 @@
-# Manual time edits
+# Time edits
 
-Slice 9 records every time entry create, edit, delete, and timer start or stop. The report is at `/reports/manual-time-edits`.
+Slice 9 records every time entry create, edit, delete, and timer start or stop. The report is at `/reports/manual-time-edits`. The nav hub is **Reports**. This page's heading is **Time edits**.
 
 ## What is stored
 
 Each change is one row in `TimeChange`. The row stores the actor, the time, the entry id, and the before and after values for start, end, duration, project, client, notes, and billable. Duration is milliseconds. A running timer has no end and no duration.
 
 The row does not store a rate, a currency, or an amount. Members never see money, so the log does not keep it.
+
+The report shows the client as well as the project. A missing client is "—". A client id that no longer exists is "Removed client".
 
 `source` is the channel:
 
@@ -24,7 +26,7 @@ The audit row is inserted in the same database transaction as the time entry cha
 
 ## Append-only
 
-The app has no update or delete for these rows. Postgres rejects both with `time change rows are append-only`.
+The app has no update or delete for these rows. Postgres rejects `UPDATE`, `DELETE`, and `TRUNCATE` with `time change rows are append-only`. `TRUNCATE` does not fire a row delete trigger, so a statement trigger blocks it too. On staging and production the running app uses a database role that does not own the table, so it cannot turn that trigger off. Migrations still run as the owner role. The server steps are in [DEPLOY.md](DEPLOY.md).
 
 `timeEntryId` is not a foreign key. Deleting a time entry does not cascade into the log, and the report still shows the deleted entry. Deletes stay permanent. The entry row is removed. The log row stays.
 
@@ -54,4 +56,4 @@ Timer API error codes are unchanged. A failed start or a stop under one second d
 
 ## Not in this slice
 
-A reason on the edit, grouping, and CSV export wait for a later reports slice. The page is not a full audit log of clients, projects, or rates.
+A reason on the edit waits for a later slice. Hours reports and CSV export are in [REPORTS.md](REPORTS.md). The page is not a full audit log of clients, projects, or rates.

@@ -359,14 +359,17 @@ describe("time change log", () => {
     expect(paged.page).toBe(2);
     expect(paged.items).toHaveLength(1);
     expect(parseChangeAction("timer")).toBe("timer");
+    expect(parseChangeAction(["edited", "deleted"])).toBe("edited");
     expect(parseChangeAction("nope")).toBeNull();
     expect(parsePage("0")).toBe(1);
+    expect(parsePage(["2", "9"])).toBe(2);
 
     const id = (await prisma.timeChange.findFirstOrThrow()).id;
     await expect(
       prisma.timeChange.update({ where: { id }, data: { action: "added" } }),
     ).rejects.toThrow(/append-only/);
     await expect(prisma.timeChange.delete({ where: { id } })).rejects.toThrow(/append-only/);
+    await expect(prisma.$executeRaw`TRUNCATE TABLE "TimeChange"`).rejects.toThrow(/append-only/);
     expect(await prisma.timeChange.count()).toBe(2);
   });
 

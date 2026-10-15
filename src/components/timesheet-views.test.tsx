@@ -125,6 +125,8 @@ describe("weekly timesheet amounts", () => {
     expect(footer[0].textContent).not.toContain("0m");
     expect(footer[4].textContent).toContain("1m");
     expect(footer[5].textContent).toContain("2h");
+    expect(footer[5].textContent).toContain(rateCopy.noAmount);
+    expect(footer[5].textContent).toContain(rateCopy.nonBillable);
     expect(footer[7].textContent).toContain(rateCopy.noAmount);
     expect(footer[7].textContent).toContain(rateCopy.nonBillable);
 

@@ -49,7 +49,7 @@ Staging sets `ULIXDESK_ENVIRONMENT=staging` and shows a banner: “Staging. This
 
 ### Why one Postgres
 
-Two Postgres processes would each keep their own cache on a 2 GB machine. One Postgres container with two databases is lighter. Staging uses the role `ulixdesk_staging` and database `ulixdesk_staging`. Production uses `ulixdesk_production` and `ulixdesk_production`. Staging's password cannot connect to the production database. Each app also caps its pool with `connection_limit=5`.
+Two Postgres processes would each keep their own cache on a 2 GB machine. One Postgres container with two databases is lighter. Staging uses the owner role `ulixdesk_staging` and database `ulixdesk_staging`. Production uses `ulixdesk_production` and `ulixdesk_production`. Each app also has a second role, `ulixdesk_staging_app` or `ulixdesk_production_app`, which does not own the tables. The running app uses that role. Migrations use the owner role. Staging's passwords cannot connect to the production database. Each app caps its pool with `connection_limit=5`.
 
 ### First-time server setup
 
@@ -174,6 +174,125 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-s
 ```
 
 Use `app-production` for the live copy. `restart` alone does not reload the env file.
+
+### App database role
+
+The time edit log rejects `UPDATE`, `DELETE`, and `TRUNCATE`. The trigger blocks `TRUNCATE` even for the table owner. The running app uses a role that is not the owner, so it also cannot disable that trigger or drop the table. Migrations and bootstrap keep using the owner role.
+
+`docker-compose.prod.yml` does not change for this. One Postgres container still holds both databases. The init script in `docker/postgres/init-prod.sh` creates the app roles only when the data volume is created for the first time. A server that already has a volume does not run that script again. Those servers use the steps below.
+
+A brand-new server uses the env examples as they are now. `postgres.env` has `STAGING_APP_DB_PASSWORD` and `PRODUCTION_APP_DB_PASSWORD` (letters and numbers only). `staging.env` and `production.env` set `MIGRATE_DATABASE_URL` to the owner role and `DATABASE_URL` to the app role. The first start creates the roles, migrates as the owner, and serves as the app role. No extra SQL is required on a new volume.
+
+#### Existing staging and production databases
+
+Do this after the release that adds the `TRUNCATE` trigger is deployed to staging, and before you point an older image at the app role. Run the commands from `/opt/ulixdesk`. Replace the two passwords. Use letters and numbers only. Do not reuse the owner passwords. Do not commit the passwords.
+
+1. Confirm staging is running this release. The staging log should include `Applying database migrations` without an error. The trigger is then on the staging database. Production can still be on the previous image.
+
+2. Create the app roles and grant them access. This does not restart the apps. Both apps keep using the owner role until step 4.
+
+```bash
+cd /opt/ulixdesk
+export STAGING_APP_DB_PASSWORD='replaceWithLettersAndNumbers'
+export PRODUCTION_APP_DB_PASSWORD='replaceWithOtherLettersAndNumbers'
+./scripts/grant-app-role.sh
+unset STAGING_APP_DB_PASSWORD PRODUCTION_APP_DB_PASSWORD
+```
+
+The script is copied to the server by the staging deploy. If it is missing, copy `scripts/grant-app-role.sh` from this repository to `/opt/ulixdesk/scripts/grant-app-role.sh` and `chmod +x` it. It runs this SQL, in this order, as the Postgres superuser inside the `postgres` container.
+
+On the `postgres` database:
+
+```sql
+-- Create the role, or reset its password and take away superuser if it already exists.
+CREATE ROLE ulixdesk_staging_app LOGIN PASSWORD 'the staging app password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+CREATE ROLE ulixdesk_production_app LOGIN PASSWORD 'the production app password' NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT;
+GRANT CONNECT ON DATABASE ulixdesk_staging TO ulixdesk_staging_app;
+GRANT CONNECT ON DATABASE ulixdesk_production TO ulixdesk_production_app;
+```
+
+Then, connected to `ulixdesk_staging` (repeat with the production names on `ulixdesk_production`):
+
+```sql
+GRANT USAGE ON SCHEMA public TO ulixdesk_staging_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ulixdesk_staging_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ulixdesk_staging_app;
+REVOKE UPDATE, DELETE, TRUNCATE, TRIGGER, REFERENCES ON TABLE "TimeChange" FROM ulixdesk_staging_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_staging IN SCHEMA public
+  GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO ulixdesk_staging_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_staging IN SCHEMA public
+  GRANT USAGE, SELECT ON SEQUENCES TO ulixdesk_staging_app;
+```
+
+`TimeChange` keeps `SELECT` and `INSERT` only. The app can still add log rows. It cannot change or empty them.
+
+3. Edit the env files. Leave the owner URL on `MIGRATE_DATABASE_URL`. Point `DATABASE_URL` at the app role. Passwords are the ones from step 2.
+
+`env/staging.env`:
+
+```text
+MIGRATE_DATABASE_URL=postgresql://ulixdesk_staging:OWNER_PASSWORD@postgres:5432/ulixdesk_staging?connection_limit=1
+DATABASE_URL=postgresql://ulixdesk_staging_app:APP_PASSWORD@postgres:5432/ulixdesk_staging?connection_limit=5
+```
+
+`env/production.env`:
+
+```text
+MIGRATE_DATABASE_URL=postgresql://ulixdesk_production:OWNER_PASSWORD@postgres:5432/ulixdesk_production?connection_limit=1
+DATABASE_URL=postgresql://ulixdesk_production_app:APP_PASSWORD@postgres:5432/ulixdesk_production?connection_limit=5
+```
+
+Do this for production only when production will run this release. An older image reads `DATABASE_URL` for migrations and cannot migrate as the app role.
+
+4. Recreate staging so it reloads the env file:
+
+```bash
+cd /opt/ulixdesk
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-staging
+docker compose -f docker-compose.prod.yml logs app-staging --since 2m
+```
+
+The log must say `Connecting for migrations as ulixdesk_staging` and `Starting the app as ulixdesk_staging_app`. Then open staging and sign in. After you promote this same image to production, recreate production the same way and look for `ulixdesk_production` and `ulixdesk_production_app` in its log.
+
+#### Roll back the role switch
+
+The `TRUNCATE` trigger stays. It is part of the migration. Rolling the image back does not remove it. The app does not truncate that table.
+
+To run as the owner role again:
+
+1. In `env/staging.env` and `env/production.env`, set `DATABASE_URL` back to the owner URL (`ulixdesk_staging` or `ulixdesk_production`). Remove `MIGRATE_DATABASE_URL`, or set it to that same owner URL.
+2. Recreate the app containers before you start an older image. An older image migrates with `DATABASE_URL`. If that URL is still the app role, the container will not start.
+
+```bash
+cd /opt/ulixdesk
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-staging
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-production
+```
+
+3. Optional, after both apps are on the owner URL. This drops the app roles. Skip it if you plan to switch back.
+
+```bash
+docker compose -f docker-compose.prod.yml exec -T postgres sh -s <<'SQL'
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres -c "REVOKE ALL PRIVILEGES ON DATABASE ulixdesk_staging FROM ulixdesk_staging_app;"
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres -c "REVOKE ALL PRIVILEGES ON DATABASE ulixdesk_production FROM ulixdesk_production_app;"
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname ulixdesk_staging <<'EOS'
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ulixdesk_staging_app;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ulixdesk_staging_app;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM ulixdesk_staging_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_staging IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM ulixdesk_staging_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_staging IN SCHEMA public REVOKE USAGE, SELECT ON SEQUENCES FROM ulixdesk_staging_app;
+EOS
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname ulixdesk_production <<'EOS'
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM ulixdesk_production_app;
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM ulixdesk_production_app;
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM ulixdesk_production_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_production IN SCHEMA public REVOKE SELECT, INSERT, UPDATE, DELETE ON TABLES FROM ulixdesk_production_app;
+ALTER DEFAULT PRIVILEGES FOR ROLE ulixdesk_production IN SCHEMA public REVOKE USAGE, SELECT ON SEQUENCES FROM ulixdesk_production_app;
+EOS
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres -c "DROP ROLE ulixdesk_staging_app;"
+psql -v ON_ERROR_STOP=1 --username "$POSTGRES_USER" --dbname postgres -c "DROP ROLE ulixdesk_production_app;"
+SQL
+```
 
 ### Bringing across the Phase 1 database
 

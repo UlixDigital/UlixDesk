@@ -13,7 +13,7 @@ import {
   type ChangeActionFilter,
   type ChangeSource,
 } from "@/lib/time-change-copy";
-import { isRealCalendarDate } from "@/lib/time-zone";
+import { parseBoundedDate, parseEnumParam, parsePageParam } from "@/lib/search-params";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 export { timeChangeSnapshot };
@@ -75,23 +75,18 @@ export function scopedEntryUserId(
   return requestedMemberId;
 }
 
-export function parseChangeAction(value: string | undefined): ChangeActionFilter | null {
-  const action = (value ?? "").trim();
-  if (changeActionFilters.includes(action as ChangeActionFilter)) {
-    return action as ChangeActionFilter;
-  }
-  return null;
+export function parseChangeAction(
+  value: string | string[] | undefined,
+): ChangeActionFilter | null {
+  return parseEnumParam(value, changeActionFilters);
 }
 
-export function parseDateParam(value: string | undefined, fallback: string) {
-  const trimmed = (value ?? "").trim();
-  return isRealCalendarDate(trimmed) ? trimmed : fallback;
+export function parseDateParam(value: string | string[] | undefined, fallback: string) {
+  return parseBoundedDate(value, fallback);
 }
 
-export function parsePage(value: string | undefined) {
-  const page = Number((value ?? "").trim());
-  if (!Number.isInteger(page) || page < 1) return 1;
-  return page;
+export function parsePage(value: string | string[] | undefined) {
+  return parsePageParam(value);
 }
 
 export function timeChangeWhere(input: {
@@ -215,6 +210,19 @@ export async function listTimeChanges(input: {
           select: { id: true, name: true },
         });
   const projectNames = new Map(projects.map((project) => [project.id, project.name]));
+  const clientIds = [
+    ...new Set(
+      rows.flatMap((row) => [row.beforeClientId, row.afterClientId].filter((id) => id !== null)),
+    ),
+  ];
+  const clients =
+    clientIds.length === 0
+      ? []
+      : await prisma.client.findMany({
+          where: { id: { in: clientIds } },
+          select: { id: true, name: true },
+        });
+  const clientNames = new Map(clients.map((client) => [client.id, client.name]));
   const items = rows.flatMap((row) => {
     if (!isChangeAction(row.action) || !isChangeSource(row.source)) return [];
     return [
@@ -232,6 +240,7 @@ export async function listTimeChanges(input: {
         before: snapshotFromRow(row, "before"),
         after: snapshotFromRow(row, "after"),
         projectNames,
+        clientNames,
       }),
     ];
   });

@@ -156,10 +156,10 @@ export function WeeklyTimesheet({
 }) {
   const moneyCaption = showMoney ? formatMoneyTotals(moneyTotals).join(", ") : "";
   return (
-    <div className="mt-4">
+    <div className="mt-4 min-w-0 max-w-full">
       {showMoney ? <MoneySummary totals={moneyTotals} unrated={unrated} /> : null}
-    <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
-      <table className="min-w-[52rem] w-full table-fixed border-separate border-spacing-0 text-sm">
+    <div className="mt-4 w-full max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
+      <table className="w-full min-w-[52rem] table-fixed border-separate border-spacing-0 text-sm">
         <caption className="sr-only">
           Weekly timesheet totaling {formatTrackedDuration(totalMs)}
           {moneyCaption ? `. ${moneyCaption}` : ""}
@@ -285,6 +285,11 @@ export function WeeklyTimesheet({
                   <>
                     <div>{formatTrackedDuration(value)}</div>
                     {showMoney ? <MoneyLines totals={columnMoney[index] ?? []} /> : null}
+                    <AmountMarks
+                      showMoney={showMoney}
+                      noAmount={rows.some((row) => row.dayNoAmount[index])}
+                      nonBillable={rows.some((row) => row.dayNonBillable[index])}
+                    />
                   </>
                 ) : (
                   <span className="font-normal text-slate-500">—</span>

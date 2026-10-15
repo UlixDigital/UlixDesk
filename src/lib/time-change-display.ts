@@ -123,6 +123,11 @@ function formatProject(projectId: string | null, names: ReadonlyMap<string, stri
   return names.get(projectId) ?? timeChangeCopy.removedProject;
 }
 
+function formatClient(clientId: string | null, names: ReadonlyMap<string, string>) {
+  if (!clientId) return timeChangeCopy.emptyValue;
+  return names.get(clientId) ?? timeChangeCopy.removedClient;
+}
+
 function formatNote(note: string | null) {
   const trimmed = note?.trim() ?? "";
   return trimmed ? note ?? trimmed : timeChangeCopy.emptyValue;
@@ -156,6 +161,7 @@ export function describeTimeChange(input: {
   before: TimeChangeSnapshot | null;
   after: TimeChangeSnapshot | null;
   projectNames: ReadonlyMap<string, string>;
+  clientNames: ReadonlyMap<string, string>;
 }): TimeChangeView {
   const before = input.before;
   const after = input.after;
@@ -183,6 +189,12 @@ export function describeTimeChange(input: {
       formatProject(before?.projectId ?? null, input.projectNames),
       formatProject(after?.projectId ?? null, input.projectNames),
       (before?.projectId ?? null) !== (after?.projectId ?? null),
+    ),
+    field(
+      timeChangeCopy.fieldClient,
+      formatClient(before?.clientId ?? null, input.clientNames),
+      formatClient(after?.clientId ?? null, input.clientNames),
+      (before?.clientId ?? null) !== (after?.clientId ?? null),
     ),
     field(
       timeChangeCopy.fieldNotes,
