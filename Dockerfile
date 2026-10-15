@@ -9,6 +9,8 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+# braces is overridden to the depth-guarded copy. npm ci needs it on disk.
+COPY vendor/braces ./vendor/braces
 RUN npm ci
 COPY . .
 # pdfkit stays external. Copy its runtime closure so the slim image can
