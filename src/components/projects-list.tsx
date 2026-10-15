@@ -35,17 +35,13 @@ export function ProjectsList({
               className={`grid grid-cols-1 gap-3 px-4 py-4 sm:px-5 ${columns}`}
             >
               <div className="min-w-0">
-                {canManage ? (
-                  <Link
-                    href={`/projects/${project.id}/edit`}
-                    className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                  >
-                    {project.name}
-                    <span className="sr-only">, edit project</span>
-                  </Link>
-                ) : (
-                  <p className="text-base font-semibold break-words text-ink">{project.name}</p>
-                )}
+                <Link
+                  href={`/projects/${project.id}/edit`}
+                  className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                >
+                  {project.name}
+                  <span className="sr-only">{canManage ? ", edit project" : ", view project"}</span>
+                </Link>
                 {project.description ? (
                   <p className="mt-1 line-clamp-2 text-sm break-words text-slate-600">
                     {project.description}
@@ -102,7 +98,12 @@ export function ProjectsList({
                       <ArchiveButton id={project.id} name={project.name} />
                     )}
                   </>
-                ) : null}
+                ) : (
+                  <Link href={`/projects/${project.id}/edit`} className={ui.secondaryButton}>
+                    View
+                    <span className="sr-only"> {project.name}</span>
+                  </Link>
+                )}
               </div>
             </li>
           ))}

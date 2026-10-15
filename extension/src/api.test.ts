@@ -94,6 +94,14 @@ describe("extension API client", () => {
       timer,
       message: timeCopy.timerAlready,
     });
+
+    const budget: FetchLike = async () =>
+      jsonResponse({ error: timeCopy.budgetReached, code: "BUDGET_REACHED" }, 409);
+    expect(await startTimer(config, "website", "", budget)).toEqual({
+      ok: false,
+      reason: "budget",
+      message: timeCopy.budgetReached,
+    });
   });
 
   it("reads a timer and a stopped entry", async () => {

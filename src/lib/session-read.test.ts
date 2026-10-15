@@ -77,6 +77,33 @@ describe("session reads do not write cookies", () => {
     expect(testState.sessionToken).not.toBe(signedIn.cookie);
     expect((await readSession()).status).toBe("user");
   });
+
+  it("accepts the previous token when two refreshes race", async () => {
+    const signedIn = await signInAs("member", "race-session@ulix.test");
+    const before = await prisma.session.findFirstOrThrow({ where: { userId: signedIn.user.id } });
+    await prisma.session.update({
+      where: { id: before.id },
+      data: { rotatedAt: new Date(Date.now() - 20 * 60 * 1000) },
+    });
+
+    const [first, second] = await Promise.all([rotateSessionIfDue(), rotateSessionIfDue()]);
+    expect(first.ok).toBe(true);
+    expect(second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    const issued = [first.cookie, second.cookie].filter((cookie) => cookie !== null);
+    expect(issued).toHaveLength(1);
+
+    testState.sessionToken = signedIn.cookie;
+    expect((await readSession()).status).toBe("user");
+    const response = await refreshSession(
+      new Request("http://127.0.0.1:3000/session/refresh?next=%2Fsettings", {
+        headers: { cookie: `${SESSION_COOKIE}=${signedIn.cookie}` },
+      }),
+    );
+    expect(response.status).toBe(303);
+    expect(response.headers.get("location")).toBe("/settings");
+    expect(response.headers.get("set-cookie") ?? "").not.toContain("Max-Age=0");
+  });
 });
 
 describe("session routes", () => {

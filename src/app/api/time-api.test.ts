@@ -514,6 +514,43 @@ describe("extension API", () => {
     });
     expect(await prisma.runningTimer.findUnique({ where: { id: userId } })).not.toBeNull();
   });
+
+  it("returns 409 when a project hard stop is already at 100%", async () => {
+    const project = await createProject({
+      name: "Capped",
+      description: null,
+      clientId: null,
+      billable: true,
+    });
+    await prisma.budget.create({
+      data: {
+        scope: "project",
+        projectId: project.id,
+        basis: "hours",
+        amount: 3600,
+        recurrence: "total",
+        billableOnly: true,
+        hardStop: true,
+        createdById: userId,
+      },
+    });
+    await prisma.timeEntry.create({
+      data: {
+        projectId: project.id,
+        userId,
+        startedAt: new Date("2026-10-15T01:00:00.000Z"),
+        endedAt: new Date("2026-10-15T02:00:00.000Z"),
+        billable: true,
+        source: "manual",
+      },
+    });
+    const blocked = await startRoute(post("http://localhost/api/timer/start", { projectId: project.id }));
+    expect(blocked.status).toBe(409);
+    expect(await blocked.json()).toEqual({
+      error: timeCopy.budgetReached,
+      code: apiCodes.BUDGET_REACHED,
+    });
+  });
 });
 
 function bearerPost(url: string, body: unknown, token: string, origin?: string) {

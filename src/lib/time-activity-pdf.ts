@@ -82,7 +82,7 @@ export type ActivityModel = {
 export type ActivitySlice =
   | { type: "heading"; client: string; continued: boolean; height: number }
   | { type: "columns"; height: number }
-  | { type: "group"; id: string; height: number }
+  | { type: "group"; id: string; continued: boolean; height: number }
   | { type: "detail"; id: string; height: number }
   | { type: "total"; client: string; height: number };
 
@@ -163,8 +163,11 @@ export function buildTimeActivityModel(input: {
 
 /**
  * Pack client sections onto pages. A group row stays with its first detail row.
- * A table that continues repeats the column header. A row taller than the page
- * is placed anyway so the loop cannot spin.
+ * A table that continues repeats the column header. A date group that splits
+ * repeats the date and member row with "(continued)". The first time that
+ * group is drawn, including when the whole group moves to the next page, is
+ * not marked continued. A row taller than the page is placed anyway so the
+ * loop cannot spin.
  */
 export function paginateActivity(input: {
   sections: SectionMeasure[];
@@ -176,6 +179,7 @@ export function paginateActivity(input: {
   let room = input.firstRoom;
   let columnsOnPage = false;
   let headingOnPage = false;
+  let groupOnPage: string | null = null;
 
   const freshPage = () => {
     pages.push([]);
@@ -183,6 +187,7 @@ export function paginateActivity(input: {
     room = input.nextRoom;
     columnsOnPage = false;
     headingOnPage = false;
+    groupOnPage = null;
   };
 
   const place = (slice: ActivitySlice) => {
@@ -190,6 +195,7 @@ export function paginateActivity(input: {
     used += slice.height;
     if (slice.type === "columns") columnsOnPage = true;
     if (slice.type === "heading") headingOnPage = true;
+    if (slice.type === "group") groupOnPage = slice.id;
   };
 
   const reserve = (height: () => number) => {
@@ -225,14 +231,19 @@ export function paginateActivity(input: {
       const bundle = group.height + (group.details[0]?.height ?? 0);
       reserve(() => preface(section) + bundle);
       continueSection(section);
-      place({ type: "group", id: group.id, height: group.height });
+      place({ type: "group", id: group.id, continued: false, height: group.height });
       group.details.forEach((detail, index) => {
         if (index === 0) {
           place({ type: "detail", id: detail.id, height: detail.height });
           return;
         }
-        reserve(() => preface(section) + detail.height);
+        reserve(
+          () => preface(section) + (groupOnPage === group.id ? 0 : group.height) + detail.height,
+        );
         continueSection(section);
+        if (groupOnPage !== group.id) {
+          place({ type: "group", id: group.id, continued: true, height: group.height });
+        }
         place({ type: "detail", id: detail.id, height: detail.height });
       });
     }
@@ -505,7 +516,7 @@ function drawGrandTotal(doc: Doc, model: ActivityModel) {
   const values = model.showMoney
     ? [model.grand.time, model.grand.billed, model.grand.billable]
     : [model.grand.time, model.grand.billable];
-  const tableWidth = Math.min(contentWidth(doc), labels.length * 140);
+  const tableWidth = contentWidth(doc);
   const col = tableWidth / labels.length;
   const y = doc.y;
   const rowH = 18;
@@ -569,14 +580,22 @@ function measureSection(doc: Doc, client: ActivityClient, widths: number[], show
     ),
     columns: 18,
     total: measureCells(doc, totalCells(client, showMoney), widths, true),
-    groups: client.groups.map((group) => ({
-      id: group.id,
-      height: measureCells(doc, groupCells(group, showMoney), widths, true),
-      details: group.details.map((detail) => ({
-        id: detail.id,
-        height: measureCells(doc, detailCells(detail, showMoney), widths, false, detail.missingTodo),
-      })),
-    })),
+    groups: client.groups.map((group) => {
+      const cells = groupCells(group, showMoney);
+      const continued = [...cells];
+      continued[0] = `${group.dateLabel} (continued)`;
+      return {
+        id: group.id,
+        height: Math.max(
+          measureCells(doc, cells, widths, true),
+          measureCells(doc, continued, widths, true),
+        ),
+        details: group.details.map((detail) => ({
+          id: detail.id,
+          height: measureCells(doc, detailCells(detail, showMoney), widths, false, detail.missingTodo),
+        })),
+      };
+    }),
   };
 }
 
@@ -639,24 +658,25 @@ function drawSlice(doc: Doc, model: ActivityModel, slice: ActivitySlice, widths:
   if (slice.type === "group") {
     const group = client.groups.find((item) => item.id === slice.id);
     if (group) {
-      const shade = client.groups.indexOf(group) % 2 === 0;
-      drawDataRow(doc, groupCells(group, model.showMoney), widths, y, slice.height, true, shade, false);
+      const cells = groupCells(group, model.showMoney);
+      if (slice.continued) cells[0] = `${group.dateLabel} (continued)`;
+      drawDataRow(doc, cells, widths, y, slice.height, true, true, false);
     }
     doc.y = y + slice.height;
     return;
   }
   if (slice.type === "detail") {
-    const found = findDetail(client, slice.id);
-    if (found) {
+    const detail = findDetail(client, slice.id);
+    if (detail) {
       drawDataRow(
         doc,
-        detailCells(found.detail, model.showMoney),
+        detailCells(detail, model.showMoney),
         widths,
         y,
         slice.height,
         false,
-        found.groupIndex % 2 === 0,
-        found.detail.missingTodo,
+        true,
+        detail.missingTodo,
       );
     }
     doc.y = y + slice.height;
@@ -675,9 +695,9 @@ function sliceClient(slice: ActivitySlice, model: ActivityModel) {
 }
 
 function findDetail(client: ActivityClient, id: string) {
-  for (let index = 0; index < client.groups.length; index += 1) {
-    const detail = client.groups[index].details.find((item) => item.id === id);
-    if (detail) return { detail, groupIndex: index };
+  for (const group of client.groups) {
+    const detail = group.details.find((item) => item.id === id);
+    if (detail) return detail;
   }
   return null;
 }

@@ -660,6 +660,9 @@ async function onStart() {
     await writeSettings({ lastProjectId: "" });
     const refreshed = await fetchProjects({ serverUrl, token });
     if (refreshed.ok) projects = refreshed.projects;
+  } else if (result.reason === "budget") {
+    alertMessage = result.message;
+    failure = null;
   } else if (result.reason === "unauthorized" || result.reason === "unreachable" || result.reason === "invalid-response") {
     failure = result;
     projects = null;

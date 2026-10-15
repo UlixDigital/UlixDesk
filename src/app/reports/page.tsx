@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { SavedReportList, type SavedReportListItem } from "@/components/saved-report-list";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
+import { budgetCopy } from "@/lib/budget-copy";
 import { reportCopy, savedReportErrorText, savedReportNotice } from "@/lib/report-copy";
 import { reportDescription, reportKinds, reportTitle } from "@/lib/report-query";
 import {
@@ -44,6 +45,11 @@ export default async function ReportsPage({
       href: "/reports/manual-time-edits",
       title: timeChangeCopy.pageTitle,
       body: reportCopy.timeEditsBody,
+    },
+    {
+      href: "/reports/budgets",
+      title: budgetCopy.reportTitle,
+      body: manager ? budgetCopy.reportBody : budgetCopy.reportMemberBody,
     },
   ];
   const today = todayInTimeZone(await getWorkspaceTimeZone());

@@ -41,6 +41,7 @@ export type StartResult =
   | { ok: false; reason: "already-running"; timer: ApiTimer; message: string }
   | { ok: false; reason: "archived"; message: string }
   | { ok: false; reason: "missing"; message: string }
+  | { ok: false; reason: "budget"; message: string }
   | ClientFailure;
 export type StopResult =
   | { ok: true; warnings: string[] }
@@ -219,6 +220,9 @@ export async function startTimer(
   }
   if (!result.ok && result.reason === "http" && errorCode(result.body) === "PROJECT_NOT_FOUND") {
     return { ok: false, reason: "missing", message: popupCopy.projectMissing };
+  }
+  if (!result.ok && result.reason === "http" && errorCode(result.body) === "BUDGET_REACHED") {
+    return { ok: false, reason: "budget", message: result.message };
   }
   if (!result.ok) return clientFailure(result);
   if (!result.body || typeof result.body !== "object" || !isTimer((result.body as { timer?: unknown }).timer)) {

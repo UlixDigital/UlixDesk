@@ -13,6 +13,21 @@ import { setTestSessionToken, testState } from "@/lib/test-hooks";
 const ABSOLUTE_MS = 14 * 24 * 60 * 60 * 1000;
 const IDLE_MS = 12 * 60 * 60 * 1000;
 const ROTATE_MS = 15 * 60 * 1000;
+/**
+ * After a rotation the previous token still opens the session. Next.js can
+ * send the document and a prefetch, or TimezoneSync can call router.refresh,
+ * with the same cookie. The request that loses the compare-and-swap must not
+ * be treated as signed out, or the refresh route clears the cookie.
+ */
+const PREVIOUS_TOKEN_MS = 60 * 1000;
+
+const sessionUserSelect = {
+  id: true,
+  email: true,
+  name: true,
+  role: true,
+  deactivatedAt: true,
+} as const;
 
 export type CurrentUser = {
   id: string;
@@ -91,7 +106,24 @@ export async function destroySessionCookie(cookie: string | null) {
   if (sessionSecretProblem(secret, process.env.ULIXDESK_APP_HOSTS ?? "")) return;
   const token = await verifySessionCookie(cookie, secret);
   if (!token) return;
-  await prisma.session.deleteMany({ where: { tokenHash: sha256(token) } });
+  const hash = sha256(token);
+  await prisma.session.deleteMany({
+    where: { OR: [{ tokenHash: hash }, { previousTokenHash: hash }] },
+  });
+}
+
+async function findSessionByPresentedToken(token: string, now: Date) {
+  const hash = sha256(token);
+  const include = { user: { select: sessionUserSelect } } as const;
+  const current = await prisma.session.findUnique({
+    where: { tokenHash: hash },
+    include,
+  });
+  if (current) return current;
+  return prisma.session.findFirst({
+    where: { previousTokenHash: hash, previousTokenExpiresAt: { gt: now } },
+    include,
+  });
 }
 
 export type SessionRead =
@@ -115,14 +147,7 @@ export async function readSession(now = new Date()): Promise<SessionRead> {
   const token = await verifySessionCookie(cookie, secret);
   if (!token) return { status: "anonymous", hadCookie: true };
 
-  const session = await prisma.session.findUnique({
-    where: { tokenHash: sha256(token) },
-    include: {
-      user: {
-        select: { id: true, email: true, name: true, role: true, deactivatedAt: true },
-      },
-    },
-  });
+  const session = await findSessionByPresentedToken(token, now);
   if (!session || session.expiresAt <= now || session.user.deactivatedAt) {
     if (session) await prisma.session.deleteMany({ where: { id: session.id } });
     return { status: "anonymous", hadCookie: true };
@@ -166,22 +191,38 @@ export async function rotateSessionIfDue(now = new Date()): Promise<
   const secret = readSessionSecret();
   const token = cookie ? await verifySessionCookie(cookie, secret) : null;
   if (!token) return { ok: false };
-  const session = await prisma.session.findUnique({ where: { tokenHash: sha256(token) } });
+  const session = await findSessionByPresentedToken(token, now);
   if (!session) return { ok: false };
+  if (now.getTime() - session.rotatedAt.getTime() <= ROTATE_MS) {
+    return { ok: true, cookie: null, expiresAt: null };
+  }
 
   const rotatedToken = randomBytes(32).toString("base64url");
   const rotatedCookie = await signSessionCookie(rotatedToken, secret);
-  await prisma.session.update({
-    where: { id: session.id },
-    data: { tokenHash: sha256(rotatedToken), rotatedAt: now, lastSeenAt: now },
+  const updated = await prisma.session.updateMany({
+    where: { id: session.id, rotatedAt: session.rotatedAt },
+    data: {
+      tokenHash: sha256(rotatedToken),
+      previousTokenHash: sha256(token),
+      previousTokenExpiresAt: new Date(now.getTime() + PREVIOUS_TOKEN_MS),
+      rotatedAt: now,
+      lastSeenAt: now,
+    },
   });
+  if (updated.count !== 1) {
+    const again = await readSession(now);
+    if (again.status === "anonymous") return { ok: false };
+    return { ok: true, cookie: null, expiresAt: null };
+  }
   try {
     await writeSessionCookie(rotatedCookie, session.expiresAt);
   } catch (error) {
     await prisma.session.update({
       where: { id: session.id },
       data: {
-        tokenHash: sha256(token),
+        tokenHash: session.tokenHash,
+        previousTokenHash: session.previousTokenHash,
+        previousTokenExpiresAt: session.previousTokenExpiresAt,
         rotatedAt: session.rotatedAt,
         lastSeenAt: session.lastSeenAt,
       },
@@ -210,14 +251,7 @@ export async function userFromCookieHeader(cookieHeader: string | null, now = ne
   if (!cookie) return null;
   const token = await verifySessionCookie(cookie, secret);
   if (!token) return null;
-  const session = await prisma.session.findUnique({
-    where: { tokenHash: sha256(token) },
-    include: {
-      user: {
-        select: { id: true, email: true, name: true, role: true, deactivatedAt: true },
-      },
-    },
-  });
+  const session = await findSessionByPresentedToken(token, now);
   if (!session || session.expiresAt <= now || session.user.deactivatedAt) return null;
   if (now.getTime() - session.lastSeenAt.getTime() > IDLE_MS) return null;
   return toCurrentUser(session.user);

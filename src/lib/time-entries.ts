@@ -1,3 +1,4 @@
+import { BudgetReachedError, projectBudgetReached } from "@/lib/budgets";
 import { prisma } from "@/lib/db";
 import {
   changeContext,
@@ -289,6 +290,9 @@ export async function createManualEntry(
   });
   const context = changeContext(userId, now, change);
   const created = await prisma.$transaction(async (tx) => {
+    if (await projectBudgetReached(tx, input.projectId, now)) {
+      throw new BudgetReachedError();
+    }
     const row = await tx.timeEntry.create({
       data: {
         projectId: input.projectId,
@@ -433,6 +437,9 @@ export async function startTimer(input: {
       });
       if (!project) return { missing: true as const };
       if (project.archivedAt) return { inactive: true as const };
+      if (await projectBudgetReached(tx, projectId, input.now)) {
+        return { budget: true as const };
+      }
 
       const created = await tx.timeEntry.create({
         data: {
@@ -465,6 +472,7 @@ export async function startTimer(input: {
     }
     if ("missing" in timer) return { ok: false, code: "project-missing" };
     if ("inactive" in timer) return { ok: false, code: "project-inactive" };
+    if ("budget" in timer) return { ok: false, code: "budget-reached" };
     return { ok: true, timer: timer.timer };
   } catch (error) {
     const running = await getRunningTimer(input.userId);

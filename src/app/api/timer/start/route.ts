@@ -43,7 +43,11 @@ export async function POST(request: Request) {
 
   if (!result.ok) {
     const status =
-      result.code === "already-running" ? 409 : result.code === "project-missing" ? 404 : 400;
+      result.code === "already-running" || result.code === "budget-reached"
+        ? 409
+        : result.code === "project-missing"
+          ? 404
+          : 400;
     return jsonApi(
       request,
       {

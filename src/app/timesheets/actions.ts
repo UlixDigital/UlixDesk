@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { gateMutation } from "@/lib/auth";
+import { BudgetReachedError } from "@/lib/budgets";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import {
@@ -87,6 +88,9 @@ export async function saveTimeEntryAction(
       };
     }
   } catch (error) {
+    if (error instanceof BudgetReachedError) {
+      return { errors: { form: timeCopy.budgetReached }, values };
+    }
     console.error("Failed to save time entry", error);
     return { errors: { form: timeCopy.saveFailed }, values };
   }

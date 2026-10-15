@@ -49,9 +49,10 @@ describe("member list links", () => {
     expect(container.textContent).toContain("Acme");
     expect(container.textContent).toContain("Website");
     expect(container.querySelector('a[href="/clients/client-1/edit"]')).toBeNull();
-    expect(container.querySelector('a[href="/projects/project-1/edit"]')).toBeNull();
+    expect(container.querySelector('a[href="/projects/project-1/edit"]')).not.toBeNull();
     expect(container.textContent).not.toContain("edit client");
     expect(container.textContent).not.toContain("edit project");
+    expect(container.textContent).toContain("view project");
 
     await act(async () => {
       root.unmount();
