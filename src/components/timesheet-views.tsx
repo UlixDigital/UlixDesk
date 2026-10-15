@@ -156,9 +156,9 @@ export function WeeklyTimesheet({
 }) {
   const moneyCaption = showMoney ? formatMoneyTotals(moneyTotals).join(", ") : "";
   return (
-    <div className="mt-4 min-w-0 max-w-full">
+    <div className="mt-4 min-w-0 max-w-full overflow-hidden">
       {showMoney ? <MoneySummary totals={moneyTotals} unrated={unrated} /> : null}
-    <div className="mt-4 w-full max-w-full overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
+    <div className="mt-4 w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
       <table className="w-full min-w-[52rem] table-fixed border-separate border-spacing-0 text-sm">
         <caption className="sr-only">
           Weekly timesheet totaling {formatTrackedDuration(totalMs)}
@@ -314,7 +314,7 @@ export function WeeklyTimesheet({
 }
 
 const projectColumn =
-  "sticky left-0 z-10 bg-white shadow-[1px_0_0_0_rgb(226_232_240)]";
+  "z-10 bg-white md:sticky md:left-0 md:shadow-[1px_0_0_0_rgb(226_232_240)]";
 
 function ProjectName({
   canManage,

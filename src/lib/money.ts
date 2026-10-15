@@ -67,6 +67,22 @@ export function formatMoneyTotals(totals: MoneyTotal[]) {
 }
 
 /**
+ * A spreadsheet number for one currency. No currency code and no thousands
+ * separators, so the cell stays numeric. `40000` USD minor units is `400.00`.
+ * `1500` JPY is `1500`.
+ */
+export function formatMoneyNumber(amountMinor: number, currency: string) {
+  const digits = minorDigits(currency) ?? 2;
+  const negative = amountMinor < 0;
+  const abs = Math.abs(amountMinor);
+  const scale = 10 ** digits;
+  const whole = digits === 0 ? abs : Math.trunc(abs / scale);
+  const fraction = digits === 0 ? 0 : abs % scale;
+  const body = digits === 0 ? String(whole) : `${whole}.${String(fraction).padStart(digits, "0")}`;
+  return `${negative ? "-" : ""}${body}`;
+}
+
+/**
  * Hourly rate × duration, rounded half away from zero to the currency minor unit.
  * `amount = round(rateMinor × durationMs / 3_600_000)` using integer division.
  * A remainder of exactly half a minor unit rounds away from zero (up, for these

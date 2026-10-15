@@ -5,6 +5,7 @@ import {
   parseEnumParam,
   parsePageParam,
 } from "@/lib/search-params";
+import { formatDayHeading } from "@/lib/timesheet";
 import { addCalendarDays, isRealCalendarDate, startOfWeekDate } from "@/lib/time-zone";
 
 export const reportKinds = ["time-activity", "daily", "weekly", "work-sessions"] as const;
@@ -84,7 +85,16 @@ export function rangeForPreset(
   return monthBounds(prevYear, prevMonth);
 }
 
-export function parseReportSearchParams(params: SearchInput, today: string): {
+/** Daily opens as one row per day. The other reports open grouped by project. */
+export function defaultGroupBy(kind: ReportKind): GroupBy {
+  return kind === "daily" ? "date" : "project";
+}
+
+export function parseReportSearchParams(
+  params: SearchInput,
+  today: string,
+  kind: ReportKind = "time-activity",
+): {
   query: ReportQuery;
   rangeError: boolean;
 } {
@@ -104,7 +114,7 @@ export function parseReportSearchParams(params: SearchInput, today: string): {
       clientId: firstSearchParam(params.client),
       projectId: firstSearchParam(params.project),
       billable: parseEnumParam(params.billable, billableFilters) ?? "all",
-      groupBy: parseEnumParam(params.group, groupByOptions) ?? "project",
+      groupBy: parseEnumParam(params.group, groupByOptions) ?? defaultGroupBy(kind),
       columns: params.columns === undefined ? null : parseColumnList(params.columns),
       page: parsePageParam(params.page),
     },
@@ -168,8 +178,8 @@ export function columnLabel(id: string) {
   return id;
 }
 
-export function reportPath(kind: ReportKind, exportCsv = false) {
-  return exportCsv ? `/reports/${kind}/export` : `/reports/${kind}`;
+export function reportPath(kind: ReportKind, mode: "page" | "csv" | "pdf" = "page") {
+  return mode === "page" ? `/reports/${kind}` : `/reports/${kind}/export`;
 }
 
 export function reportHref(
@@ -186,7 +196,7 @@ export function reportHref(
     columns?: string[] | null;
     page?: number;
   },
-  options: { exportCsv?: boolean } = {},
+  options: { exportCsv?: boolean; exportPdf?: boolean } = {},
 ) {
   const params = new URLSearchParams();
   const preset = query.preset ?? "this-week";
@@ -199,10 +209,12 @@ export function reportHref(
   if (query.clientId) params.set("client", query.clientId);
   if (query.projectId) params.set("project", query.projectId);
   if (query.billable && query.billable !== "all") params.set("billable", query.billable);
-  if (query.groupBy && query.groupBy !== "project") params.set("group", query.groupBy);
+  if (query.groupBy && query.groupBy !== defaultGroupBy(kind)) params.set("group", query.groupBy);
   if (query.columns) params.set("columns", query.columns.join(","));
-  if (query.page && query.page > 1 && !options.exportCsv) params.set("page", String(query.page));
-  const path = reportPath(kind, options.exportCsv);
+  const exporting = Boolean(options.exportCsv || options.exportPdf);
+  if (query.page && query.page > 1 && !exporting) params.set("page", String(query.page));
+  if (options.exportPdf) params.set("format", "pdf");
+  const path = reportPath(kind, options.exportPdf ? "pdf" : options.exportCsv ? "csv" : "page");
   const search = params.toString();
   return search ? `${path}?${search}` : path;
 }
@@ -214,8 +226,53 @@ export function reportTitle(kind: ReportKind) {
   return reportCopy.sessionsTitle;
 }
 
-export function reportDescription(kind: ReportKind) {
-  if (kind === "time-activity") return reportCopy.timeActivityBody;
+export function groupByLabel(kind: ReportKind, groupBy: GroupBy) {
+  if (kind === "weekly" && groupBy === "date") return reportCopy.week;
+  if (groupBy === "member") return reportCopy.groupMember;
+  if (groupBy === "client") return reportCopy.groupClient;
+  if (groupBy === "project") return reportCopy.groupProject;
+  return reportCopy.groupDate;
+}
+
+export function billableFilterLabel(billable: BillableFilter) {
+  if (billable === "billable") return reportCopy.billableOnly;
+  if (billable === "non-billable") return reportCopy.billableNone;
+  return reportCopy.billableAll;
+}
+
+/** Header lines for the PDF. Names, not ids. Members do not get a member line. */
+export function describeReportFilters(input: {
+  kind: ReportKind;
+  from: string;
+  to: string;
+  timeZone: string;
+  showMember: boolean;
+  memberName: string | null;
+  clientName: string | null;
+  projectName: string | null;
+  billable: BillableFilter;
+  groupBy: GroupBy;
+}) {
+  const lines = [
+    `${reportCopy.filterDates}: ${formatDayHeading(input.from)} – ${formatDayHeading(input.to)}`,
+  ];
+  if (input.showMember) {
+    lines.push(`${reportCopy.memberLabel}: ${input.memberName ?? reportCopy.allMembers}`);
+  }
+  lines.push(
+    `${reportCopy.clientLabel}: ${input.clientName ?? reportCopy.allClients}`,
+    `${reportCopy.projectLabel}: ${input.projectName ?? reportCopy.allProjects}`,
+    `${reportCopy.billableLabel}: ${billableFilterLabel(input.billable)}`,
+    `${reportCopy.groupLabel}: ${groupByLabel(input.kind, input.groupBy)}`,
+    `${reportCopy.timezoneLabel}: ${input.timeZone}`,
+  );
+  return lines;
+}
+
+export function reportDescription(kind: ReportKind, manager = true) {
+  if (kind === "time-activity") {
+    return manager ? reportCopy.timeActivityBody : reportCopy.timeActivityMemberBody;
+  }
   if (kind === "daily") return reportCopy.dailyBody;
   if (kind === "weekly") return reportCopy.weeklyBody;
   return reportCopy.sessionsBody;

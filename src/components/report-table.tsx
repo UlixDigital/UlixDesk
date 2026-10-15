@@ -38,7 +38,14 @@ export function ReportTable({
           <thead>
             <tr className="text-left text-xs font-medium text-slate-500">
               {report.columns.map((column) => (
-                <th key={column.id} scope="col" className="border-b border-slate-200 px-4 py-3 font-medium">
+                <th
+                  key={column.id}
+                  scope="col"
+                  className={cn(
+                    "border-b border-slate-200 px-4 py-3 font-medium",
+                    isAmountColumn(column.id) && "text-right",
+                  )}
+                >
                   {column.label}
                 </th>
               ))}
@@ -49,7 +56,10 @@ export function ReportTable({
               <tr key={row.id}>
                 {report.columns.map((column, index) => {
                   const value = row.cells[column.id] ?? "";
-                  const className = "border-b border-slate-100 px-4 py-3 align-top text-ink";
+                  const className = cn(
+                    "border-b border-slate-100 px-4 py-3 align-top text-ink",
+                    isAmountColumn(column.id) && "text-right tabular-nums",
+                  );
                   if (index === 0) {
                     return (
                       <th key={column.id} scope="row" className={cn(className, "text-left font-semibold")}>
@@ -72,7 +82,10 @@ export function ReportTable({
                 {report.columns.map((column) => (
                   <td
                     key={column.id}
-                    className="border-t border-slate-200 px-4 py-3 font-semibold text-ink"
+                    className={cn(
+                      "border-t border-slate-200 px-4 py-3 font-semibold text-ink",
+                      isAmountColumn(column.id) && "text-right tabular-nums",
+                    )}
                   >
                     <CellText value={report.totals?.[column.id] ?? ""} />
                   </td>
@@ -109,6 +122,10 @@ export function ReportTable({
       ) : null}
     </div>
   );
+}
+
+function isAmountColumn(id: string) {
+  return id === "amount" || id === "noAmount" || id.startsWith("amount:");
 }
 
 function CellText({ value }: { value: string }) {

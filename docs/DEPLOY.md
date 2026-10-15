@@ -201,6 +201,8 @@ unset STAGING_APP_DB_PASSWORD PRODUCTION_APP_DB_PASSWORD
 
 The script is copied to the server by the staging deploy. If it is missing, copy `scripts/grant-app-role.sh` from this repository to `/opt/ulixdesk/scripts/grant-app-role.sh` and `chmod +x` it. It runs this SQL, in this order, as the Postgres superuser inside the `postgres` container.
 
+`docker-compose.prod.yml` names the Compose project `ulixdesk`. On the server, run the script from `/opt/ulixdesk` and leave `COMPOSE_PROJECT_NAME` unset so it uses that name. A laptop that started the dev database with `npm run db:up` is project `ulixdesk-dev` (`docker-compose.yml`). To point this script at a stack you started under another name, export `COMPOSE_PROJECT_NAME` to that name before you run it. `COMPOSE_PROJECT_NAME` overrides the `name:` in the compose file. The dev database does not create the app roles; the script does, when you run it against that Postgres.
+
 On the `postgres` database:
 
 ```sql

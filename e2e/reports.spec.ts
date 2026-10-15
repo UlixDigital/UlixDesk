@@ -100,11 +100,25 @@ test("owners see amounts and members see only their own time", async ({ browser 
     expect(csvResponse.status()).toBe(200);
     expect(csvResponse.headers()["content-type"]).toContain("text/csv");
     const csv = await csvResponse.text();
+    expect(csv).toContain("Hours (decimal)");
     expect(csv).toContain("Amount (USD)");
     expect(csv).toContain("Amount (JPY)");
-    expect(csv).toContain("USD 50.00");
-    expect(csv).toContain("JPY 1,500");
-    expect(csv).not.toContain("USD 50.00,JPY");
+    expect(csv).toContain("Status");
+    expect(csv).toContain("50.00");
+    expect(csv).toContain("1500");
+    expect(csv).toContain("Billable");
+    expect(csv).not.toContain("USD 50.00");
+    expect(csv).not.toContain("JPY 1,500");
+    expect(csv).not.toContain("No amount");
+
+    const pdfResponse = await ownerPage.request.get(
+      "/reports/time-activity/export?preset=custom&from=2026-10-01&to=2026-10-31&format=pdf",
+    );
+    expect(pdfResponse.status()).toBe(200);
+    expect(pdfResponse.headers()["content-type"]).toContain("application/pdf");
+    expect(pdfResponse.headers()["content-disposition"]).toContain("time-activity.pdf");
+    const pdf = await pdfResponse.body();
+    expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
 
     await ownerPage.goto("/reports/daily?preset=custom&from=2026-10-01&to=2026-10-31");
     await expect(ownerPage.getByRole("heading", { name: "Daily totals" })).toBeVisible();
@@ -138,7 +152,9 @@ test("owners see amounts and members see only their own time", async ({ browser 
     await memberPage.goto(
       `/reports/time-activity?preset=custom&from=2026-10-01&to=2026-10-31&group=member&member=${owner.id}`,
     );
-    await expect(memberPage.getByRole("rowheader", { name: "Mia Member" })).toBeVisible();
+    await expect(memberPage.getByRole("rowheader", { name: "Brochure Report" })).toBeVisible();
+    await expect(memberPage.getByRole("option", { name: "Member" })).toHaveCount(0);
+    await expect(memberPage.getByText("Owners and admins also see the amount")).toHaveCount(0);
     await expect(memberPage.getByText(owner.name)).toHaveCount(0);
     await expect(memberPage.getByText("Owner only note")).toHaveCount(0);
     await expect(memberPage.getByRole("columnheader", { name: "Amount (JPY)" })).toHaveCount(0);
@@ -164,6 +180,20 @@ test("owners see amounts and members see only their own time", async ({ browser 
     expect(memberBody).toContain("'=Mia session");
     expect(memberBody).not.toContain("Owner only note");
     expect(memberBody).not.toMatch(/USD|JPY|Amount/);
+
+    const memberPdf = await memberPage.request.get(
+      "/reports/time-activity/export?preset=custom&from=2026-10-01&to=2026-10-31&format=pdf&columns=hours,amount",
+    );
+    expect(memberPdf.status()).toBe(200);
+    expect(memberPdf.headers()["content-type"]).toContain("application/pdf");
+    expect((await memberPdf.body()).subarray(0, 5).toString()).toBe("%PDF-");
+
+    const editsPdf = await ownerPage.request.get(
+      "/reports/manual-time-edits/export?format=pdf&from=2026-10-01&to=2026-10-31",
+    );
+    expect(editsPdf.status()).toBe(200);
+    expect(editsPdf.headers()["content-type"]).toContain("application/pdf");
+    expect(editsPdf.headers()["x-error-code"]).toBeUndefined();
 
     const repeated = await ownerPage.request.get(
       "/reports/manual-time-edits?action=added&action=deleted&page=1&page=2&to=9999-12-31",

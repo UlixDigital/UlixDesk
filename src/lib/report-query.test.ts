@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   parseReportSearchParams,
   rangeForPreset,
+  reportDescription,
   reportHref,
   resolveColumns,
 } from "@/lib/report-query";
@@ -48,6 +49,18 @@ describe("report query", () => {
     expect(reportHref("daily", parsed.query)).toBe(
       "/reports/daily?preset=custom&from=2026-10-01&to=2100-12-31&member=sam&billable=non-billable&group=client&columns=hours%2Camount&page=2",
     );
+  });
+
+  it("opens daily as one row per day and omits that default group from the URL", () => {
+    const daily = parseReportSearchParams({}, today, "daily");
+    expect(daily.query.groupBy).toBe("date");
+    expect(reportHref("daily", daily.query)).toBe("/reports/daily");
+    const activity = parseReportSearchParams({}, today, "time-activity");
+    expect(activity.query.groupBy).toBe("project");
+    expect(reportDescription("time-activity", false)).toBe(
+      "Hours and billable hours for the range. Activity percentage is not tracked.",
+    );
+    expect(reportDescription("time-activity", true)).toContain("Owners and admins also see the amount");
   });
 
   it("drops amount columns for members and keeps the defaults when columns are absent", () => {

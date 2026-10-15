@@ -116,10 +116,21 @@ describe("report totals", () => {
     expect(member.columns.map((column) => column.id).join(" ")).not.toContain("amount");
     expect(reportToCsv(member)).not.toMatch(/USD|JPY|Amount/);
     const csv = reportToCsv(owner);
+    expect(csv).toContain("Hours (decimal)");
+    expect(csv).toContain("Billable hours (decimal)");
     expect(csv).toContain("Amount (USD)");
-    expect(csv).toContain("USD 400.00");
-    expect(csv).toContain("JPY 1,500");
-    expect(csv).not.toContain("USD 400.00 JPY");
+    expect(csv).toContain("Amount (JPY)");
+    expect(csv).toContain("Status");
+    expect(csv).toContain("5.0000");
+    expect(csv).toContain("400.00");
+    expect(csv).toContain("1500");
+    expect(csv).toContain(reportCopy.statusNoRate);
+    expect(csv).toContain(reportCopy.statusNonBillable);
+    expect(csv).toContain(reportCopy.statusBillable);
+    expect(csv).not.toContain("USD 400.00");
+    expect(csv).not.toContain("JPY 1,500");
+    expect(csv).not.toContain(reportCopy.noAmount);
+    expect(csv.split("\r\n").at(-2)).not.toMatch(/No rate|Non-billable|Billable/);
   });
 
   it("buckets weeks Monday through Sunday and lists work sessions", () => {
@@ -166,6 +177,76 @@ describe("report totals", () => {
     expect(sessions.rows[1]?.cells.notes).toBe("=cmd");
     expect(sessions.rows[1]?.cells.billable).toBe(rateCopy.billablePrefix);
     expect(sessions.rows[1]?.cells.duration).toBe("1h 30m");
-    expect(reportToCsv(sessions)).toContain("'=cmd");
+    const sessionCsv = reportToCsv(sessions);
+    expect(sessionCsv).toContain("Duration (decimal)");
+    expect(sessionCsv).toContain("1.5000");
+    expect(sessionCsv).toContain("'=cmd");
+    expect(sessionCsv).not.toContain("1h 30m");
+  });
+
+  it("keeps notes as typed, sorts sessions by start, and totals a day once", () => {
+    const later = entry({
+      id: "later",
+      note: "  keep spaces  ",
+      startedAt: new Date("2026-10-14T11:00:00.000Z"),
+      endedAt: new Date("2026-10-14T12:00:00.000Z"),
+    });
+    const earlier = entry({
+      id: "earlier",
+      note: "",
+      startedAt: new Date("2026-10-14T09:00:00.000Z"),
+      endedAt: new Date("2026-10-14T10:00:00.000Z"),
+    });
+    const sessions = buildReport({
+      kind: "work-sessions",
+      entries: [later, earlier],
+      rangeStart: zonedDayStart("2026-10-14", "UTC"),
+      rangeEnd: zonedDayEnd("2026-10-14", "UTC"),
+      timeZone: "UTC",
+      groupBy: "project",
+      columns: ["start", "notes"],
+      showMoney: false,
+      manager: false,
+    });
+    expect(sessions.rows.map((row) => row.id)).toEqual(["earlier", "later"]);
+    expect(sessions.rows[0]?.cells.notes).toBe("—");
+    expect(sessions.rows[1]?.cells.notes).toBe("  keep spaces  ");
+    const csv = reportToCsv(sessions);
+    expect(csv).toContain("  keep spaces  ");
+    expect(csv).not.toContain("—");
+
+    const other = entry({
+      id: "other-day",
+      projectId: "other",
+      projectName: "Other",
+      startedAt: new Date("2026-10-14T09:00:00.000Z"),
+      endedAt: new Date("2026-10-14T10:00:00.000Z"),
+    });
+    const daily = buildReport({
+      kind: "daily",
+      entries: [later, other],
+      rangeStart: zonedDayStart("2026-10-14", "UTC"),
+      rangeEnd: zonedDayEnd("2026-10-14", "UTC"),
+      timeZone: "UTC",
+      groupBy: "date",
+      columns: ["hours"],
+      showMoney: false,
+      manager: false,
+    });
+    expect(daily.rows).toHaveLength(1);
+    expect(daily.rows[0]?.cells.hours).toBe("2h");
+    const breakdown = buildReport({
+      kind: "daily",
+      entries: [later, other],
+      rangeStart: zonedDayStart("2026-10-14", "UTC"),
+      rangeEnd: zonedDayEnd("2026-10-14", "UTC"),
+      timeZone: "UTC",
+      groupBy: "project",
+      columns: ["hours"],
+      showMoney: false,
+      manager: false,
+    });
+    expect(breakdown.rows).toHaveLength(2);
+    expect(breakdown.columns.map((column) => column.id)).toContain("bucket");
   });
 });

@@ -83,7 +83,11 @@ describe("weekly timesheet amounts", () => {
 
     const table = container.querySelector("table")!;
     expect(table.className).toContain("table-fixed");
-    expect(table.querySelector("th")?.className).toContain("sticky");
+    const scroller = table.parentElement;
+    expect(scroller?.className).toContain("overflow-x-auto");
+    expect(scroller?.className).toContain("w-0");
+    expect(scroller?.parentElement?.className).toContain("overflow-hidden");
+    expect(table.querySelector("th")?.className).toContain("md:sticky");
     const cols = [...table.querySelectorAll("col")];
     expect(cols).toHaveLength(9);
     expect(cols[0].className).toContain("w-44");

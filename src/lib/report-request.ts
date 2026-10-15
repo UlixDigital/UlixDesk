@@ -1,6 +1,7 @@
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { listClientsForFilter } from "@/lib/projects";
 import {
+  defaultGroupBy,
   parseReportSearchParams,
   resolveColumns,
   type ReportKind,
@@ -38,9 +39,11 @@ export async function prepareReport(input: {
 }): Promise<PreparedReport> {
   const timeZone = await getWorkspaceTimeZone();
   const today = todayInTimeZone(timeZone);
-  const { query, rangeError } = parseReportSearchParams(input.params, today);
+  const { query, rangeError } = parseReportSearchParams(input.params, today, input.kind);
   const manager = canManageWorkspace(input.actor.role);
   const showMoney = canSeeMoney(input.actor.role);
+  const groupBy =
+    !manager && query.groupBy === "member" ? defaultGroupBy(input.kind) : query.groupBy;
   const [projects, clients, people] = await Promise.all([
     listProjectsForTimesheetFilter(),
     listClientsForFilter(),
@@ -55,6 +58,7 @@ export async function prepareReport(input: {
     projectId: project?.id ?? "",
     clientId: client?.id ?? "",
     memberId: member?.id ?? "",
+    groupBy,
     columns,
   };
   const filtered = Boolean(
@@ -63,7 +67,7 @@ export async function prepareReport(input: {
       resolved.clientId ||
       resolved.projectId ||
       resolved.billable !== "all" ||
-      resolved.groupBy !== "project" ||
+      resolved.groupBy !== defaultGroupBy(input.kind) ||
       query.columns,
   );
   const base = {

@@ -148,6 +148,20 @@ export function overnightDurationNotice(endsNextDay: boolean, durationMs: number
   return { hint: timeCopy.endsNextDay, warning: null };
 }
 
+/**
+ * Decimal hours for CSV. Four places keep a minute (0.0167) without using
+ * float division. The screen keeps `formatTrackedDuration`.
+ */
+export function decimalHours(ms: number) {
+  if (!Number.isFinite(ms) || ms <= 0) return "0.0000";
+  const rounded = BigInt(Math.round(ms));
+  const tenThousand = BigInt(10000);
+  const scaled = (rounded * tenThousand + BigInt(1800000)) / BigInt(3600000);
+  const whole = scaled / tenThousand;
+  const fraction = (scaled % tenThousand).toString().padStart(4, "0");
+  return `${whole}.${fraction}`;
+}
+
 export function formatTrackedDuration(ms: number) {
   if (!Number.isFinite(ms) || ms <= 0) return "0m";
   const totalSeconds = Math.floor(ms / 1000);

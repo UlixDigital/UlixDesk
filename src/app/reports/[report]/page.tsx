@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import { ReportColumns } from "@/components/report-columns";
 import { ReportFilters } from "@/components/report-filters";
 import { ReportTable } from "@/components/report-table";
+import { SaveReportDialog } from "@/components/save-report-dialog";
 import { reportCodes, reportCopy } from "@/lib/report-copy";
 import {
   allowedColumns,
@@ -56,15 +57,33 @@ export default async function ReportPage({
         <div className="min-w-0">
           <h1 className="text-2xl font-semibold tracking-tight text-ink">{reportTitle(report)}</h1>
           <p className="mt-1 max-w-2xl text-sm text-slate-600">
-            {prepared.manager ? reportCopy.allScope : reportCopy.ownScope} {reportDescription(report)}
+            {prepared.manager ? reportCopy.allScope : reportCopy.ownScope}{" "}
+            {reportDescription(report, prepared.manager)}
           </p>
         </div>
-        <Link
-          href={reportHref(report, prepared.query, { exportCsv: true })}
-          className={ui.secondaryButton}
-        >
-          {reportCopy.exportCsv}
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <a href={reportHref(report, prepared.query, { exportCsv: true })} className={ui.secondaryButton}>
+            {reportCopy.exportCsv}
+          </a>
+          <a href={reportHref(report, prepared.query, { exportPdf: true })} className={ui.secondaryButton}>
+            {reportCopy.exportPdf}
+          </a>
+          <SaveReportDialog
+            canShare={prepared.manager}
+            fields={{
+              reportType: report,
+              preset: prepared.query.preset,
+              from: prepared.query.from,
+              to: prepared.query.to,
+              member: prepared.query.memberId,
+              client: prepared.query.clientId,
+              project: prepared.query.projectId,
+              billable: prepared.query.billable,
+              group: prepared.query.groupBy,
+              columns: prepared.columns.join(","),
+            }}
+          />
+        </div>
       </div>
       <ReportFilters
         kind={report}

@@ -27,6 +27,7 @@ model User {
   timeChangesOwned  TimeChange[] @relation("TimeChangeSubject")
   memberBillRates   BillRate[] @relation("MemberBillRate")
   billRatesCreated  BillRate[] @relation("BillRateAuthor")
+  savedReports      SavedReport[]
 
   @@index([role])
   @@index([deactivatedAt])
@@ -213,6 +214,24 @@ model RunningTimer {
   id          String    @id
   timeEntryId String    @unique
   timeEntry   TimeEntry @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+}
+
+/// A named set of report filters, grouping, and columns.
+/// `visibility` is private or shared. Only owners and admins can share.
+/// `params` is re-parsed with the report query parser whenever it is opened.
+model SavedReport {
+  id          String   @id @default(cuid())
+  name        String
+  reportType  String
+  visibility  String   @default("private")
+  params      Json
+  createdById String
+  createdBy   User     @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([createdById, name])
+  @@index([visibility])
 }
 
 /// A bearer token for the Chrome extension. It belongs to the user who created it.

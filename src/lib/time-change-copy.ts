@@ -1,3 +1,6 @@
+import { reportCopy } from "@/lib/report-copy";
+import { formatDayHeading } from "@/lib/timesheet";
+
 /** Exact UI copy for the manual time edits report. Members never see amounts. */
 
 export const changeSources = ["web", "extension", "api"] as const;
@@ -55,10 +58,14 @@ export const timeChangeCopy = {
   previous: "Previous",
   next: "Next",
   unchanged: "No tracked fields changed.",
+  exportPdf: "Export PDF",
+  exportAll: "The PDF includes every matching change, with these filters. It matches this screen.",
+  tooLarge: "Too many time changes for this range. Narrow the dates and try again.",
 } as const;
 
 export const timeChangeCodes = {
   RANGE_ORDER: "RANGE_ORDER",
+  TIME_CHANGE_TOO_LARGE: "TIME_CHANGE_TOO_LARGE",
 } as const;
 
 export type TimeChangeCode = (typeof timeChangeCodes)[keyof typeof timeChangeCodes];
@@ -88,6 +95,54 @@ export function timeEditsHref(
   if (input.page && input.page > 1) params.set("page", String(input.page));
   const query = params.toString();
   return query ? `/reports/manual-time-edits?${query}` : "/reports/manual-time-edits";
+}
+
+export function describeTimeEditFilters(input: {
+  from: string;
+  to: string;
+  timeZone: string;
+  showMember: boolean;
+  memberName: string | null;
+  clientName: string | null;
+  projectName: string | null;
+  actionLabel: string;
+}) {
+  const lines = [
+    `${timeChangeCopy.fromLabel}–${timeChangeCopy.toLabel}: ${formatDayHeading(input.from)} – ${formatDayHeading(input.to)}`,
+  ];
+  if (input.showMember) {
+    lines.push(`${timeChangeCopy.memberLabel}: ${input.memberName ?? timeChangeCopy.allMembers}`);
+  }
+  lines.push(
+    `${timeChangeCopy.clientLabel}: ${input.clientName ?? timeChangeCopy.allClients}`,
+    `${timeChangeCopy.projectLabel}: ${input.projectName ?? timeChangeCopy.allProjects}`,
+    `${timeChangeCopy.actionLabel}: ${input.actionLabel}`,
+    `${reportCopy.timezoneLabel}: ${input.timeZone}`,
+  );
+  return lines;
+}
+
+export function timeEditsPdfHref(input: {
+  from?: string;
+  to?: string;
+  memberId?: string;
+  clientId?: string;
+  projectId?: string;
+  action?: string;
+}) {
+  const page = timeEditsHref(input);
+  const url = new URL(page, "http://ulixdesk.local");
+  url.pathname = "/reports/manual-time-edits/export";
+  url.searchParams.set("format", "pdf");
+  return `${url.pathname}${url.search}`;
+}
+
+export function actionFilterLabel(action: string) {
+  if (action === "added") return timeChangeCopy.actionAdded;
+  if (action === "edited") return timeChangeCopy.actionEdited;
+  if (action === "deleted") return timeChangeCopy.actionDeleted;
+  if (action === "timer") return timeChangeCopy.actionTimer;
+  return timeChangeCopy.allActions;
 }
 
 export function actionVerb(action: ChangeAction) {

@@ -11,6 +11,10 @@ COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
 COPY . .
+# pdfkit stays external. Copy its runtime closure so the slim image can
+# embed the logo and the standard fonts without Chromium.
+RUN node scripts/copy-pdfkit-runtime.mjs /opt/pdfkit-runtime \
+  && du -sh /opt/pdfkit-runtime
 ENV NEXT_TELEMETRY_DISABLED=1
 RUN npx prisma generate && npm run build
 
@@ -61,6 +65,7 @@ COPY --from=build --chown=nextjs:nodejs /app/node_modules/postgres-date ./node_m
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/postgres-interval ./node_modules/postgres-interval
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/pg-int8 ./node_modules/pg-int8
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/xtend ./node_modules/xtend
+COPY --from=build --chown=nextjs:nodejs /opt/pdfkit-runtime/ ./node_modules/
 COPY --from=migrate --chown=nextjs:nodejs /opt/migrate /opt/migrate
 USER nextjs
 EXPOSE 3000
