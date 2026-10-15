@@ -1,5 +1,13 @@
 import { defineConfig, devices } from "@playwright/test";
-import { e2eDatabaseUrl, e2eEmail, e2eOrigin, e2ePassword, e2ePort, e2eSessionSecret } from "./e2e/env";
+import {
+  e2eDatabaseUrl,
+  e2eEmail,
+  e2eInvoiceLinkKey,
+  e2eOrigin,
+  e2ePassword,
+  e2ePort,
+  e2eSessionSecret,
+} from "./e2e/env";
 
 process.env.DATABASE_URL = e2eDatabaseUrl;
 
@@ -28,6 +36,8 @@ export default defineConfig({
       ULIXDESK_APP_HOSTS: "desk.example.com",
       ULIXDESK_EXTENSION_IDS: "cjlaoflbipaehclleojofopapalhiooe",
       ULIXDESK_SESSION_SECRET: e2eSessionSecret,
+      INVOICE_LINK_KEY: e2eInvoiceLinkKey,
+      ...(process.env.ULIXDESK_INVOICE_MAIL_CAPTURE === "1" ? { ULIXDESK_INVOICE_MAIL_CAPTURE: "1" } : {}),
       ULIXDESK_BOOTSTRAP_EMAIL: e2eEmail,
       ULIXDESK_BOOTSTRAP_PASSWORD: e2ePassword,
       ULIXDESK_BOOTSTRAP_NAME: "E2E Owner",

@@ -376,7 +376,7 @@ model Invoice {
   issuedAt            DateTime?
   voidedAt            DateTime?
   /// SHA-256 of the client view token. The plaintext is not stored.
-  /// A sealed copy (AES-256-GCM under the session secret) lets owners and admins
+  /// A sealed copy (AES-256-GCM under INVOICE_LINK_KEY) lets owners and admins
   /// copy the same link again. Both are cleared when the link is revoked.
   viewTokenHash       String?   @unique
   viewTokenCipher     String?

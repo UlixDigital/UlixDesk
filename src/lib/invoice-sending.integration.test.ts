@@ -7,7 +7,7 @@ import {
 } from "@/app/invoices/actions";
 import { prisma } from "@/lib/db";
 import { invoiceCopy } from "@/lib/invoice-copy";
-import { revokeClientLink, rotateClientLink } from "@/lib/invoice-link";
+import { readClientLink, revokeClientLink, rotateClientLink } from "@/lib/invoice-link";
 import { isSliceConflict } from "@/lib/invoice-lock";
 import {
   deliverInvoiceMail,
@@ -238,6 +238,44 @@ describe("invoice status transitions", () => {
 });
 
 describe("client invoice link", () => {
+  it("refuses a missing or invalid link key and still opens a saved link by hash", async () => {
+    const { owner, client } = await workspace();
+    const actor = { id: owner.id, role: owner.role };
+    const invoice = await draftInvoice(actor, client.id);
+    const saved = process.env.INVOICE_LINK_KEY;
+    delete process.env.INVOICE_LINK_KEY;
+    try {
+      expect(await rotateClientLink({ actor, id: invoice.id })).toEqual({
+        ok: false,
+        error: invoiceCopy.linkKeyMissing,
+      });
+      process.env.INVOICE_LINK_KEY = "not-a-key";
+      expect(await rotateClientLink({ actor, id: invoice.id })).toEqual({
+        ok: false,
+        error: invoiceCopy.linkKeyInvalid,
+      });
+      expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.viewTokenHash).toBeNull();
+    } finally {
+      process.env.INVOICE_LINK_KEY = saved;
+    }
+
+    const created = await rotateClientLink({ actor, id: invoice.id });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect((await saveDraft({ actor, id: invoice.id, draft: draftOf(invoice), issue: true })).ok).toBe(true);
+    delete process.env.INVOICE_LINK_KEY;
+    try {
+      expect((await findPublicInvoice(created.token))?.number).toBe(invoice.number);
+      expect(await readClientLink(owner.role, invoice.id)).toEqual({
+        active: true,
+        path: null,
+        keyStatus: "missing",
+      });
+    } finally {
+      process.env.INVOICE_LINK_KEY = saved;
+    }
+  });
+
   it("stores only the hash, hides drafts, shows void, and 404s after revoke", async () => {
     const { owner, client } = await workspace();
     const actor = { id: owner.id, role: owner.role };

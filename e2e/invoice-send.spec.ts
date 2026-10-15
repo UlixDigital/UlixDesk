@@ -1,5 +1,5 @@
 import "./env";
-import { mkdir } from "node:fs/promises";
+import { copyFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
@@ -21,7 +21,19 @@ async function waitForHydration(page: Page) {
 
 async function shot(page: Page, dir: string, name: string) {
   await mkdir(dir, { recursive: true });
-  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
+  const target = path.join(dir, `${name}.png`);
+  const tmp = path.join("/tmp", `ulixdesk-${name}.png`);
+  let last: unknown;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      await page.screenshot({ path: tmp, fullPage: true });
+      await copyFile(tmp, target);
+      return;
+    } catch (error) {
+      last = error;
+    }
+  }
+  throw last;
 }
 
 async function createDraft(page: Page, clientId: string, start: string, end: string) {
@@ -93,6 +105,12 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
   try {
     await signIn(ownerContext, prisma, owner.email);
     const page = await ownerContext.newPage();
+    await page.goto(`/clients/${client.id}/edit`);
+    await waitForHydration(page);
+    await expect(page.locator("#client-email")).toBeVisible();
+    await expect(page.getByRole("list", { name: "Billing emails" })).toContainText("billing@northwind.test");
+    await shot(page, shots, "invoice-billing-emails");
+
     await createDraft(page, client.id, "2026-10-05", "2026-10-11");
     const invoiceUrl = new URL(page.url());
     const invoiceId = invoiceUrl.pathname.split("/").at(-1) ?? "";
@@ -105,7 +123,7 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await expect(page.locator("#invoice-send-body")).toContainText("USD 25.00");
     await expect(page.locator("#invoice-send-confirm")).toBeVisible();
     await expect(page.getByRole("button", { name: "Send email" })).toBeDisabled();
-    await shot(page, shots, "invoice-send-unconfigured");
+    await shot(page, shots, "invoice-send-dialog-unconfigured");
 
     await page.getByRole("button", { name: "Create client link" }).click();
     await expect(page.getByText("A client link is active.")).toBeVisible();
@@ -116,7 +134,6 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await expect(page.locator("#invoice-mail-unconfigured")).toBeVisible();
     await expect(page.locator("#invoice-send-link")).toHaveValue(clientPath);
     await expect(page.getByRole("button", { name: "Copy link" }).first()).toBeEnabled();
-    await shot(page, shots, "invoice-send-dialog");
 
     await page.getByRole("button", { name: "Mark as issued" }).click();
     await expect(page.getByText("This invoice is issued.")).toBeVisible();
@@ -170,7 +187,6 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await expect(page.locator("#invoice-email-history")).toContainText("billing@northwind.test");
     await expect(page.locator("#invoice-email-history")).toContainText("ap@northwind.test");
     await expect(page.locator("#invoice-email-history")).toContainText("Sent");
-    await shot(page, shots, "invoice-send-history");
 
     await page.locator("#invoice-void-reason").fill("Client asked to cancel");
     await page.getByRole("button", { name: "Void invoice" }).click();
@@ -183,6 +199,11 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await expect(page.getByText("Client link revoked.")).toBeVisible();
     const revoked = await publicContext.request.get(clientPath);
     expect(revoked.status()).toBe(404);
+    const revokedPage = await clientPage.goto(clientPath);
+    expect(revokedPage?.status()).toBe(404);
+    await expect(clientPage.getByRole("heading", { name: "Invoice not found" })).toBeVisible();
+    await expect(clientPage.getByText("This link is invalid or has been revoked.")).toBeVisible();
+    await shot(clientPage, shots, "invoice-revoked-404");
 
     await signIn(memberContext, prisma, member.email);
     const memberPage = await memberContext.newPage();

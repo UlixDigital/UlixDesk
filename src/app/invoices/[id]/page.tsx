@@ -9,7 +9,7 @@ import { InvoiceSendDialog } from "@/components/invoice-send-dialog";
 import { InvoiceStatusActions } from "@/components/invoice-status-actions";
 import { publicOrigin } from "@/lib/auth";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
-import { clientLinkUrl, readClientLink } from "@/lib/invoice-link";
+import { clientLinkKeyMessage, clientLinkUrl, readClientLink } from "@/lib/invoice-link";
 import { unratedLineLabel } from "@/lib/invoice-lines";
 import { invoiceMailConfigured, invoiceMessageDefaults } from "@/lib/invoice-mail";
 import { amountDueMinor, formatDurationHms, formatInvoiceDate, formatPercentBps } from "@/lib/invoice-money";
@@ -48,6 +48,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
   const link = await readClientLink(user.role, invoice.id);
   const origin = await publicOrigin();
   const linkPath = link?.active ? link.path : null;
+  const keyMessage = link?.active && !link.path ? clientLinkKeyMessage(link.keyStatus === "ok" ? "mismatch" : link.keyStatus) : null;
   const clientUrl = linkPath ? clientLinkUrl(origin, linkPath) : null;
   const defaults = invoiceMessageDefaults({
     number: invoice.number,
@@ -97,7 +98,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
         <InvoiceClientLink
           invoiceId={invoice.id}
           url={clientUrl}
-          unreadable={Boolean(link?.active && !linkPath)}
+          keyMessage={keyMessage}
           draft={invoice.status === "draft"}
         />
         <InvoiceSendDialog

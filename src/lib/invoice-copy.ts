@@ -118,7 +118,15 @@ export const invoiceCopy = {
   clientLinkNone: "No client link yet.",
   clientLinkRevoked: "Client link revoked.",
   clientLinkDraft: "Clients can open the link after the invoice is issued. Until then the address does not load.",
-  linkUnreadable: "The saved client link cannot be opened. Regenerate it, then try again.",
+  linkKeyMissing:
+    "INVOICE_LINK_KEY is not set. Generate one with openssl rand -base64 32, then create the link again.",
+  linkKeyInvalid: "INVOICE_LINK_KEY must be 32 bytes encoded as base64 or hex.",
+  linkKeyMissingShow:
+    "The client link is saved, but INVOICE_LINK_KEY is not set, so it cannot be shown again. Anyone who already has the link can still open it.",
+  linkKeyInvalidShow:
+    "The client link is saved, but INVOICE_LINK_KEY is not valid, so it cannot be shown again. Anyone who already has the link can still open it.",
+  linkUnreadable:
+    "The client link is saved, but this key does not open it, so it cannot be shown again.",
   send: "Send",
   sendTitle: "Email this invoice",
   sendTo: "To",

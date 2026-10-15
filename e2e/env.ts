@@ -4,5 +4,7 @@ export const e2ePort = 3100;
 export const e2eEmail = "owner@ulix.test";
 export const e2ePassword = "e2e-password-10";
 export const e2eSessionSecret = "e2e-session-secret-at-least-32-characters";
+/** Fixed 32-byte test key. Not a production secret. */
+export const e2eInvoiceLinkKey = "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=";
 
 process.env.DATABASE_URL = e2eDatabaseUrl;

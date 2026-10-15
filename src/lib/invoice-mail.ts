@@ -70,17 +70,35 @@ export function readInvoiceSmtpConfig(): InvoiceSmtpConfig | null {
   return { host, port, user, pass, from, fromName };
 }
 
+const capturedMail: InvoiceMailMessage[] = [];
+
+/** Dev and test only. Production ignores the flag so a stray env value cannot skip SMTP. */
+export function invoiceMailCaptureEnabled() {
+  return process.env.NODE_ENV !== "production" && process.env.ULIXDESK_INVOICE_MAIL_CAPTURE === "1";
+}
+
+export function readInvoiceMailCapture() {
+  return capturedMail;
+}
+
+export function clearInvoiceMailCapture() {
+  capturedMail.length = 0;
+}
+
 export function invoiceMailConfigured() {
+  if (invoiceMailCaptureEnabled()) return true;
   return readInvoiceSmtpConfig() !== null;
 }
 
 /**
- * True when a test double is installed, or when SMTP is configured outside Vitest.
- * Tests cannot fall through to the network even if the SMTP variables are set.
+ * True when a test double is installed, a non-production capture flag is set,
+ * or SMTP is configured outside Vitest. Tests cannot fall through to the network
+ * even if the SMTP variables are set.
  */
 export function invoiceMailCanSend() {
   if (testTransport) return true;
   if (process.env.VITEST === "true") return false;
+  if (invoiceMailCaptureEnabled()) return true;
   return invoiceMailConfigured();
 }
 
@@ -194,6 +212,10 @@ export async function deliverInvoiceMail(message: InvoiceMailMessage) {
   }
   if (process.env.VITEST === "true") {
     throw new Error("Refusing to open an SMTP connection from tests.");
+  }
+  if (invoiceMailCaptureEnabled()) {
+    capturedMail.push(message);
+    return;
   }
   const config = readInvoiceSmtpConfig();
   if (!config) throw new InvoiceMailUnconfiguredError();

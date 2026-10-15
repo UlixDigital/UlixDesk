@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  clearInvoiceMailCapture,
   deliverInvoiceMail,
   invoiceMailCanSend,
   invoiceMailConfigured,
+  readInvoiceMailCapture,
   invoiceMessageDefaults,
   parseInvoiceMessage,
   parseRecipientList,
@@ -21,6 +23,8 @@ const keys = [
 
 afterEach(() => {
   setInvoiceMailTransportForTests(null);
+  clearInvoiceMailCapture();
+  delete process.env.ULIXDESK_INVOICE_MAIL_CAPTURE;
   for (const key of keys) delete process.env[key];
 });
 
@@ -86,5 +90,27 @@ describe("invoice email", () => {
     expect(captured[0]?.to).toEqual(["a@client.test"]);
     expect(captured[0]?.cc).toEqual(["b@client.test"]);
     expect(captured[0]?.attachments[0]?.content.subarray(0, 5).toString()).toBe("%PDF-");
+  });
+
+  it("records a capture-flag send outside Vitest and ignores the flag in production", async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    const previousVitest = process.env.VITEST;
+    process.env.ULIXDESK_INVOICE_MAIL_CAPTURE = "1";
+    process.env.NODE_ENV = "development";
+    delete process.env.VITEST;
+    try {
+      expect(invoiceMailConfigured()).toBe(true);
+      expect(invoiceMailCanSend()).toBe(true);
+      await deliverInvoiceMail(message);
+      expect(readInvoiceMailCapture()).toHaveLength(1);
+      expect(readInvoiceMailCapture()[0]?.attachments[0]?.filename).toBe("Invoice-LE1.pdf");
+      process.env.NODE_ENV = "production";
+      expect(invoiceMailConfigured()).toBe(false);
+      expect(invoiceMailCanSend()).toBe(false);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+      if (previousVitest === undefined) delete process.env.VITEST;
+      else process.env.VITEST = previousVitest;
+    }
   });
 });

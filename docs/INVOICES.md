@@ -23,7 +23,9 @@ Deleting a draft is not a status change. The number stays in `InvoiceNumber`.
 
 The link is `/v/<token>`. The token is 32 random bytes (256 bits), encoded as base64url.
 
-The database stores the SHA-256 hash, which is what the public page looks up. It also stores an AES-256-GCM sealed copy, keyed from `ULIXDESK_SESSION_SECRET`, so an owner or admin can copy the same link later and put it in an email. The plaintext is not stored and is not written to the audit log. This is the retrievable option: after a reload, Copy link still shows the current URL.
+The database stores the SHA-256 hash, which is what the public page looks up. It also stores an AES-256-GCM sealed copy, keyed from `INVOICE_LINK_KEY`, so an owner or admin can copy the same link later and put it in an email. The plaintext is not stored and is not written to the audit log. This is the retrievable option: after a reload, Copy link still shows the current URL.
+
+`INVOICE_LINK_KEY` is 32 bytes. Use base64 from `openssl rand -base64 32`, or 64 hex characters. If it is missing or not that format, creating or regenerating a link fails and says so. Opening a link someone already has still works, because that uses the hash. Showing the address again reports that the key is missing or does not match. Rotating `ULIXDESK_SESSION_SECRET` does not change the link key.
 
 Revoke clears the hash and the sealed copy. The old token then returns 404. Regenerate replaces both, which also invalidates the previous token.
 

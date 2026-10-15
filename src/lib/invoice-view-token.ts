@@ -28,15 +28,47 @@ export function viewTokenHashesMatch(computedHex: string, storedHex: string) {
   return timingSafeEqual(computed, stored);
 }
 
-function sealKey() {
-  const secret = process.env.ULIXDESK_SESSION_SECRET ?? "";
-  if (secret.length < 32) {
-    throw new Error("ULIXDESK_SESSION_SECRET is not set.");
+export type InvoiceLinkKeyStatus = "ok" | "missing" | "invalid";
+
+export class InvoiceLinkKeyError extends Error {
+  constructor(readonly status: Exclude<InvoiceLinkKeyStatus, "ok">) {
+    super(status);
+    this.name = "InvoiceLinkKeyError";
   }
-  return createHash("sha256").update(`ulixdesk-invoice-view-v1\0${secret}`).digest();
 }
 
-/** AES-256-GCM under the session secret. The public lookup uses the hash, not this blob. */
+/**
+ * `INVOICE_LINK_KEY` is 32 bytes. Hex is 64 characters. Base64 is the
+ * `openssl rand -base64 32` form, with or without the trailing `=`.
+ * Base64url is accepted too. Anything else is invalid.
+ */
+export function decodeInvoiceLinkKey(raw: string): Buffer | null {
+  const value = raw.trim();
+  if (/^[0-9a-fA-F]{64}$/.test(value)) {
+    const key = Buffer.from(value, "hex");
+    return key.length === 32 ? key : null;
+  }
+  if (!/^[A-Za-z0-9+/_-]{43}={0,1}$/.test(value)) return null;
+  const encoding = value.includes("-") || value.includes("_") ? "base64url" : "base64";
+  const key = Buffer.from(value, encoding);
+  return key.length === 32 ? key : null;
+}
+
+export function invoiceLinkKeyStatus(): InvoiceLinkKeyStatus {
+  const raw = process.env.INVOICE_LINK_KEY;
+  if (raw === undefined || raw.trim() === "") return "missing";
+  return decodeInvoiceLinkKey(raw) ? "ok" : "invalid";
+}
+
+function sealKey() {
+  const status = invoiceLinkKeyStatus();
+  if (status !== "ok") throw new InvoiceLinkKeyError(status);
+  const key = decodeInvoiceLinkKey(process.env.INVOICE_LINK_KEY ?? "");
+  if (!key) throw new InvoiceLinkKeyError("invalid");
+  return key;
+}
+
+/** AES-256-GCM under INVOICE_LINK_KEY. The public lookup uses the hash, not this blob. */
 export function sealViewToken(token: string) {
   const iv = randomBytes(12);
   const cipher = createCipheriv("aes-256-gcm", sealKey(), iv);
@@ -48,7 +80,7 @@ export function sealViewToken(token: string) {
   };
 }
 
-/** Null when the secret changed or the sealed copy was altered. */
+/** Null when the key is missing, invalid, different, or the sealed copy was altered. */
 export function openViewToken(nonce: string, sealed: string) {
   try {
     const iv = Buffer.from(nonce, "base64url");

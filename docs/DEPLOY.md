@@ -173,7 +173,15 @@ Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
 
 ### Invoice email
 
-Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works. Google Workspace uses `smtp.gmail.com`, port `587`, STARTTLS, and an app password in `INVOICE_SMTP_PASS`. The rules for void, reopen, and the client link are in [INVOICES.md](INVOICES.md).
+Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works. Google Workspace uses `smtp.gmail.com`, port `587`, STARTTLS, and an app password in `INVOICE_SMTP_PASS`.
+
+`INVOICE_LINK_KEY` seals the client link so it can be shown again. It is 32 bytes, as base64 or as 64 hex characters. Generate a base64 key with:
+
+```bash
+openssl rand -base64 32
+```
+
+Use a different value on staging and production. Leave it blank and creating a link fails with a message on the invoice. A link that was already shared still opens, because the public page looks up the hash. The rules for void, reopen, and the client link are in [INVOICES.md](INVOICES.md).
 
 After that first sign-in, on staging and on production:
 
