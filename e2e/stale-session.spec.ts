@@ -60,8 +60,24 @@ test("an invalid, expired, or deactivated session cookie signs every page out", 
 test("a session older than 15 minutes still opens after the container would have restarted", async ({
   page,
 }) => {
+  // Two refreshes used to both pass the 15-minute check and replace tokenHash.
+  // The loser, or the next navigation still holding the old cookie, looked
+  // signed out, and the refresh route then cleared the cookie. Rotation is now
+  // compare-and-swap, and the previous token stays valid for 60 seconds.
+  // This test also sets the timezone cookie so TimezoneSync does not refresh
+  // the router, and waits until the page is idle before aging the session again.
   test.setTimeout(120_000);
   const owner = await signIn(page.context(), prisma);
+  await page.goto("/login", { waitUntil: "domcontentloaded" });
+  const timeZone = await page.evaluate(() => Intl.DateTimeFormat().resolvedOptions().timeZone);
+  await page.context().addCookies([
+    {
+      name: "ulixdesk-timezone",
+      value: timeZone,
+      url: e2eOrigin,
+      sameSite: "Lax",
+    },
+  ]);
   for (const path of pages) {
     await prisma.session.updateMany({
       where: { userId: owner.id },
@@ -72,6 +88,7 @@ test("a session older than 15 minutes still opens after the container would have
       },
     });
     const response = await page.goto(path, { waitUntil: "domcontentloaded" });
+    await page.waitForLoadState("networkidle");
     expect(response?.status() ?? 0, path).toBeLessThan(500);
     await expect(page.getByRole("heading", { name: "Sign in" })).toHaveCount(0);
     expect(page.url()).not.toContain("Application error");

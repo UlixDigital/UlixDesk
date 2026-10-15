@@ -75,6 +75,8 @@ export const timeCopy = {
   stop: "Stop",
   stopping: "Stopping…",
   saving: "Saving…",
+  budgetReached:
+    "This project has reached its budget. New time can't be started or added until the budget resets or someone raises it.",
 } as const;
 
 export const NOTE_MAX = 2000;
@@ -94,7 +96,8 @@ export type TimerFailureCode =
   | "project-missing"
   | "note-too-long"
   | "not-running"
-  | "too-short";
+  | "too-short"
+  | "budget-reached";
 
 export function timerFailureMessage(code: TimerFailureCode) {
   switch (code) {
@@ -112,5 +115,7 @@ export function timerFailureMessage(code: TimerFailureCode) {
       return timeCopy.timerNone;
     case "too-short":
       return timeCopy.timerShort;
+    case "budget-reached":
+      return timeCopy.budgetReached;
   }
 }

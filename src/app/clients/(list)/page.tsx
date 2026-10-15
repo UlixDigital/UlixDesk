@@ -3,7 +3,6 @@ import Link from "next/link";
 import { ClientSearch } from "@/components/client-search";
 import { ClientsList, type ClientListItem } from "@/components/clients-list";
 import { EmptyState } from "@/components/empty-state";
-import { PlusIcon } from "@/components/icons";
 import {
   clientCountLabel,
   clientsHref,
@@ -15,7 +14,6 @@ import { countClientsByStatus, loadClientLists } from "@/lib/clients";
 import { cn } from "@/lib/cn";
 import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
-import { ui } from "@/lib/ui";
 
 export const metadata: Metadata = {
   title: "Clients",
@@ -45,23 +43,6 @@ export default async function ClientsPage({
 
   return (
     <div>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-ink">
-            Clients
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Companies and contacts you track time for.
-          </p>
-        </div>
-        {canManage ? (
-          <Link href="/clients/new" className={ui.primaryButton}>
-            <PlusIcon className="h-4 w-4" />
-            Add client
-          </Link>
-        ) : null}
-      </div>
-
       <ClientSearch status={status} query={query} />
 
       <div className="mt-6 border-b border-slate-200">

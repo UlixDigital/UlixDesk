@@ -9,6 +9,7 @@ import {
   TimesheetNav,
   WeeklyTimesheet,
 } from "@/components/timesheet-views";
+import { budgetAlertForViewer } from "@/lib/budgets";
 import { getWorkspaceTimeZone, listAllBillRates } from "@/lib/bill-rates";
 import { getCurrentUser } from "@/lib/session";
 import { attachRates } from "@/lib/rates";
@@ -57,6 +58,7 @@ export default async function TimesheetsPage({
     client?: string;
     notice?: string;
     user?: string;
+    alertProject?: string;
   }>;
 }) {
   const timeZone = await getWorkspaceTimeZone();
@@ -105,6 +107,14 @@ export default async function TimesheetsPage({
   const priced = attachRates(actor.role, entries, rates, timeZone);
   const filtered = Boolean(projectId || clientId);
   const notice = parseNotice(params.notice);
+  const budgetWarning =
+    notice === "budget" || notice === "budget-overlap"
+      ? await budgetAlertForViewer({
+          userId: actor.id,
+          projectId: params.alertProject ?? "",
+          at: zonedDayStart(date, timeZone),
+        })
+      : null;
   const daily =
     view === "day"
       ? buildDailyTimesheet({ date, timeZone, entries: priced })
@@ -200,12 +210,20 @@ export default async function TimesheetsPage({
         }
       />
 
-      {notice === "overlap" ? (
+      {notice === "overlap" || notice === "budget-overlap" ? (
         <p
           role="status"
           className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
         >
           {timeCopy.overlap}
+        </p>
+      ) : null}
+      {budgetWarning ? (
+        <p
+          role="status"
+          className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950"
+        >
+          {budgetWarning}
         </p>
       ) : null}
       {notice === "running" ? (

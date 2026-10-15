@@ -299,13 +299,19 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - CSV export of the same filters, grouping, and columns. Amounts stay in their own currency columns. Members see only their own rows and no amounts, in the page and in the CSV.
 - See [docs/REPORTS.md](docs/REPORTS.md).
 
+## What shipped in Slice 12
+
+- Budgets on projects and clients, by hours or by cost in the client's currency. Total, weekly, or monthly, with an optional start date, in the workspace timezone. See [docs/BUDGETS.md](docs/BUDGETS.md).
+- In-app alerts at a percent of the budget. An optional project hard stop blocks new timers and manual entries once the budget is already used up, for the web app, the Chrome extension, and the API.
+- A Budgets report at `/reports/budgets`, with CSV and PDF export. Members see hours progress for projects they track, and no money.
+
 ## Deferred
 
 - Chrome Web Store publishing
 - Screenshots, activity percentage, and idle tracking
 - Approvals and reasons
 - Saved reports and PDF export
-- Pay rates, budgets, and to-dos
+- Pay rates and to-dos
 - Import, duplicate, and transfer
 - Invoicing, auto-invoicing, invoice notes, tax, and net terms
 - Email delivery for invites

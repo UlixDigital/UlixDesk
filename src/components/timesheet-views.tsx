@@ -156,7 +156,7 @@ export function WeeklyTimesheet({
 }) {
   const moneyCaption = showMoney ? formatMoneyTotals(moneyTotals).join(", ") : "";
   return (
-    <div className="mt-4 min-w-0 max-w-full overflow-hidden">
+    <div className="mt-4 min-w-0 max-w-full overflow-hidden [contain:inline-size]">
       {showMoney ? <MoneySummary totals={moneyTotals} unrated={unrated} /> : null}
     <div className="mt-4 w-0 min-w-full max-w-full overflow-x-auto overscroll-x-contain rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
       <table className="w-full min-w-[52rem] table-fixed border-separate border-spacing-0 text-sm">

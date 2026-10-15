@@ -80,7 +80,7 @@ export function TimerControls({
 
   const elapsed = timer ? now - new Date(timer.startedAt).getTime() : 0;
   const overLong = Boolean(timer && elapsed > MAX_ENTRY_MS);
-  const warnings = timer ? [] : (stopState.warnings ?? []);
+  const warnings = timer ? (startState.warnings ?? []) : (stopState.warnings ?? []);
 
   return (
     <div>

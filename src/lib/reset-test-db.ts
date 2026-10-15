@@ -19,6 +19,7 @@ export async function resetTestDatabase() {
   clearRequestTestState();
   await deleteTimeChangesForTests(prisma);
   await prisma.savedReport.deleteMany();
+  await prisma.budget.deleteMany();
   await prisma.billRate.deleteMany();
   await prisma.workspaceSettings.deleteMany();
   await prisma.runningTimer.deleteMany();

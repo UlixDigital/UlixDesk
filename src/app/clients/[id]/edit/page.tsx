@@ -7,9 +7,13 @@ import { ClientForm } from "@/components/client-form";
 import { RestoreButton } from "@/components/client-row-actions";
 import { ClientProjects } from "@/components/client-projects";
 import { BillRateForm } from "@/components/bill-rate-form";
+import { BudgetForm } from "@/components/budget-form";
+import { BudgetProgressView } from "@/components/budget-progress";
 import { RateHistory } from "@/components/rate-history";
 import { TrackedTime } from "@/components/tracked-time";
 import { authCopy } from "@/lib/auth-copy";
+import { budgetCopy } from "@/lib/budget-copy";
+import { budgetFormValues, clientBudgetProgress } from "@/lib/budgets";
 import { clientsHref } from "@/lib/client-display";
 import { getWorkspaceTimeZone, listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
 import { getClient } from "@/lib/clients";
@@ -41,15 +45,17 @@ export default async function EditClientPage({ params }: EditPageProps) {
   const { id } = await params;
   const client = await getClient(id);
   if (!client) notFound();
-  const [projects, trackedMs, clientRates, memberRates, members, money, timeZone] = await Promise.all([
-    listProjectsForClient(client.id),
-    trackedMsForClient(client.id),
-    listRateHistory({ scope: "client", clientId: client.id }),
-    listRateHistory({ scope: "member", clientId: client.id }),
-    listActiveUsers(),
-    summarizeBillableMoney({ clientId: client.id }, user.role),
-    getWorkspaceTimeZone(),
-  ]);
+  const [projects, trackedMs, clientRates, memberRates, members, money, timeZone, progress] =
+    await Promise.all([
+      listProjectsForClient(client.id),
+      trackedMsForClient(client.id),
+      listRateHistory({ scope: "client", clientId: client.id }),
+      listRateHistory({ scope: "member", clientId: client.id }),
+      listActiveUsers(),
+      summarizeBillableMoney({ clientId: client.id }, user.role),
+      getWorkspaceTimeZone(),
+      clientBudgetProgress({ clientId: client.id, role: user.role }),
+    ]);
   const today = todayInTimeZone(timeZone);
 
   const archived = client.archivedAt !== null;
@@ -88,6 +94,23 @@ export default async function EditClientPage({ params }: EditPageProps) {
       }
       after={
         <div className="space-y-8">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6">
+            <h2 className="text-lg font-semibold text-ink">{budgetCopy.title}</h2>
+            <p className="mt-1 text-sm text-slate-600">{budgetCopy.clientBody}</p>
+            {progress ? (
+              <div className="mt-4">
+                <BudgetProgressView progress={progress} />
+              </div>
+            ) : null}
+            <BudgetForm
+              key={client.id}
+              scope="client"
+              clientId={client.id}
+              currency={client.currency}
+              initial={budgetFormValues(progress?.record ?? null)}
+              hasBudget={progress !== null}
+            />
+          </section>
           <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6">
             <h2 className="text-lg font-semibold text-ink">{rateCopy.clientRateTitle}</h2>
             <p className="mt-1 text-sm text-slate-600">{rateCopy.clientRateBody}</p>

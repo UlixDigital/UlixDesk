@@ -245,13 +245,19 @@ describe("time activity layout", () => {
       ],
     });
     expect(kinds(pages[0])).toEqual(["heading", "columns", "group", "detail", "detail"]);
-    expect(kinds(pages[1])).toEqual(["heading", "columns", "detail", "total"]);
+    expect(kinds(pages[1])).toEqual(["heading", "columns", "group", "detail", "total"]);
     expect(pages[1]?.find((slice) => slice.type === "heading")).toMatchObject({
       client: "Acme",
       continued: true,
     });
-    expect(pages[0]?.some((slice) => slice.type === "group" && slice.id === "g1")).toBe(true);
-    expect(pages[1]?.some((slice) => slice.type === "group")).toBe(false);
+    expect(pages[0]?.find((slice) => slice.type === "group")).toMatchObject({
+      id: "g1",
+      continued: false,
+    });
+    expect(pages[1]?.find((slice) => slice.type === "group")).toMatchObject({
+      id: "g1",
+      continued: true,
+    });
   });
 
   it("moves a group that would be orphaned at the bottom of the page", () => {
@@ -277,7 +283,10 @@ describe("time activity layout", () => {
     expect(pages[1]?.find((slice) => slice.type === "heading")).toMatchObject({
       continued: true,
     });
-    expect(pages[1]?.find((slice) => slice.type === "group")?.id).toBe("g2");
+    expect(pages[1]?.find((slice) => slice.type === "group")).toMatchObject({
+      id: "g2",
+      continued: false,
+    });
   });
 
   it("draws the reference header, totals, and a continuation page", async () => {

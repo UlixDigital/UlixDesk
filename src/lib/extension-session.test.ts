@@ -91,6 +91,13 @@ describe("extension sessions", () => {
     const manual = await createAccessToken("Work laptop", signedIn.user.id);
     const { currentSessionTokenHash } = await import("@/lib/session");
     const keep = await currentSessionTokenHash();
+    await prisma.session.update({
+      where: { tokenHash: keep ?? "" },
+      data: {
+        previousTokenHash: "c".repeat(64),
+        previousTokenExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
 
     const saved = await changeOwnPassword({
       userId: signedIn.user.id,
@@ -103,6 +110,8 @@ describe("extension sessions", () => {
     const sessions = await prisma.session.findMany({ where: { userId: signedIn.user.id } });
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.tokenHash).toBe(keep);
+    expect(sessions[0]?.previousTokenHash).toBeNull();
+    expect(sessions[0]?.previousTokenExpiresAt).toBeNull();
     expect(await findUsableExtensionAccess(extension.accessToken)).toBeNull();
     expect(await findUsableAccessToken(manual.token)).toBeNull();
     expect(
@@ -111,6 +120,37 @@ describe("extension sessions", () => {
     expect(
       (await prisma.accessToken.findUniqueOrThrow({ where: { id: manual.record.id } })).revokedAt,
     ).not.toBeNull();
+  });
+
+  it("keeps this browser signed in when the password change presents the grace token", async () => {
+    const signedIn = await signInAs("member", "grace-password@ulix.test");
+    setTestSessionToken(signedIn.cookie);
+    const { currentSessionTokenHash } = await import("@/lib/session");
+    const current = await currentSessionTokenHash();
+    expect(current).toBeTruthy();
+    const grace = "a".repeat(64);
+    await prisma.session.update({
+      where: { tokenHash: current ?? "" },
+      data: {
+        previousTokenHash: grace,
+        previousTokenExpiresAt: new Date(Date.now() + 60_000),
+      },
+    });
+    await createSession(signedIn.user.id);
+
+    const saved = await changeOwnPassword({
+      userId: signedIn.user.id,
+      currentPassword: "test-password-10",
+      nextPassword: "new-password-10",
+      keepSessionTokenHash: grace,
+    });
+    expect(saved).toEqual({ ok: true });
+
+    const sessions = await prisma.session.findMany({ where: { userId: signedIn.user.id } });
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]?.tokenHash).toBe(grace);
+    expect(sessions[0]?.previousTokenHash).toBeNull();
+    expect(sessions[0]?.previousTokenExpiresAt).toBeNull();
   });
 
   it("revokes extension sign-ins and manual access tokens when a set-password link is used", async () => {
