@@ -124,8 +124,8 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
 
     await page.goto("/invoices");
     await expect(page.getByRole("link", { name: /^LE\d+/ })).toBeVisible();
-    await expect(page.getByText("WSI Web Enhancers")).toBeVisible();
-    await expect(page.getByText("Open")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "WSI Web Enhancers" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "Open" })).toBeVisible();
     await shot(page, shots, "invoice-list");
 
     await page.goto(`/timesheets/${entries[0]}/edit`);

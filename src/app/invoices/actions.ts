@@ -13,8 +13,6 @@ export type InvoiceFormState = {
   notice: string | null;
 };
 
-const idle: InvoiceFormState = { error: null, notice: null };
-
 export async function saveInvoiceSettingsAction(
   _previous: InvoiceFormState,
   formData: FormData,
@@ -87,5 +85,3 @@ export async function deleteDraftAction(_previous: InvoiceFormState, formData: F
   revalidatePath("/invoices");
   redirect("/invoices");
 }
-
-export { idle };

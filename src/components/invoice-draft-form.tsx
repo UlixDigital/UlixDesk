@@ -196,16 +196,32 @@ export function InvoiceDraftForm({
         {invoiceCopy.bank}
         <textarea id="invoice-bank" name="bankDetails" defaultValue={bankDetails} rows={6} className={`${ui.input} mt-1.5`} />
       </label>
+      <input type="hidden" name="intent" value="save" />
       <div className="flex flex-wrap gap-3">
-        <button type="submit" name="intent" value="save" className={ui.primaryButton} disabled={pending}>
+        <button
+          type="submit"
+          className={ui.primaryButton}
+          disabled={pending}
+          onClick={(event) => setIntent(event.currentTarget.form, "save")}
+        >
           {pending ? invoiceCopy.saving : invoiceCopy.save}
         </button>
-        <button type="submit" name="intent" value="issue" className={ui.secondaryButton} disabled={pending}>
+        <button
+          type="submit"
+          className={ui.secondaryButton}
+          disabled={pending}
+          onClick={(event) => setIntent(event.currentTarget.form, "issue")}
+        >
           {invoiceCopy.issue}
         </button>
       </div>
     </form>
   );
+}
+
+function setIntent(form: HTMLFormElement | null, intent: string) {
+  const field = form?.elements.namedItem("intent");
+  if (field instanceof HTMLInputElement) field.value = intent;
 }
 
 function update(
