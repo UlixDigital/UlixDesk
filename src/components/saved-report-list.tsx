@@ -3,11 +3,7 @@
 import { useActionState, useId, useRef } from "react";
 import { useFormStatus } from "react-dom";
 import Link from "next/link";
-import {
-  deleteSavedReportAction,
-  idleSavedReportState,
-  renameSavedReportAction,
-} from "@/app/reports/actions";
+import { deleteSavedReportAction, renameSavedReportAction } from "@/app/reports/actions";
 import { reportCopy } from "@/lib/report-copy";
 import { ui, textInputClass } from "@/lib/ui";
 
@@ -68,7 +64,7 @@ export function SavedReportList({ items }: { items: SavedReportListItem[] }) {
 
 function RenameSavedReport({ id, name }: { id: string; name: string }) {
   const inputId = useId();
-  const [state, formAction] = useActionState(renameSavedReportAction, idleSavedReportState);
+  const [state, formAction] = useActionState(renameSavedReportAction, { error: "", code: "" });
   return (
     <form action={formAction} className="flex flex-wrap items-center gap-2">
       <input type="hidden" name="id" value={id} readOnly />
@@ -106,7 +102,7 @@ function DeleteSavedReport({ id, name }: { id: string; name: string }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descriptionId = useId();
-  const [state, formAction] = useActionState(deleteSavedReportAction, idleSavedReportState);
+  const [state, formAction] = useActionState(deleteSavedReportAction, { error: "", code: "" });
   return (
     <>
       <button type="button" className={ui.secondaryButton} onClick={() => dialogRef.current?.showModal()}>

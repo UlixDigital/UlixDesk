@@ -86,9 +86,10 @@ test("owners see amounts and members see only their own time", async ({ browser 
 
     await ownerPage.getByRole("link", { name: "Time & Activity" }).click();
     await expect(ownerPage.getByRole("heading", { name: "Time & Activity" })).toBeVisible();
-    await expect(ownerPage.getByRole("form", { name: "Filters" }).getByLabel("Date range")).toBeVisible();
-    await expect(ownerPage.getByLabel("Member")).toBeVisible();
-    await expect(ownerPage.getByLabel("Client")).toBeVisible();
+    const filters = ownerPage.getByRole("form", { name: "Filters" });
+    await expect(filters.getByLabel("Date range")).toBeVisible();
+    await expect(filters.getByLabel("Member")).toBeVisible();
+    await expect(filters.getByLabel("Client")).toBeVisible();
     await expect(ownerPage.getByText("USD 50.00").first()).toBeVisible();
     await expect(ownerPage.getByText("JPY 1,500").first()).toBeVisible();
     await expect(ownerPage.getByText("Owner only note")).toHaveCount(0);

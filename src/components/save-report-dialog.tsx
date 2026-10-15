@@ -2,7 +2,7 @@
 
 import { useActionState, useId, useRef } from "react";
 import { useFormStatus } from "react-dom";
-import { idleSavedReportState, saveSavedReportAction } from "@/app/reports/actions";
+import { saveSavedReportAction } from "@/app/reports/actions";
 import { reportCopy } from "@/lib/report-copy";
 import { ui, textInputClass } from "@/lib/ui";
 
@@ -16,7 +16,7 @@ export function SaveReportDialog({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const nameId = useId();
-  const [state, formAction] = useActionState(saveSavedReportAction, idleSavedReportState);
+  const [state, formAction] = useActionState(saveSavedReportAction, { error: "", code: "" });
 
   return (
     <>

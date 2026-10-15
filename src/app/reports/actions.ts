@@ -22,8 +22,6 @@ export type SavedReportFormState = {
   code: string;
 };
 
-export const idleSavedReportState: SavedReportFormState = { error: "", code: "" };
-
 function fail(code: SavedReportCode, error: string): SavedReportFormState {
   return { error, code };
 }
