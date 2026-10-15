@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeActivityFilters,
   parseReportSearchParams,
   rangeForPreset,
+  reportDescription,
   reportHref,
   resolveColumns,
 } from "@/lib/report-query";
@@ -50,6 +52,18 @@ describe("report query", () => {
     );
   });
 
+  it("opens daily as one row per day and omits that default group from the URL", () => {
+    const daily = parseReportSearchParams({}, today, "daily");
+    expect(daily.query.groupBy).toBe("date");
+    expect(reportHref("daily", daily.query)).toBe("/reports/daily");
+    const activity = parseReportSearchParams({}, today, "time-activity");
+    expect(activity.query.groupBy).toBe("project");
+    expect(reportDescription("time-activity", false)).toBe(
+      "Hours and billable hours for the range. Activity percentage is not tracked.",
+    );
+    expect(reportDescription("time-activity", true)).toContain("Owners and admins also see the amount");
+  });
+
   it("drops amount columns for members and keeps the defaults when columns are absent", () => {
     expect(resolveColumns("time-activity", null, false, false)).toEqual(["hours", "billableHours"]);
     expect(resolveColumns("time-activity", ["hours", "amount", "member"], false, false)).toEqual([
@@ -57,5 +71,26 @@ describe("report query", () => {
     ]);
     expect(resolveColumns("work-sessions", null, true, true)).toContain("member");
     expect(resolveColumns("work-sessions", null, false, false)).not.toContain("member");
+  });
+
+  it("describes the filters the Time & Activity PDF applies, without group by", () => {
+    expect(
+      describeActivityFilters({
+        showMember: true,
+        memberName: "Sam Rivera",
+        clientName: "Acme",
+        projectName: null,
+        billable: "billable",
+      }),
+    ).toBe("Member: Sam Rivera · Client: Acme · Billable: Billable");
+    expect(
+      describeActivityFilters({
+        showMember: false,
+        memberName: "Sam Rivera",
+        clientName: null,
+        projectName: null,
+        billable: "all",
+      }),
+    ).toBe("");
   });
 });

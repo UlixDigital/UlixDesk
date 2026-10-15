@@ -14,28 +14,18 @@ export function firstSearchParam(value: string | string[] | undefined | null): s
   return (value ?? "").trim();
 }
 
-function pad(value: number) {
-  return String(value).padStart(2, "0");
-}
-
 /**
- * Keep a real calendar date inside 2000–2100.
- * `9999-12-31` becomes `2100-12-31`. A day that does not exist in the
- * clamped year (29 Feb 2100) moves back to the last day of that month.
+ * Keep a real calendar date inside 2000-01-01 through 2100-12-31.
+ * Anything earlier, including years 0001–0099, becomes 2000-01-01.
+ * Anything later becomes 2100-12-31. The month and day are not kept.
  * Returns null when `value` is not a real `YYYY-MM-DD` date.
  */
 export function clampCalendarDate(value: string): string | null {
   const trimmed = value.trim();
   if (!isRealCalendarDate(trimmed)) return null;
-  const year = Number(trimmed.slice(0, 4));
-  const month = Number(trimmed.slice(5, 7));
-  const day = Number(trimmed.slice(8, 10));
-  const clampedYear = Math.min(SEARCH_YEAR_MAX, Math.max(SEARCH_YEAR_MIN, year));
-  if (clampedYear === year) return trimmed;
-  const lastDay = new Date(Date.UTC(clampedYear, month, 0)).getUTCDate();
-  const clampedDay = Math.min(day, lastDay);
-  const result = `${clampedYear}-${pad(month)}-${pad(clampedDay)}`;
-  return isRealCalendarDate(result) ? result : null;
+  if (trimmed < `${SEARCH_YEAR_MIN}-01-01`) return `${SEARCH_YEAR_MIN}-01-01`;
+  if (trimmed > `${SEARCH_YEAR_MAX}-12-31`) return `${SEARCH_YEAR_MAX}-12-31`;
+  return trimmed;
 }
 
 /** A date query param, or `fallback` when it is missing or not a real date. */

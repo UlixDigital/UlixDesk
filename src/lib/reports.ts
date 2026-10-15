@@ -1,7 +1,7 @@
 import type { Prisma } from "@prisma/client";
 import { toCsv } from "@/lib/csv";
 import { prisma } from "@/lib/db";
-import { formatMoney, sumMoney, type MoneyTotal } from "@/lib/money";
+import { formatMoney, formatMoneyNumber, sumMoney, type MoneyTotal } from "@/lib/money";
 import { amountColumnLabel, reportCopy } from "@/lib/report-copy";
 import {
   REPORT_PAGE_SIZE,
@@ -18,7 +18,7 @@ import {
   portionIsUnrated,
   type ResolvedRate,
 } from "@/lib/rates";
-import { formatTrackedDuration, formatDayHeading, formatWeekHeading } from "@/lib/timesheet";
+import { decimalHours, formatTrackedDuration, formatDayHeading, formatWeekHeading } from "@/lib/timesheet";
 import { formatChangeWhen } from "@/lib/time-change-display";
 import {
   startOfWeekDate,
@@ -41,6 +41,10 @@ export type SourceEntry = {
   projectBillable: boolean;
   note: string | null;
   rate: ResolvedRate | null;
+  /** manual or timer. Omitted on older fixtures; treated as timer. */
+  source?: "manual" | "timer";
+  /** True when a time-change row records an edit of this entry. */
+  edited?: boolean;
 };
 
 export type ReportSlice = {
@@ -54,6 +58,8 @@ export type ReportSlice = {
   startedAt: Date;
   endedAt: Date;
   note: string;
+  source: "manual" | "timer";
+  edited: boolean;
   date: string;
   weekStart: string;
   durationMs: number;
@@ -64,10 +70,18 @@ export type ReportSlice = {
 
 export type ReportColumn = { id: string; label: string };
 
+export type ReportCsv = {
+  columns: ReportColumn[];
+  rows: string[][];
+  totals: string[] | null;
+};
+
 export type BuiltReport = {
   columns: ReportColumn[];
   rows: Array<{ id: string; cells: Record<string, string> }>;
   totals: Record<string, string> | null;
+  /** Numeric hours and amounts. The screen keeps the formatted cells. */
+  csv: ReportCsv;
   totalRows: number;
   page: number;
   pageCount: number;
@@ -98,7 +112,9 @@ function named(entry: SourceEntry): Omit<ReportSlice, "date" | "weekStart" | "du
     clientName: entry.clientName?.trim() || reportCopy.noClient,
     startedAt: entry.startedAt,
     endedAt: entry.endedAt,
-    note: entry.note?.trim() ?? "",
+    note: entry.note ?? "",
+    source: entry.source === "manual" ? "manual" : "timer",
+    edited: entry.edited === true,
   };
 }
 
@@ -302,15 +318,75 @@ export function buildReport(input: {
           ...summaryCells(totalsSource, columns),
           ...(bucket ? { bucket: reportCopy.total, group: "" } : { group: reportCopy.total }),
         };
+  const csvColumns = summaryCsvColumns(columns);
+  const csv = {
+    columns: csvColumns,
+    rows: aggs.map((row, index) =>
+      summaryCsvLine(row, rows[index]?.cells ?? {}, csvColumns, false, input.showMoney),
+    ),
+    totals:
+      rows.length === 0
+        ? null
+        : summaryCsvLine(totalsSource, totals ?? {}, csvColumns, true, input.showMoney),
+  };
   return {
     columns,
     rows,
     totals,
+    csv,
     totalRows: rows.length,
     page: 1,
     pageCount: 1,
     pageSize: Math.max(rows.length, 1),
   };
+}
+
+function summaryCsvColumns(columns: ReportColumn[]): ReportColumn[] {
+  const kept = columns
+    .filter((column) => column.id !== "noAmount" && column.id !== "amount")
+    .map((column) => ({
+      id: column.id,
+      label:
+        column.id === "hours"
+          ? reportCopy.hoursDecimal
+          : column.id === "billableHours"
+            ? reportCopy.billableHoursDecimal
+            : column.label,
+    }));
+  return [...kept, { id: "status", label: reportCopy.status }];
+}
+
+function summaryCsvLine(
+  row: { durationMs: number; billableMs: number; amounts: MoneyTotal[]; unrated: boolean },
+  cells: Record<string, string>,
+  columns: ReportColumn[],
+  totals = false,
+  showMoney = true,
+) {
+  return columns.map((column) => {
+    if (column.id === "hours") return decimalHours(row.durationMs);
+    if (column.id === "billableHours") return decimalHours(row.billableMs);
+    if (column.id.startsWith("amount:")) {
+      return amountNumber(row.amounts, column.id.slice("amount:".length));
+    }
+    if (column.id === "status") return totals ? "" : rowStatus(row, showMoney);
+    return cells[column.id] ?? "";
+  });
+}
+
+function amountNumber(amounts: MoneyTotal[], currency: string) {
+  const match = amounts.find((amount) => amount.currency === currency);
+  return match ? formatMoneyNumber(match.amountMinor, match.currency) : "";
+}
+
+function rowStatus(
+  row: { durationMs: number; billableMs: number; unrated: boolean },
+  showMoney: boolean,
+) {
+  if (showMoney && row.unrated) return reportCopy.statusNoRate;
+  if (row.durationMs > 0 && row.billableMs === 0) return reportCopy.statusNonBillable;
+  if (row.billableMs > 0) return reportCopy.statusBillable;
+  return "";
 }
 
 function buildSessions(
@@ -354,7 +430,7 @@ function buildSessions(
     const bSlice = sessionSortKey(b, input.groupBy, input.timeZone);
     const byGroup = aSlice.localeCompare(bSlice, "en");
     if (byGroup !== 0) return byGroup;
-    const byTime = b.startedAt.getTime() - a.startedAt.getTime();
+    const byTime = a.startedAt.getTime() - b.startedAt.getTime();
     if (byTime !== 0) return byTime;
     return a.id.localeCompare(b.id);
   });
@@ -373,14 +449,34 @@ function buildSessions(
     }
     if (selected.has("project")) cells.project = name.projectName;
     if (selected.has("client")) cells.client = name.clientName;
-    if (selected.has("notes")) cells.notes = name.note || "—";
+    if (selected.has("notes")) cells.notes = name.note === "" ? "—" : name.note;
     if (selected.has("billable")) cells.billable = sessionBillable(entry);
     return { id: entry.id, cells };
+  });
+  const csvColumns = columns.map((column) =>
+    column.id === "duration" ? { id: column.id, label: reportCopy.durationDecimal } : column,
+  );
+  const csvRows = visible.map((entry) => {
+    const name = named(entry);
+    return csvColumns.map((column) => {
+      if (column.id === "member") return name.userName;
+      if (column.id === "start") return formatChangeWhen(entry.startedAt, input.timeZone);
+      if (column.id === "end") return formatChangeWhen(entry.endedAt, input.timeZone);
+      if (column.id === "duration") {
+        return decimalHours(entry.endedAt.getTime() - entry.startedAt.getTime());
+      }
+      if (column.id === "project") return name.projectName;
+      if (column.id === "client") return name.clientName;
+      if (column.id === "notes") return entry.note ?? "";
+      if (column.id === "billable") return sessionBillable(entry);
+      return "";
+    });
   });
   return {
     columns,
     rows,
     totals: null,
+    csv: { columns: csvColumns, rows: csvRows, totals: null },
     totalRows: sorted.length,
     page,
     pageCount,
@@ -398,12 +494,9 @@ function sessionSortKey(entry: SourceEntry, groupBy: GroupBy, timeZone: string) 
 }
 
 export function reportToCsv(report: BuiltReport) {
-  const header = report.columns.map((column) => column.label);
-  const body = report.rows.map((row) => report.columns.map((column) => row.cells[column.id] ?? ""));
-  const totals = report.totals
-    ? [report.columns.map((column) => report.totals?.[column.id] ?? "")]
-    : [];
-  return toCsv([header, ...body, ...totals]);
+  const header = report.csv.columns.map((column) => column.label);
+  const totals = report.csv.totals ? [report.csv.totals] : [];
+  return toCsv([header, ...report.csv.rows, ...totals]);
 }
 
 export type LoadedReport =
@@ -486,6 +579,16 @@ export async function loadReportEntries(input: {
     },
     orderBy: [{ startedAt: "asc" }, { id: "asc" }],
   });
+  const ids = rows.map((row) => row.id);
+  const editedRows =
+    ids.length === 0
+      ? []
+      : await prisma.timeChange.findMany({
+          where: { timeEntryId: { in: ids }, action: "edited" },
+          select: { timeEntryId: true },
+          distinct: ["timeEntryId"],
+        });
+  const editedIds = new Set(editedRows.map((row) => row.timeEntryId));
   const source: SourceEntry[] = rows.flatMap((row) => {
     if (!row.endedAt) return [];
     return [
@@ -503,6 +606,8 @@ export async function loadReportEntries(input: {
         projectBillable: row.project.billable,
         note: row.note,
         rate: null,
+        source: row.source === "manual" ? "manual" : "timer",
+        edited: editedIds.has(row.id),
       },
     ];
   });

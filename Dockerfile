@@ -9,10 +9,28 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/*
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+# braces is overridden to the depth-guarded copy. npm ci needs it on disk.
+COPY vendor/braces ./vendor/braces
 RUN npm ci
 COPY . .
+# pdfkit stays external. Copy its runtime closure so the slim image can
+# embed the logo and the standard fonts without Chromium.
+RUN node scripts/copy-pdfkit-runtime.mjs /opt/pdfkit-runtime \
+  && du -sh /opt/pdfkit-runtime
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npx prisma generate && npm run build
+RUN npx prisma generate && npm run build \
+  && find node_modules/@prisma/client/runtime -name '*.wasm-base64.*' -delete \
+  && find node_modules/@prisma/client/runtime -name '*.map' -delete \
+  && find node_modules/@prisma/engines -type f -name 'libquery_engine-*' -delete \
+  && find node_modules/@prisma/engines -type f -name 'query-engine-*' -delete \
+  && find node_modules/@prisma/engines -type f -name 'schema-engine-*' ! -name 'schema-engine-debian-openssl-3.0.x' -delete \
+  && rm -rf .next/standalone/node_modules/@img/sharp-libvips-linuxmusl-x64 \
+    .next/standalone/node_modules/@img/sharp-linuxmusl-x64 \
+    .next/standalone/node_modules/@img/sharp-wasm32 \
+    .next/standalone/node_modules/typescript \
+  && if [ -d .next/standalone/node_modules/@prisma ]; then \
+    find .next/standalone/node_modules/@prisma \( -name '*.wasm-base64.*' -o -name '*.map' \) -delete; \
+  fi
 
 # Prisma's migrate CLI is only needed at startup. Keep it out of the Next standalone tree.
 FROM node:22-bookworm-slim AS migrate
@@ -21,7 +39,12 @@ RUN node -e "const [major,minor]=process.versions.node.split('.').map(Number); i
 RUN apt-get update \
   && apt-get install -y --no-install-recommends openssl ca-certificates \
   && rm -rf /var/lib/apt/lists/*
-RUN npm init -y && npm install --omit=dev --no-package-lock prisma@6.19.3
+RUN npm init -y && npm install --omit=dev --no-package-lock prisma@6.19.3 \
+  && find node_modules -name 'libquery_engine-*' -delete \
+  && find node_modules -name '*.wasm-base64.*' -delete \
+  && find node_modules -name '*.map' -delete \
+  && find node_modules/@prisma/engines -type f -name 'schema-engine-*' ! -name 'schema-engine-debian-openssl-3.0.x' -delete \
+  && find node_modules/@prisma/engines -type f -name 'query-engine-*' -delete
 
 FROM node:22-bookworm-slim AS runner
 WORKDIR /app
@@ -32,7 +55,7 @@ ENV CHECKPOINT_DISABLE=1
 # Use the engine already copied from the build stage. Otherwise Prisma
 # tries to download one on startup and the container hangs without egress.
 ENV PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
-ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
 ENV HOME=/home/nextjs
 ENV HOSTNAME=0.0.0.0
 ENV PORT=3000
@@ -61,6 +84,7 @@ COPY --from=build --chown=nextjs:nodejs /app/node_modules/postgres-date ./node_m
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/postgres-interval ./node_modules/postgres-interval
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/pg-int8 ./node_modules/pg-int8
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/xtend ./node_modules/xtend
+COPY --from=build --chown=nextjs:nodejs /opt/pdfkit-runtime/ ./node_modules/
 COPY --from=migrate --chown=nextjs:nodejs /opt/migrate /opt/migrate
 USER nextjs
 EXPOSE 3000

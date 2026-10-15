@@ -69,5 +69,9 @@ describe("time zones", () => {
   it("rejects calendar dates that do not exist", () => {
     expect(isRealCalendarDate("2026-02-31")).toBe(false);
     expect(isRealCalendarDate("2026-10-09")).toBe(true);
+    expect(isRealCalendarDate("0004-02-29")).toBe(true);
+    expect(isRealCalendarDate("0001-01-01")).toBe(true);
+    expect(isRealCalendarDate("0099-12-31")).toBe(true);
+    expect(isRealCalendarDate("0000-01-01")).toBe(false);
   });
 });

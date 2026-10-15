@@ -12,14 +12,24 @@ export function isValidTimeZone(timeZone: string) {
   }
 }
 
+/**
+ * `Date.UTC` maps years 0–99 onto 1900–1999. Set the full year afterwards
+ * so 0001–0099 stay those years and can be clamped into the search range.
+ */
+function utcCalendarDate(year: number, month: number, day: number) {
+  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (year < 100) probe.setUTCFullYear(year, month - 1, day);
+  return probe;
+}
+
 export function isRealCalendarDate(date: string) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
   if (!match) return false;
   const year = Number(match[1]);
   const month = Number(match[2]);
   const day = Number(match[3]);
-  if (month < 1 || month > 12 || day < 1 || day > 31) return false;
-  const probe = new Date(Date.UTC(year, month - 1, day));
+  if (year < 1 || month < 1 || month > 12 || day < 1 || day > 31) return false;
+  const probe = utcCalendarDate(year, month, day);
   return (
     probe.getUTCFullYear() === year &&
     probe.getUTCMonth() === month - 1 &&

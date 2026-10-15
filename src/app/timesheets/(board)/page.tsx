@@ -140,7 +140,7 @@ export default async function TimesheetsPage({
     view === "day" ? daily!.rows.length === 0 && !running : weekly!.rows.length === 0;
 
   return (
-    <div>
+    <div className="min-w-0 max-w-full">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">

@@ -22,6 +22,7 @@ const eslintConfig = [
       "test-results/**",
       "blob-report/**",
       "extension/dist/**",
+      "vendor/**",
     ],
   },
   {

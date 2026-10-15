@@ -20,6 +20,8 @@ export { timeChangeSnapshot };
 export type { TimeChangeSnapshot, TimeChangeView };
 
 export const TIME_CHANGE_PAGE_SIZE = 50;
+/** Same cap as a report export, so a PDF cannot load an unbounded log. */
+export const TIME_CHANGE_EXPORT_CAP = 5000;
 
 export type ChangeContext = {
   actorId: string;
@@ -245,4 +247,20 @@ export async function listTimeChanges(input: {
     ];
   });
   return { items, total, page, pageSize, pageCount };
+}
+
+/** Every matching row for the PDF, or TIME_CHANGE_TOO_LARGE when the cap is passed. */
+export async function listTimeChangesForExport(
+  input: Omit<Parameters<typeof listTimeChanges>[0], "page" | "pageSize">,
+) {
+  const total = await prisma.timeChange.count({ where: timeChangeWhere(input) });
+  if (total > TIME_CHANGE_EXPORT_CAP) {
+    return { ok: false as const, code: "TIME_CHANGE_TOO_LARGE" as const };
+  }
+  const listed = await listTimeChanges({
+    ...input,
+    page: 1,
+    pageSize: Math.max(total, 1),
+  });
+  return { ok: true as const, items: listed.items };
 }

@@ -2,6 +2,11 @@
 # Create or update the non-owner app roles on an existing Postgres volume.
 # Run from /opt/ulixdesk after this release has migrated. Then point
 # DATABASE_URL at the app role and recreate the app. See docs/DEPLOY.md.
+#
+# docker-compose.prod.yml sets the project name to ulixdesk. Export
+# COMPOSE_PROJECT_NAME first when the running stack uses another name
+# (a local `docker compose up` from docker-compose.yml is ulixdesk-dev).
+# COMPOSE_PROJECT_NAME overrides the name in the compose file.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname "$0")/.." && pwd)

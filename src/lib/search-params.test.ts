@@ -24,9 +24,15 @@ describe("search params", () => {
 
   it("clamps years into 2000–2100 so the day bounds can be resolved", () => {
     expect(clampCalendarDate("9999-12-31")).toBe("2100-12-31");
-    expect(clampCalendarDate("1999-06-15")).toBe("2000-06-15");
-    expect(clampCalendarDate("2104-02-29")).toBe("2100-02-28");
+    expect(clampCalendarDate("1999-06-15")).toBe("2000-01-01");
+    expect(clampCalendarDate("0004-02-29")).toBe("2000-01-01");
+    expect(clampCalendarDate("0001-01-01")).toBe("2000-01-01");
+    expect(clampCalendarDate("0099-12-31")).toBe("2000-01-01");
+    expect(clampCalendarDate("2104-02-29")).toBe("2100-12-31");
+    expect(clampCalendarDate("2000-01-01")).toBe("2000-01-01");
+    expect(clampCalendarDate("2100-12-31")).toBe("2100-12-31");
     expect(clampCalendarDate("2026-10-15")).toBe("2026-10-15");
+    expect(clampCalendarDate("0000-01-01")).toBeNull();
     expect(clampCalendarDate("not-a-date")).toBeNull();
     expect(parseBoundedDate(["9999-12-31", "2026-01-01"], "2026-10-12")).toBe("2100-12-31");
     expect(parseBoundedDate("nope", "2026-10-12")).toBe("2026-10-12");

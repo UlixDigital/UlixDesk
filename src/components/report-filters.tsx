@@ -138,7 +138,7 @@ export function ReportFilters({
       </Field>
       <Field label={reportCopy.groupLabel} id="report-group">
         <select id="report-group" name="group" key={groupBy} defaultValue={groupBy} className={ui.input}>
-          <option value="member">{reportCopy.groupMember}</option>
+          {people.length > 0 ? <option value="member">{reportCopy.groupMember}</option> : null}
           <option value="client">{reportCopy.groupClient}</option>
           <option value="project">{reportCopy.groupProject}</option>
           <option value="date">{reportCopy.groupDate}</option>
