@@ -129,6 +129,24 @@ describe("invoice pdf layout", () => {
     expect(INVOICE_TOTAL_ROW - 16).toBeLessThanOrEqual(3);
   });
 
+  it("prints Overdue with Paid and Amount due when a balance is past due", async () => {
+    const input = referenceInvoicePdfInput(placeholderBank);
+    input.overdue = true;
+    input.totals = [
+      { label: "Total", value: "$100.00" },
+      { label: "Paid", value: "$40.00" },
+      { label: "Amount due", value: "$60.00", emphasize: true },
+    ];
+    const trace: Array<{ text: string; x: number; y: number }> = [];
+    await renderInvoicePdf(input, { compress: false, trace });
+    expect(trace.some((item) => item.text === "Overdue:")).toBe(true);
+    expect(trace.some((item) => item.text === "Yes")).toBe(true);
+    expect(trace.some((item) => item.text === "Paid")).toBe(true);
+    expect(trace.some((item) => item.text === "$40.00")).toBe(true);
+    expect(trace.some((item) => item.text === "Amount due")).toBe(true);
+    expect(trace.some((item) => item.text === "$60.00")).toBe(true);
+  });
+
   it("gives the notes column enough room for Ulix Digital", () => {
     const doc = new PDFDocument({ size: "LETTER", margin: 0 });
     doc.registerFont("DejaVu", "assets/fonts/DejaVuSans.ttf");

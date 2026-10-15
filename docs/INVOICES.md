@@ -11,7 +11,25 @@ Owners and admins manage invoices. Members have no invoice pages, and the invoic
 | open | draft | Reopen. No payment recorded. The time slices stay reserved on this draft. |
 | void | draft | Reopen. No payment recorded, every slice still fits its time entry, and no other invoice has an active slice on that window. |
 
-Paid and partially paid are stored statuses. This slice does not move an invoice into them, and it does not void or reopen them once a payment exists.
+Paid is the status once the amount due is 0. A partial payment leaves the status open and updates Paid and Amount due. `partially_paid` remains a stored status from the invoice table, and this slice does not write it. An invoice that is already `partially_paid` can still take a payment; afterward it is open (balance remaining) or paid (balance zero).
+
+## Payments
+
+Owners and admins record a payment on an open invoice. The amount is integer minor units of the invoice currency (the client's currency when the invoice was created). Each payment stores the paid-on date, the method (bank transfer, card, cash, check, or other), an optional note, and who recorded it. The invoice page lists that history. Correct replaces the amount, date, method, and note. Delete removes the row. Every record, correction, and deletion writes `InvoiceStatusEvent` with the actor, the status before and after, and a reason that names the amount.
+
+Paid and amount due are shown on the invoice page, the public client page, and the PDF. Amount due is total minus paid. The page, the public page, and the PDF show Overdue when the due date is before today in the workspace timezone (Asia/Colombo) and a balance remains. Due today is not overdue.
+
+An amount above the balance is refused. Nothing is stored, and no credit is created. Hubstaff's client invoice article describes recording the amount and the date, then showing the invoice as paid, and deleting that payment to unmark it ([How to Invoice Clients](https://support.hubstaff.com/invoice-clients/), "Recording Payments" and "Unmark an Invoice as Paid"). It does not describe accepting more than the balance. The team invoice article says an amount less than the balance stays partially paid until the balance is fully paid ([Team invoices](https://support.hubstaff.com/team-invoices/), "Recording payments on team invoices"). Credit notes in Hubstaff's own subscription bills are a different product ([How to read your Hubstaff subscription's invoice](https://support.hubstaff.com/how-to-read-your-hubstaff-subscriptions-invoice/)). UlixDesk does not record an overpayment in this slice.
+
+Void stays available only for an open invoice with no payment row and `paidMinor` of 0. A paid invoice is not open, so void is refused until every payment is deleted. Deleting the payments sets `paidMinor` back to 0 and the status back to open, and void is allowed again.
+
+Reopen stays available only for an open or void invoice with no payment recorded. A paid invoice cannot be reopened. Delete or reduce the payments first. A remaining balance returns the status to open, and reopen is still refused while any payment row exists. After the last payment is deleted, reopen follows the rules already in the table above.
+
+| From | To | When it is allowed |
+| --- | --- | --- |
+| open | open | A payment is recorded or corrected and a balance remains. |
+| open | paid | The amount due becomes 0. |
+| paid | open | A payment is deleted or reduced so a balance remains. |
 
 Void sets `InvoiceTime.active` to false. The edit lock ignores void, so the time can be changed. The overlap constraint `InvoiceTime_no_overlap` only covers active windows, so the time can be billed on another invoice. Reopen of a void invoice sets `active` back to true inside the same transaction. That is the check against `InvoiceTime_no_overlap`. If another invoice took the window, or the entry was edited so the slice no longer fits, reopen is refused and the void invoice stays void.
 
@@ -29,7 +47,7 @@ The database stores the SHA-256 hash, which is what the public page looks up. It
 
 Revoke clears the hash and the sealed copy. The old token then returns 404. Regenerate replaces both, which also invalidates the previous token.
 
-The public page and its PDF need no login. They show that invoice only: number, status, the client name and billing address, dates, lines, totals, notes, and bank details. They do not show other invoices, staff accounts, or the audit log. A draft does not load, even if a link exists. A void invoice loads and is marked void. Responses send `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`.
+The public page and its PDF need no login. They show that invoice only: number, status, the client name and billing address, dates, lines, totals, paid, amount due, overdue when the due date has passed with a balance, notes, and bank details. They do not show other invoices, staff accounts, or the audit log. A draft does not load, even if a link exists. A void invoice loads and is marked void. Responses send `X-Robots-Tag: noindex` and `Referrer-Policy: no-referrer`.
 
 The public page and PDF share a per-address limit of 60 requests a minute. The PDF answers 429. The HTML page shows the same limit message.
 

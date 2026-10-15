@@ -1,11 +1,14 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { getWorkspaceTimeZone } from "@/lib/bill-rates";
+import { isOverdue } from "@/lib/invoice-balance";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
 import { amountDueMinor, formatDurationHms, formatInvoiceDate, formatPercentBps } from "@/lib/invoice-money";
 import { findPublicInvoice, takePublicInvoiceRead } from "@/lib/invoice-public";
 import { formatMoney } from "@/lib/money";
 import { utcDateKey } from "@/lib/rates";
 import { requestIp } from "@/lib/request-headers";
+import { todayInTimeZone } from "@/lib/time-zone";
 import { ui } from "@/lib/ui";
 
 export const dynamic = "force-dynamic";
@@ -29,6 +32,12 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   const { token } = await params;
   const invoice = await findPublicInvoice(token);
   if (!invoice) notFound();
+  const dueMinor = amountDueMinor(invoice.totalMinor, invoice.paidMinor);
+  const overdue = isOverdue({
+    dueDate: utcDateKey(invoice.dueDate),
+    today: todayInTimeZone(await getWorkspaceTimeZone()),
+    dueMinor,
+  });
   const rows = [
     [invoiceCopy.subtotal, formatMoney(invoice.subtotalMinor, invoice.currency)],
     ...(invoice.discountMinor > 0 ? [[invoiceCopy.discount, formatMoney(-invoice.discountMinor, invoice.currency)]] : []),
@@ -37,7 +46,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
       : []),
     [invoiceCopy.total, formatMoney(invoice.totalMinor, invoice.currency)],
     [invoiceCopy.paid, formatMoney(invoice.paidMinor, invoice.currency)],
-    [invoiceCopy.amountDue, formatMoney(amountDueMinor(invoice.totalMinor, invoice.paidMinor), invoice.currency)],
+    [invoiceCopy.amountDue, formatMoney(dueMinor, invoice.currency)],
   ];
   return (
     <main id="public-invoice" className="mx-auto w-full max-w-3xl px-4 py-10">
@@ -51,6 +60,11 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
           {invoiceCopy.publicDownload}
         </a>
       </div>
+      {overdue ? (
+        <p id="public-invoice-overdue" role="status" className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
+          {invoiceCopy.publicOverdue}
+        </p>
+      ) : null}
       {invoice.status === "void" ? (
         <p role="status" className="mt-6 rounded-xl border border-slate-300 bg-slate-100 px-4 py-3 text-sm font-medium text-slate-800">
           {invoiceCopy.publicVoid}

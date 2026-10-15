@@ -12,6 +12,8 @@ Slice 10 adds a reports hub at `/reports`. Activity percentage and screenshots a
 | Work sessions | `/reports/work-sessions` | One row per time entry: start, end, duration, project, client, notes, and billable |
 | Time edits | `/reports/manual-time-edits` | The append-only edit log. See [TIME_CHANGES.md](TIME_CHANGES.md) |
 | Budgets | `/reports/budgets` | Budget, used, remaining, and percent. See [BUDGETS.md](BUDGETS.md) |
+| Client invoices | `/reports/client-invoices` | Issued client invoices: number, client, status, total, paid, due, due date, and overdue. Owners and admins only. |
+| Invoice aging | `/reports/invoice-aging` | Unpaid balances by client in Current, 1-30, 31-60, 61-90, and 90+ days past the due date. Owners and admins only. |
 
 The nav label is **Reports**. The hub heading is **Reports**. The time edit log heading is **Time edits**, the same words as its card on the hub.
 
@@ -111,8 +113,26 @@ Stored params are a plain object of strings. They are read back through the same
 | `SAVED_REPORT_SHARE` | A member tried to share a report. |
 | `SAVED_REPORT_NOT_FOUND` | The saved report is missing, or it is private and belongs to someone else. |
 | `SAVED_REPORT_FORBIDDEN` | The person can see the report but cannot rename or delete it. |
-| `SAVED_REPORT_TYPE` | The stored report type is not one of the five. |
+| `SAVED_REPORT_TYPE` | The stored report type is not one of the seven. A member who tries to save a client invoice or aging report gets this too. |
 | `SAVED_REPORT_PARAMS` | The stored params are not a plain object of strings. |
+
+## Client invoices and aging
+
+Both reports are for owners and admins. A member does not see the cards, cannot open the pages, and the CSV and PDF routes answer 403. A shared saved report of either type is hidden from members. Drafts and void invoices are excluded. Money stays in the invoice currency. Totals are per currency and are never added across currencies.
+
+Client invoices filter by client, status (all, open, or paid), and issue date. The date control is the same preset list as the other reports. The default preset is this month. Overdue is yes when the due date is before today in the workspace timezone and the amount due is above zero. Due today is not overdue. Each row keeps paid plus amount due equal to the total.
+
+Aging uses the end date of the same date control as the as-of date. The default preset is today, so the as-of date is today in Asia/Colombo. An invoice issued after that date is left out. Unpaid means the amount due is above zero. Days past due are calendar days from the due date to the as-of date:
+
+| Days past the due date | Bucket |
+| --- | --- |
+| 0 or not yet due | Current |
+| 1–30 | 1-30 |
+| 31–60 | 31-60 |
+| 61–90 | 61-90 |
+| 91 and later | 90+ |
+
+**Export CSV** and **Export PDF** use `/reports/client-invoices/export` and `/reports/invoice-aging/export`, with `format=pdf` for the PDF. The file is every matching row, not a page. CSV amounts are numbers. The PDF matches the screen and uses the same header and page numbers as the other table reports. Save report stores the preset, dates, client, and, for client invoices, the status.
 
 ## Not in this slice
 
