@@ -41,6 +41,10 @@ export type SourceEntry = {
   projectBillable: boolean;
   note: string | null;
   rate: ResolvedRate | null;
+  /** manual or timer. Omitted on older fixtures; treated as timer. */
+  source?: "manual" | "timer";
+  /** True when a time-change row records an edit of this entry. */
+  edited?: boolean;
 };
 
 export type ReportSlice = {
@@ -54,6 +58,8 @@ export type ReportSlice = {
   startedAt: Date;
   endedAt: Date;
   note: string;
+  source: "manual" | "timer";
+  edited: boolean;
   date: string;
   weekStart: string;
   durationMs: number;
@@ -107,6 +113,8 @@ function named(entry: SourceEntry): Omit<ReportSlice, "date" | "weekStart" | "du
     startedAt: entry.startedAt,
     endedAt: entry.endedAt,
     note: entry.note ?? "",
+    source: entry.source === "manual" ? "manual" : "timer",
+    edited: entry.edited === true,
   };
 }
 
@@ -562,6 +570,16 @@ export async function loadReportEntries(input: {
     },
     orderBy: [{ startedAt: "asc" }, { id: "asc" }],
   });
+  const ids = rows.map((row) => row.id);
+  const editedRows =
+    ids.length === 0
+      ? []
+      : await prisma.timeChange.findMany({
+          where: { timeEntryId: { in: ids }, action: "edited" },
+          select: { timeEntryId: true },
+          distinct: ["timeEntryId"],
+        });
+  const editedIds = new Set(editedRows.map((row) => row.timeEntryId));
   const source: SourceEntry[] = rows.flatMap((row) => {
     if (!row.endedAt) return [];
     return [
@@ -579,6 +597,8 @@ export async function loadReportEntries(input: {
         projectBillable: row.project.billable,
         note: row.note,
         rate: null,
+        source: row.source === "manual" ? "manual" : "timer",
+        edited: editedIds.has(row.id),
       },
     ];
   });

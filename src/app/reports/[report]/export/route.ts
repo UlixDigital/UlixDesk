@@ -1,9 +1,16 @@
-import { requireUser } from "@/lib/auth";
+import { publicOrigin, requireUser } from "@/lib/auth";
+import { getWorkspaceCurrency } from "@/lib/bill-rates";
 import { reportCodes, reportCopy } from "@/lib/report-copy";
 import { builtReportToTable, renderReportPdf } from "@/lib/report-pdf";
 import { describeReportFilters, isReportKind, reportTitle } from "@/lib/report-query";
 import { prepareReport } from "@/lib/report-request";
-import { reportToCsv } from "@/lib/reports";
+import { reportToCsv, slicesForEntry } from "@/lib/reports";
+import {
+  buildTimeActivityModel,
+  renderTimeActivityPdf,
+  type ActivityLine,
+} from "@/lib/time-activity-pdf";
+import { zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 
 export async function GET(
   request: Request,
@@ -28,6 +35,40 @@ export async function GET(
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-|-$/g, "");
+  if (url.searchParams.get("format") === "pdf" && report === "time-activity") {
+    const [currency, appUrl] = await Promise.all([getWorkspaceCurrency(), publicOrigin()]);
+    const from = prepared.query.from;
+    const to = prepared.query.to;
+    const rangeStart = zonedDayStart(from, prepared.timeZone);
+    const rangeEnd = zonedDayEnd(to, prepared.timeZone);
+    const lines: ActivityLine[] = prepared.entries.flatMap((entry) =>
+      slicesForEntry(entry, rangeStart, rangeEnd, prepared.timeZone).map((slice) => ({
+        clientName: slice.clientName,
+        date: slice.date,
+        memberName: slice.userName,
+        projectName: slice.projectName,
+        durationMs: slice.durationMs,
+        billableMs: slice.billableMs,
+        amount: slice.amount,
+        note: slice.note,
+        manual: slice.source === "manual",
+        edited: slice.edited,
+      })),
+    );
+    const model = buildTimeActivityModel({
+      lines,
+      from,
+      to,
+      showMoney: prepared.showMoney,
+      workspaceCurrency: currency,
+    });
+    const pdf = await renderTimeActivityPdf({
+      model,
+      appUrl,
+      empty: prepared.filtered ? reportCopy.emptyFiltered : reportCopy.empty,
+    });
+    return file(new Uint8Array(pdf), "application/pdf", `${slug}.pdf`);
+  }
   if (url.searchParams.get("format") === "pdf") {
     const member = prepared.people.find((person) => person.id === prepared.query.memberId) ?? null;
     const client = prepared.clients.find((item) => item.id === prepared.query.clientId) ?? null;

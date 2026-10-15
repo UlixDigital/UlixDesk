@@ -116,7 +116,9 @@ export default async function ReportPage({
         columnsInUrl={prepared.columnsInUrl}
         choices={allowedColumns(report, prepared.showMoney, prepared.manager)}
       />
-      <p className="mt-3 text-sm text-slate-500">{reportCopy.exportAll}</p>
+      <p className="mt-3 text-sm text-slate-500">
+        {report === "time-activity" ? reportCopy.activityExportAll : reportCopy.exportAll}
+      </p>
       {prepared.failure === "range" ? (
         <p
           role="alert"

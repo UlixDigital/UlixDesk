@@ -70,7 +70,11 @@ The export stops at 5,000 time entries and returns `REPORT_TOO_LARGE`. Narrow th
 
 **Export PDF** uses the same URL with `format=pdf`. Time edits use `/reports/manual-time-edits/export?format=pdf`. The route checks the session and applies the same role limits as the CSV, so a member PDF has no amounts.
 
-The file is drawn on the server with pdfkit (pure JavaScript, standard Helvetica). It does not use headless Chromium. The first page has the Ulix logo and the Ulix gradient. The header lists the filters, including the workspace timezone. Amounts match the screen, including a total row per currency. The footer is `Page N of M`. A character Helvetica cannot draw is replaced so the export still completes.
+The file is drawn on the server with pdfkit (pure JavaScript, standard Helvetica). It does not use headless Chromium. A character Helvetica cannot draw is replaced so the export still completes.
+
+**Time & Activity** is US Letter landscape. Every page has the Ulix logo, a thin rule, and the date range at the top right. The first page title is "Time & Activity Report", then the organization name "Ulix Digital", then a grand total of Time, Billed Amount, and Billable Time. There is no organization field on the workspace, so the name is the product name. Each client is a section, sorted A to Z. Inside it, one bold group row per date and member, then one detail row per project. UlixDesk has no to-do. The To-dos column is the project name, and a blank project name is "(No to-do)" in italics. To-do ID is always blank. Notes are "Manually added" or "Edited", plus the entry note. Durations are `H:MM:SS`. Money uses the rate's currency (`$723.22`, `¥1,500`). A member PDF drops the billed columns. The footer is "Generated with", the Ulix logo, the app URL, and `Page X of Y`. A group row is not left at the bottom of a page without its first detail row. A table that continues repeats the column header.
+
+Daily, weekly, and work session PDFs still match the screen: the Ulix logo and gradient, the filter summary, the workspace timezone, and a total row per currency. The footer is `Page N of M`.
 
 Time edits are blocks (who, when, action, source, and the fields), with the same header and page numbers. The export stops at 5,000 changes and returns `TIME_CHANGE_TOO_LARGE`.
 

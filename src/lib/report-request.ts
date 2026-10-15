@@ -7,7 +7,7 @@ import {
   type ReportKind,
   type ReportQuery,
 } from "@/lib/report-query";
-import { buildReport, loadReportEntries, type BuiltReport } from "@/lib/reports";
+import { buildReport, loadReportEntries, type BuiltReport, type SourceEntry } from "@/lib/reports";
 import { listProjectsForTimesheetFilter } from "@/lib/time-entries";
 import { todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 import { listActiveUsers } from "@/lib/users";
@@ -29,6 +29,8 @@ export type PreparedReport = {
   people: Array<{ id: string; name: string }>;
   failure: "range" | "large" | null;
   report: BuiltReport | null;
+  /** Priced entries for the PDF. Empty when the range is invalid or over the cap. */
+  entries: SourceEntry[];
 };
 
 export async function prepareReport(input: {
@@ -83,7 +85,7 @@ export async function prepareReport(input: {
     people,
   };
   if (rangeError) {
-    return { ...base, failure: "range", report: null };
+    return { ...base, failure: "range", report: null, entries: [] };
   }
   const from = zonedDayStart(resolved.from, timeZone);
   const to = zonedDayEnd(resolved.to, timeZone);
@@ -97,10 +99,11 @@ export async function prepareReport(input: {
     billable: resolved.billable,
     timeZone,
   });
-  if (!loaded.ok) return { ...base, failure: "large", report: null };
+  if (!loaded.ok) return { ...base, failure: "large", report: null, entries: [] };
   return {
     ...base,
     failure: null,
+    entries: loaded.entries,
     report: buildReport({
       kind: input.kind,
       entries: loaded.entries,
