@@ -44,7 +44,10 @@ export function describeTestConnection(input: {
     case "unauthorized":
       return { tone: "error", message: optionsCopy.tokenRejected };
     case "unreachable":
-      return { tone: "error", message: optionsCopy.unreachable };
+      return {
+        tone: "error",
+        message: input.result.message?.trim() || optionsCopy.unreachable,
+      };
     case "invalid-response":
       return { tone: "error", message: optionsCopy.unexpected };
     case "http":

@@ -122,7 +122,7 @@ function RevokeButton({ id, label }: { id: string; label: string }) {
         }}
       >
         <div
-          className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 shadow-xl"
+          className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 text-left shadow-xl"
           onClick={(event) => event.stopPropagation()}
         >
           <h2 id={titleId} className="text-lg font-semibold break-words text-ink">

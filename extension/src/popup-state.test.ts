@@ -55,10 +55,22 @@ describe("popup state", () => {
       message: popupCopy.unexpectedBody,
     });
     expect(failureAfterRefresh(popupCopy.invalidUrlBody).reason).toBe("invalid-url");
-    expect(failureAfterRefresh(popupCopy.unreachableBody).reason).toBe("unreachable");
-    expect(derivePopup({ ...base, failure: { ok: false, reason: "unreachable" } }).kind).toBe(
-      "unreachable",
-    );
+    expect(failureAfterRefresh(popupCopy.unreachableBody)).toEqual({
+      ok: false,
+      reason: "unreachable",
+      message: popupCopy.unreachableBody,
+    });
+    expect(derivePopup({ ...base, failure: { ok: false, reason: "unreachable" } })).toMatchObject({
+      kind: "unreachable",
+      message: null,
+    });
+    expect(
+      derivePopup({
+        ...base,
+        projects: null,
+        failure: { ok: false, reason: "unreachable", message: "Database is restarting" },
+      }),
+    ).toMatchObject({ kind: "unreachable", message: "Database is restarting" });
     expect(
       derivePopup({
         ...base,

@@ -11,6 +11,7 @@ import {
 } from "./api";
 import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
+import { hostAccessRequest } from "./host-permission";
 import { derivePopup, failureAfterRefresh, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
@@ -401,27 +402,14 @@ function onSignInClick() {
   if (!parsed.ok) return;
   const pattern = hostPermissionPattern(parsed.origin);
   const passwordValue = password;
-  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+  chrome.permissions.request(hostAccessRequest(pattern), (granted) => {
     void chrome.runtime.lastError;
     if (!granted) {
       formError = popupCopy.permissionBody;
       render();
       return;
     }
-    chrome.permissions.getAll((current) => {
-      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
-      const finish = () => {
-        void completeSignIn(described.serverUrl, described.email, passwordValue);
-      };
-      if (extras.length === 0) {
-        finish();
-        return;
-      }
-      chrome.permissions.remove({ origins: extras }, () => {
-        void chrome.runtime.lastError;
-        finish();
-      });
-    });
+    void completeSignIn(described.serverUrl, described.email, passwordValue);
   });
 }
 
@@ -483,27 +471,14 @@ function grantPermission() {
   const parsed = normalizeServerUrl(serverUrl);
   if (!parsed.ok) return;
   const pattern = hostPermissionPattern(parsed.origin);
-  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+  chrome.permissions.request(hostAccessRequest(pattern), (granted) => {
     void chrome.runtime.lastError;
     if (!granted) {
       alertMessage = popupCopy.permissionBody;
       render();
       return;
     }
-    chrome.permissions.getAll((current) => {
-      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
-      const finish = () => {
-        void load();
-      };
-      if (extras.length === 0) {
-        finish();
-        return;
-      }
-      chrome.permissions.remove({ origins: extras }, () => {
-        void chrome.runtime.lastError;
-        finish();
-      });
-    });
+    void load();
   });
 }
 
@@ -523,11 +498,15 @@ function bodyFor(model: PopupModel) {
       );
       break;
     case "invalid-url":
-      panel.append(statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody));
+      panel.append(
+        statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody),
+        optionsLink(),
+      );
       break;
     case "unreachable":
       panel.append(
         statusBlock(popupCopy.unreachableTitle, popupCopy.unreachableBody),
+        ...(model.message ? [noteLine(model.message, "alert")] : []),
         button(popupCopy.tryAgain, "primary", () => void load()),
       );
       break;
@@ -742,6 +721,18 @@ function button(
   node.disabled = disabled;
   node.addEventListener("click", onClick);
   return node;
+}
+
+function optionsLink() {
+  const link = document.createElement("a");
+  link.className = "text-button";
+  link.href = chrome.runtime.getURL("options.html");
+  link.textContent = popupCopy.openOptions;
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    chrome.runtime.openOptionsPage();
+  });
+  return link;
 }
 
 function textButton(label: string, onClick: () => void) {

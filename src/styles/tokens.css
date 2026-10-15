@@ -1,0 +1,10 @@
+:root {
+  --page: #f4f6f8;
+  --ink: #1d1d1d;
+  --slate-200: #e2e8f0;
+  --slate-300: #cbd5e1;
+  /* Default Tailwind slate-500 (#64748b) is 4.39:1 on --page. This step is 5.02:1. */
+  --slate-500: #5b6b81;
+  --slate-600: #475569;
+  --slate-700: #334155;
+}

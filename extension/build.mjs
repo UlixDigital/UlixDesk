@@ -40,7 +40,14 @@ await esbuild.build({
   legalComments: "none",
 });
 
-for (const file of ["popup.html", "options.html", "extension.css", "ulix-logo.svg"]) {
+await esbuild.build({
+  entryPoints: ["extension/src/extension.css"],
+  bundle: true,
+  outfile: path.join(dist, "extension.css"),
+  legalComments: "none",
+});
+
+for (const file of ["popup.html", "options.html", "ulix-logo.svg"]) {
   cpSync(path.join(root, "extension", "src", file), path.join(dist, file));
 }
 cpSync(path.join(root, "extension", "manifest.json"), path.join(dist, "manifest.json"));

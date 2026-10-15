@@ -1,5 +1,6 @@
 import { testConnection } from "./api";
 import { optionsCopy } from "./copy";
+import { hostAccessRequest } from "./host-permission";
 import { describeGrant, describeSave, describeTestConnection } from "./options-state";
 import { readSettings, writeSettings } from "./storage";
 import { hostPermissionPattern, normalizeServerUrl } from "./server-url";
@@ -61,27 +62,14 @@ grantControl.addEventListener("click", () => {
     return;
   }
   const pattern = hostPermissionPattern(parsed.origin);
-  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+  chrome.permissions.request(hostAccessRequest(pattern), (granted) => {
     void chrome.runtime.lastError;
     if (!granted) {
       show("error", optionsCopy.grantDenied);
       return;
     }
-    chrome.permissions.getAll((current) => {
-      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
-      const finish = () => {
-        show("success", optionsCopy.granted);
-        requestBadgeRefresh();
-      };
-      if (extras.length === 0) {
-        finish();
-        return;
-      }
-      chrome.permissions.remove({ origins: extras }, () => {
-        void chrome.runtime.lastError;
-        finish();
-      });
-    });
+    show("success", optionsCopy.granted);
+    requestBadgeRefresh();
   });
 });
 

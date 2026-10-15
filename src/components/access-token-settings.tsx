@@ -55,7 +55,7 @@ export function AccessTokenSettings({
   }, [router, seenToken, state.token]);
 
   return (
-    <div className="mx-auto max-w-3xl">
+    <div>
       <h1 className="text-2xl font-semibold tracking-tight text-ink">
         {tokenCopy.pageTitle}
       </h1>
@@ -304,7 +304,7 @@ function RevokeButton({ id, name }: { id: string; name: string }) {
         }}
       >
         <div
-          className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 shadow-xl"
+          className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 text-left shadow-xl"
           onClick={(event) => event.stopPropagation()}
         >
           <h2 id={titleId} className="text-lg font-semibold break-words text-ink">

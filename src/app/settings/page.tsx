@@ -19,7 +19,7 @@ export default async function SettingsPage() {
   ]);
 
   return (
-    <>
+    <div className="mx-auto w-full max-w-3xl">
       <ChangePasswordForm />
       <AccessTokenSettings
         timeZone={timeZone ?? "UTC"}
@@ -38,6 +38,6 @@ export default async function SettingsPage() {
           revokedAt: token.revokedAt?.toISOString() ?? null,
         }))}
       />
-    </>
+    </div>
   );
 }
