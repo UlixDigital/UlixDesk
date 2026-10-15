@@ -20,7 +20,14 @@ export const rateCopy = {
   precedence: "A project rate wins, then a member rate, then this client rate.",
   amountLabel: "Hourly rate",
   effectiveLabel: "Effective from",
-  effectiveHint: "Applies from 00:00 UTC on this date. Earlier time keeps the previous rate.",
+  timezoneTitle: "Workspace timezone",
+  timezoneBody:
+    "Timesheets and bill rates use this timezone. A rate starts at 00:00 on its effective date here. Changing it does not rewrite time you already tracked.",
+  timezoneLabel: "Timezone",
+  timezoneSave: "Save timezone",
+  timezoneSaved: "Workspace timezone saved.",
+  timezoneInvalid: "Choose a timezone, such as Asia/Colombo.",
+  timezoneSaveFailed: "Something went wrong saving the timezone. Try again.",
   saveRate: "Save rate",
   savingRate: "Saving…",
   rateSaved: "Rate saved.",
@@ -66,6 +73,18 @@ export function amountDecimalsMessage(digits: number) {
   return `This currency allows ${digits} decimal places.`;
 }
 
+export function effectiveFromHint(timeZone: string) {
+  return `Applies from 00:00 in the workspace timezone (${timeZone}) on this date. Earlier time keeps the previous rate.`;
+}
+
+export function timesheetWeekNote(timeZone: string) {
+  return `Weeks run Monday through Sunday in the workspace timezone (${timeZone}).`;
+}
+
+export function entryTimeZoneNote(timeZone: string) {
+  return `Times use the workspace timezone (${timeZone}).`;
+}
+
 export function rateHistoryLine(amount: string, date: string) {
   return `${amount} from ${date}`;
 }
@@ -80,6 +99,8 @@ export const rateCodes = {
   RATE_MEMBER_REQUIRED: "RATE_MEMBER_REQUIRED",
   RATE_NOT_FOUND: "RATE_NOT_FOUND",
   RATE_SAVE_FAILED: "RATE_SAVE_FAILED",
+  TIMEZONE_INVALID: "TIMEZONE_INVALID",
+  TIMEZONE_SAVE_FAILED: "TIMEZONE_SAVE_FAILED",
 } as const;
 
 export type RateCode = (typeof rateCodes)[keyof typeof rateCodes];

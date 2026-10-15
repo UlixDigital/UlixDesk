@@ -2,21 +2,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { PlusIcon } from "@/components/icons";
 import { TimesheetFilters } from "@/components/timesheet-filters";
-import { TimesheetEmptyState, TimezonePending } from "@/components/timesheet-empty-state";
+import { TimesheetEmptyState } from "@/components/timesheet-empty-state";
 import {
   addTimeFor,
   DailyTimesheet,
   TimesheetNav,
   WeeklyTimesheet,
 } from "@/components/timesheet-views";
-import { listAllBillRates } from "@/lib/bill-rates";
+import { getWorkspaceTimeZone, listAllBillRates } from "@/lib/bill-rates";
 import { getCurrentUser } from "@/lib/session";
 import { attachRates } from "@/lib/rates";
 import { cn } from "@/lib/cn";
 import { listClientsForFilter } from "@/lib/projects";
 import { listActiveUsers } from "@/lib/users";
 import { canManageWorkspace, canSeeMoney } from "@/lib/users-validation";
-import { getRequestTimeZone } from "@/lib/request-time-zone";
+import { timesheetWeekNote } from "@/lib/rate-copy";
 import { timeCopy } from "@/lib/time-copy";
 import {
   getRunningTimer,
@@ -59,8 +59,7 @@ export default async function TimesheetsPage({
     user?: string;
   }>;
 }) {
-  const timeZone = await getRequestTimeZone();
-  if (!timeZone) return <TimezonePending />;
+  const timeZone = await getWorkspaceTimeZone();
 
   const params = await searchParams;
   const view = parseTimesheetView(params.view);
@@ -103,7 +102,7 @@ export default async function TimesheetsPage({
     view === "day" && viewedUserId ? getRunningTimer(viewedUserId) : Promise.resolve(null),
     canSeeMoney(actor.role) ? listAllBillRates() : Promise.resolve([]),
   ]);
-  const priced = attachRates(actor.role, entries, rates);
+  const priced = attachRates(actor.role, entries, rates, timeZone);
   const filtered = Boolean(projectId || clientId);
   const notice = parseNotice(params.notice);
   const daily =
@@ -149,10 +148,10 @@ export default async function TimesheetsPage({
           </h1>
           <p className="mt-1 text-sm text-slate-600">
             {viewedUserId === actor.id
-              ? "Your time. Weeks run Monday through Sunday."
+              ? `Your time. ${timesheetWeekNote(timeZone)}`
               : viewedUserId === null
-                ? "Everyone's time. Weeks run Monday through Sunday."
-                : "Time for the person you selected. Weeks run Monday through Sunday."}
+                ? `Everyone's time. ${timesheetWeekNote(timeZone)}`
+                : `Time for the person you selected. ${timesheetWeekNote(timeZone)}`}
           </p>
         </div>
         <Link href={addTimeFor(date, projectId)} className={ui.primaryButton}>

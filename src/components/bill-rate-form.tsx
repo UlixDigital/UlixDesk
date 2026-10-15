@@ -4,7 +4,7 @@ import { useActionState, useState } from "react";
 import type { RateFormState } from "@/app/rates/actions";
 import { cn } from "@/lib/cn";
 import { moneyPlaceholder } from "@/lib/money";
-import { rateCopy } from "@/lib/rate-copy";
+import { effectiveFromHint, rateCopy } from "@/lib/rate-copy";
 import { ui } from "@/lib/ui";
 
 type SaveAction = (previous: RateFormState, formData: FormData) => Promise<RateFormState>;
@@ -13,6 +13,7 @@ export function BillRateForm({
   action,
   today,
   currency,
+  timeZone,
   clientId,
   projectId,
   members,
@@ -20,6 +21,7 @@ export function BillRateForm({
   action: SaveAction;
   today: string;
   currency: string;
+  timeZone: string;
   clientId?: string;
   projectId?: string;
   members?: Array<{ id: string; name: string }>;
@@ -114,7 +116,7 @@ export function BillRateForm({
             className={cn(ui.input, "mt-1.5")}
           />
           <p id={`${dateId}-hint`} className="mt-1.5 text-xs text-slate-500">
-            {rateCopy.effectiveHint}
+            {effectiveFromHint(timeZone)}
           </p>
         </div>
       </div>

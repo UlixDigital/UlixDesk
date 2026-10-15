@@ -281,7 +281,7 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 ## What shipped in Slice 8
 
 - A workspace default currency in Settings. New clients inherit it. Each client has its own currency and an optional hourly bill rate.
-- An optional project bill rate, in the client's currency, and an optional member bill rate for that client. A project rate wins, then a member rate, then the client rate. History keeps every effective date. Past time keeps the rate that applied at 00:00 UTC on that date.
+- An optional project bill rate, in the client's currency, and an optional member bill rate for that client. A project rate wins, then a member rate, then the client rate. History keeps every effective date. Past time keeps the rate that applied at 00:00 in the workspace timezone on that date. The default timezone is Asia/Colombo. Timesheet days use that same timezone.
 - Billable amounts on timesheets and on the client and project tracked-time totals. Totals are grouped by currency. Owners and admins see them. Members do not, in the UI or on the server.
 - A non-billable project is not billed, even when an entry is marked billable.
 - See [docs/RATES.md](docs/RATES.md) for rounding, the error codes, and the migration defaults.

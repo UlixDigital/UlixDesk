@@ -18,6 +18,13 @@ test("signed-out pages load the logo and icons", async ({ page, request }) => {
   expect(favicon.status()).toBeLessThan(400);
 });
 
+test("a future image path stays behind sign-in", async ({ page }) => {
+  await page.goto("/future-route.svg");
+  await expect(page).toHaveURL(/\/login/);
+  await page.goto("/reports/chart.png");
+  await expect(page).toHaveURL(/\/login/);
+});
+
 test("sends a signed-out visit to sign-in, then accepts the owner password", async ({ page }) => {
   await page.goto("/clients");
   await expect(page).toHaveURL(/\/login/);

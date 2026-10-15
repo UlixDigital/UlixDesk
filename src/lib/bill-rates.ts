@@ -10,8 +10,11 @@ import {
   type BillRateRecord,
   type BillRateScope,
 } from "@/lib/rates";
-import { isRealCalendarDate } from "@/lib/time-zone";
+import { isRealCalendarDate, isValidTimeZone } from "@/lib/time-zone";
 import { canSeeMoney } from "@/lib/users-validation";
+import { DEFAULT_TIME_ZONE } from "@/lib/workspace-time";
+
+export { DEFAULT_TIME_ZONE };
 
 const WORKSPACE_ID = "workspace";
 
@@ -29,7 +32,11 @@ export async function getWorkspaceCurrency(): Promise<CurrencyCode> {
   const created = await prisma.workspaceSettings.upsert({
     where: { id: WORKSPACE_ID },
     update: {},
-    create: { id: WORKSPACE_ID, defaultCurrency: DEFAULT_CURRENCY },
+    create: {
+      id: WORKSPACE_ID,
+      defaultCurrency: DEFAULT_CURRENCY,
+      timeZone: DEFAULT_TIME_ZONE,
+    },
   });
   return isCurrencyCode(created.defaultCurrency) ? created.defaultCurrency : DEFAULT_CURRENCY;
 }
@@ -39,7 +46,33 @@ export async function setWorkspaceCurrency(currency: string): Promise<RateResult
   await prisma.workspaceSettings.upsert({
     where: { id: WORKSPACE_ID },
     update: { defaultCurrency: currency },
-    create: { id: WORKSPACE_ID, defaultCurrency: currency },
+    create: { id: WORKSPACE_ID, defaultCurrency: currency, timeZone: DEFAULT_TIME_ZONE },
+  });
+  return { ok: true };
+}
+
+export async function getWorkspaceTimeZone(): Promise<string> {
+  const row = await prisma.workspaceSettings.findUnique({ where: { id: WORKSPACE_ID } });
+  if (row && isValidTimeZone(row.timeZone)) return row.timeZone;
+  const created = await prisma.workspaceSettings.upsert({
+    where: { id: WORKSPACE_ID },
+    update: {},
+    create: {
+      id: WORKSPACE_ID,
+      defaultCurrency: DEFAULT_CURRENCY,
+      timeZone: DEFAULT_TIME_ZONE,
+    },
+  });
+  return isValidTimeZone(created.timeZone) ? created.timeZone : DEFAULT_TIME_ZONE;
+}
+
+export async function setWorkspaceTimeZone(timeZone: string): Promise<RateResult> {
+  const zone = timeZone.trim();
+  if (!isValidTimeZone(zone)) return fail(rateCodes.TIMEZONE_INVALID, rateCopy.timezoneInvalid);
+  await prisma.workspaceSettings.upsert({
+    where: { id: WORKSPACE_ID },
+    update: { timeZone: zone },
+    create: { id: WORKSPACE_ID, defaultCurrency: DEFAULT_CURRENCY, timeZone: zone },
   });
   return { ok: true };
 }
@@ -255,7 +288,7 @@ export async function summarizeBillableMoney(
     },
   });
   if (rows.length === 0) return { totals: [], unrated: false };
-  const rates = await listAllBillRates();
+  const [rates, timeZone] = await Promise.all([listAllBillRates(), getWorkspaceTimeZone()]);
   const priced = attachRates(role, rows.map((row) => ({
     projectId: row.projectId,
     clientId: row.project.clientId,
@@ -264,7 +297,7 @@ export async function summarizeBillableMoney(
     projectBillable: row.project.billable,
     entryBillable: row.billable,
     endedAt: row.endedAt,
-  })), rates);
+  })), rates, timeZone);
   let unrated = false;
   const amounts = priced.map((entry) => {
     const durationMs = entry.endedAt

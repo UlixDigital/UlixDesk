@@ -11,12 +11,13 @@ import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { RestoreButton } from "@/components/project-row-actions";
 import { TrackedTime } from "@/components/tracked-time";
-import { listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
+import { getWorkspaceTimeZone, listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
 import { rateCopy } from "@/lib/rate-copy";
 import { projectsHref, type ClientOption } from "@/lib/project-display";
 import { getProject, listClientChoices } from "@/lib/projects";
 import { prisma } from "@/lib/db";
 import { trackedMsForProject } from "@/lib/time-entries";
+import { todayInTimeZone } from "@/lib/time-zone";
 
 type EditPageProps = {
   params: Promise<{ id: string }>;
@@ -39,7 +40,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
   const project = await getProject(id);
   if (!project) notFound();
 
-  const [choices, trackedMs, projectRates, billingClient, money] = await Promise.all([
+  const [choices, trackedMs, projectRates, billingClient, money, timeZone] = await Promise.all([
     listClientChoices(project.clientId),
     trackedMsForProject(project.id),
     listRateHistory({ scope: "project", projectId: project.id }),
@@ -50,8 +51,9 @@ export default async function EditProjectPage({ params }: EditPageProps) {
         })
       : Promise.resolve(null),
     summarizeBillableMoney({ projectId: project.id }, user.role),
+    getWorkspaceTimeZone(),
   ]);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInTimeZone(timeZone);
   const clients: ClientOption[] = choices.map((client) => ({
     id: client.id,
     name: client.name,
@@ -104,6 +106,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
                   action={saveProjectRateAction}
                   today={today}
                   currency={billingClient.currency}
+                  timeZone={timeZone}
                   projectId={project.id}
                 />
                 <RateHistory rows={projectRates} empty={rateCopy.historyEmpty} />

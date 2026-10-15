@@ -12,7 +12,7 @@ Each client has an ISO 4217 currency. Settings has one workspace default. A new 
 
 Changing a client's currency does not rewrite rates already saved. Those rows keep the currency they were saved in. New rates use the client's current currency. Totals are grouped by currency and are never added across currencies.
 
-The migration sets the workspace default and every existing client to USD. No rate rows are created.
+The migration sets the workspace currency and every existing client to USD. A later migration sets the workspace timezone to Asia/Colombo. No rate rows are created. USD stays the default currency.
 
 ## Rates
 
@@ -26,7 +26,7 @@ Three scopes, all in the client's currency at the time they are saved:
 
 Precedence is project, then member, then client. A later effective date wins inside one scope. Saving the same date again adds a row. The latest save for that date is the one that applies. History lists every save.
 
-`effectiveFrom` is a calendar date. The rate applies to time whose start is on or after 00:00 UTC that day. An entry that starts at 23:59:59.999 UTC the day before keeps the previous rate.
+`effectiveFrom` is a calendar date. The rate applies to time whose start is on or after 00:00 in the workspace timezone that day. The default zone is `Asia/Colombo`. An entry that starts at 23:59 local the day before keeps the previous rate. 00:00 local and 03:00 local on the effective date use the new rate, even when those instants are still the previous UTC day. Timesheet days use the same timezone, including across a daylight-saving change.
 
 ## Billable
 
@@ -42,11 +42,11 @@ The bill amount for a slice of time is:
 round_half_away_from_zero(rateMinor × durationMs / 3_600_000)
 ```
 
-The division is integer arithmetic. A remainder of exactly half a minor unit rounds away from zero (up, for these positive amounts). Each slice is rounded on its own. A timesheet day rounds the hours that fall on that local day. A client or project total rounds each completed entry once, on its full duration. Splitting an entry across days can change the sum by one minor unit per extra slice.
+The division is integer arithmetic. A remainder of exactly half a minor unit rounds away from zero (up, for these positive amounts). Each slice is rounded on its own. A timesheet day rounds the hours that fall on that workspace-local day. A client or project total rounds each completed entry once, on its full duration. Splitting an entry across days can change the sum by one minor unit per extra slice.
 
 ## Error codes
 
-Rate and currency actions return a human `error` and one of these `code` values:
+Rate, currency, and timezone actions return a human `error` and one of these `code` values:
 
 | Code | Message |
 |---|---|
@@ -64,3 +64,5 @@ Rate and currency actions return a human `error` and one of these `code` values:
 | `RATE_NOT_FOUND` | That member no longer exists. |
 | `RATE_SAVE_FAILED` | Something went wrong saving this rate. Try again. |
 | `RATE_SAVE_FAILED` | Something went wrong saving the currency. Try again. |
+| `TIMEZONE_INVALID` | Choose a timezone, such as Asia/Colombo. |
+| `TIMEZONE_SAVE_FAILED` | Something went wrong saving the timezone. Try again. |

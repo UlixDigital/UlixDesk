@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { TimeEntryForm } from "@/components/time-entry-form";
-import { NoActiveProjects, TimezonePending } from "@/components/timesheet-empty-state";
+import { NoActiveProjects } from "@/components/timesheet-empty-state";
 import { requireUser } from "@/lib/auth";
-import { getRequestTimeZone } from "@/lib/request-time-zone";
+import { getWorkspaceTimeZone } from "@/lib/bill-rates";
+import { entryTimeZoneNote } from "@/lib/rate-copy";
 import { listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
 import { timesheetsHref } from "@/lib/timesheet";
 import { isRealCalendarDate, todayInTimeZone } from "@/lib/time-zone";
@@ -20,8 +21,7 @@ export default async function NewTimeEntryPage({
 }: {
   searchParams: Promise<{ date?: string; project?: string }>;
 }) {
-  const timeZone = await getRequestTimeZone();
-  if (!timeZone) return <TimezonePending />;
+  const timeZone = await getWorkspaceTimeZone();
 
   const projects = await listProjectChoices(null);
   if (projects.length === 0) return <NoActiveProjects />;
@@ -46,7 +46,7 @@ export default async function NewTimeEntryPage({
       overlaps={overlaps}
       cancelHref={timesheetsHref({ date })}
       title="Add time"
-      description="Track time against an active project. Times use your timezone."
+      description={`Track time against an active project. ${entryTimeZoneNote(timeZone)}`}
       submitLabel="Save time"
       initialState={{
         errors: {},

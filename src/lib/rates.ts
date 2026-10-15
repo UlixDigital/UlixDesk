@@ -1,5 +1,6 @@
 import { canSeeMoney } from "@/lib/users-validation";
 import { billAmountMinor, type MoneyTotal } from "@/lib/money";
+import { zonedParts } from "@/lib/time-zone";
 
 export type BillRateScope = "client" | "project" | "member";
 
@@ -27,13 +28,17 @@ export type RateSubject = {
   startedAt: Date;
 };
 
-/** Calendar date in UTC. A rate starts at 00:00 UTC on its effective date. */
+/**
+ * Civil date stored on a bill rate. Prisma returns a `@db.Date` as UTC midnight,
+ * so this is the calendar date, not the workspace-local date of an instant.
+ */
 export function utcDateKey(value: Date) {
   return value.toISOString().slice(0, 10);
 }
 
-export function rateCovers(effectiveFrom: Date, startedAt: Date) {
-  return utcDateKey(effectiveFrom) <= utcDateKey(startedAt);
+/** A rate starts at 00:00 in `timeZone` on its effective calendar date. */
+export function rateCovers(effectiveFrom: Date, startedAt: Date, timeZone: string) {
+  return utcDateKey(effectiveFrom) <= zonedParts(startedAt, timeZone).date;
 }
 
 function preferred(current: BillRateRecord | null, candidate: BillRateRecord) {
@@ -53,12 +58,16 @@ function latest(rows: BillRateRecord[]) {
 
 /**
  * Project rate, then member rate for that client, then the client rate.
- * The row used is the latest effectiveFrom on or before the entry's UTC date.
- * Two rows with the same date: the later save wins. A missing rate is null,
- * which is not the same as an explicit zero.
+ * The row used is the latest effectiveFrom on or before the entry's calendar
+ * date in `timeZone`. Two rows with the same date: the later save wins.
+ * A missing rate is null, which is not the same as an explicit zero.
  */
-export function pickRate(rates: BillRateRecord[], entry: RateSubject): BillRateRecord | null {
-  const applicable = rates.filter((rate) => rateCovers(rate.effectiveFrom, entry.startedAt));
+export function pickRate(
+  rates: BillRateRecord[],
+  entry: RateSubject,
+  timeZone: string,
+): BillRateRecord | null {
+  const applicable = rates.filter((rate) => rateCovers(rate.effectiveFrom, entry.startedAt, timeZone));
   const project = latest(
     applicable.filter((rate) => rate.scope === "project" && rate.projectId === entry.projectId),
   );
@@ -102,11 +111,15 @@ export function attachRates<T extends RateSubject>(
   role: string,
   entries: T[],
   rates: BillRateRecord[],
+  timeZone: string,
 ): Array<T & { rate: ResolvedRate | null }> {
   if (!canSeeMoney(role)) {
     return entries.map((entry) => ({ ...entry, rate: null }));
   }
-  return entries.map((entry) => ({ ...entry, rate: toResolvedRate(pickRate(rates, entry)) }));
+  return entries.map((entry) => ({
+    ...entry,
+    rate: toResolvedRate(pickRate(rates, entry, timeZone)),
+  }));
 }
 
 /**

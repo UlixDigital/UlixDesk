@@ -4,14 +4,16 @@ vi.mock("next/cache", () => ({
   revalidatePath: vi.fn(),
 }));
 
-import { saveClientRateAction } from "@/app/rates/actions";
+import { saveClientRateAction, saveWorkspaceTimeZoneAction } from "@/app/rates/actions";
 import {
   getWorkspaceCurrency,
+  getWorkspaceTimeZone,
   listAllBillRates,
   saveClientRate,
   saveMemberRate,
   saveProjectRate,
   setWorkspaceCurrency,
+  setWorkspaceTimeZone,
   summarizeBillableMoney,
 } from "@/lib/bill-rates";
 import { createClient } from "@/lib/clients";
@@ -19,6 +21,7 @@ import { prisma } from "@/lib/db";
 import { createProject } from "@/lib/projects";
 import { rateCodes } from "@/lib/rate-copy";
 import { pickRate } from "@/lib/rates";
+import { zonedDateTimeToUtc } from "@/lib/time-zone";
 import { resetTestDatabase } from "@/lib/reset-test-db";
 import { createTestUser, signInAs } from "@/lib/test-actor";
 
@@ -33,6 +36,7 @@ afterAll(async () => {
 describe("bill rate storage", () => {
   it("gives a new client the workspace currency and leaves existing time without an amount", async () => {
     expect(await getWorkspaceCurrency()).toBe("USD");
+    expect(await getWorkspaceTimeZone()).toBe("Asia/Colombo");
     await setWorkspaceCurrency("LKR");
     const client = await createClient({
       name: "Acme",
@@ -116,37 +120,28 @@ describe("bill rate storage", () => {
     ).toEqual({ ok: true });
 
     const rates = await listAllBillRates();
+    const zone = "Asia/Colombo";
     const subject = {
       projectId: project.id,
       clientId: client.id,
       userId: member.id,
     };
-    expect(pickRate(rates, { ...subject, startedAt: new Date("2026-01-15T00:00:00.000Z") })?.amountMinor).toBe(
+    const febStart = zonedDateTimeToUtc("2026-02-01", "00:00", zone)!;
+    const justBefore = new Date(febStart.getTime() - 1);
+    const threeAm = zonedDateTimeToUtc("2026-02-01", "03:00", zone)!;
+    expect(threeAm.toISOString().slice(0, 10)).toBe("2026-01-31");
+    expect(pickRate(rates, { ...subject, startedAt: zonedDateTimeToUtc("2026-01-15", "12:00", zone)! }, zone)?.amountMinor).toBe(
       7000,
     );
-    expect(pickRate(rates, { ...subject, startedAt: new Date("2026-01-31T23:59:59.999Z") })?.amountMinor).toBe(
-      7000,
-    );
-    expect(pickRate(rates, { ...subject, startedAt: new Date("2026-02-01T00:00:00.000Z") })?.amountMinor).toBe(
-      7000,
-    );
-    expect(pickRate(rates, { ...subject, startedAt: new Date("2026-03-01T00:00:00.000Z") })?.amountMinor).toBe(
+    expect(pickRate(rates, { ...subject, startedAt: justBefore }, zone)?.amountMinor).toBe(7000);
+    expect(pickRate(rates, { ...subject, startedAt: febStart }, zone)?.amountMinor).toBe(7000);
+    expect(pickRate(rates, { ...subject, startedAt: threeAm }, zone)?.amountMinor).toBe(7000);
+    expect(pickRate(rates, { ...subject, startedAt: zonedDateTimeToUtc("2026-03-01", "00:00", zone)! }, zone)?.amountMinor).toBe(
       9000,
     );
-    expect(
-      pickRate(rates, {
-        ...subject,
-        userId: owner.id,
-        startedAt: new Date("2026-01-31T23:59:59.999Z"),
-      })?.amountMinor,
-    ).toBe(4000);
-    expect(
-      pickRate(rates, {
-        ...subject,
-        userId: owner.id,
-        startedAt: new Date("2026-02-01T00:00:00.000Z"),
-      })?.amountMinor,
-    ).toBe(5000);
+    expect(pickRate(rates, { ...subject, userId: owner.id, startedAt: justBefore }, zone)?.amountMinor).toBe(4000);
+    expect(pickRate(rates, { ...subject, userId: owner.id, startedAt: febStart }, zone)?.amountMinor).toBe(5000);
+    expect(pickRate(rates, { ...subject, userId: owner.id, startedAt: threeAm }, zone)?.amountMinor).toBe(5000);
 
     await prisma.timeEntry.create({
       data: {
@@ -205,6 +200,27 @@ describe("bill rate storage", () => {
     expect(result.code).toBe(rateCodes.RATE_FORBIDDEN);
     expect(result.error).toBe("You don't have permission to manage clients and projects.");
     expect(await prisma.billRate.count()).toBe(0);
+  });
+
+  it("rejects an unknown timezone and lets an owner save a daylight-saving zone", async () => {
+    expect(await setWorkspaceTimeZone("Not/AZone")).toMatchObject({
+      ok: false,
+      code: rateCodes.TIMEZONE_INVALID,
+      error: "Choose a timezone, such as Asia/Colombo.",
+    });
+    expect(await setWorkspaceTimeZone("America/New_York")).toEqual({ ok: true });
+    expect(await getWorkspaceTimeZone()).toBe("America/New_York");
+    expect(await getWorkspaceCurrency()).toBe("USD");
+  });
+
+  it("refuses a member who tries to change the workspace timezone", async () => {
+    await signInAs("member", "zone-member@ulix.test");
+    const result = await saveWorkspaceTimeZoneAction(
+      { error: null, code: null, notice: null, timeZone: "Asia/Colombo" },
+      form({ timeZone: "Europe/London" }),
+    );
+    expect(result.code).toBe(rateCodes.RATE_FORBIDDEN);
+    expect(await getWorkspaceTimeZone()).toBe("Asia/Colombo");
   });
 
   it("rejects a project rate when the project has no client", async () => {

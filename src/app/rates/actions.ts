@@ -8,6 +8,7 @@ import {
   saveMemberRate,
   saveProjectRate,
   setWorkspaceCurrency,
+  setWorkspaceTimeZone,
 } from "@/lib/bill-rates";
 import { rateCodes, rateCopy, type RateCode } from "@/lib/rate-copy";
 
@@ -23,6 +24,13 @@ export type CurrencyFormState = {
   code: RateCode | null;
   notice: string | null;
   currency: string;
+};
+
+export type TimeZoneFormState = {
+  error: string | null;
+  code: RateCode | null;
+  notice: string | null;
+  timeZone: string;
 };
 
 function denied(values: RateFormState["values"]): RateFormState {
@@ -161,4 +169,39 @@ export async function saveWorkspaceCurrencyAction(
   revalidatePath("/settings");
   revalidatePath("/clients/new");
   return { error: null, code: null, notice: rateCopy.workspaceSaved, currency };
+}
+
+export async function saveWorkspaceTimeZoneAction(
+  previous: TimeZoneFormState,
+  formData: FormData,
+): Promise<TimeZoneFormState> {
+  const timeZone = String(formData.get("timeZone") ?? "");
+  const gate = await gateManager();
+  if (!gate.ok) {
+    return {
+      error: authCopy.manageDenied,
+      code: rateCodes.RATE_FORBIDDEN,
+      notice: null,
+      timeZone: previous.timeZone,
+    };
+  }
+  try {
+    const saved = await setWorkspaceTimeZone(timeZone);
+    if (!saved.ok) {
+      return { error: saved.error, code: saved.code, notice: null, timeZone };
+    }
+  } catch (error) {
+    console.error("Failed to save the workspace timezone", error);
+    return {
+      error: rateCopy.timezoneSaveFailed,
+      code: rateCodes.TIMEZONE_SAVE_FAILED,
+      notice: null,
+      timeZone,
+    };
+  }
+  revalidatePath("/settings");
+  revalidatePath("/timesheets");
+  revalidatePath("/clients");
+  revalidatePath("/projects");
+  return { error: null, code: null, notice: rateCopy.timezoneSaved, timeZone: timeZone.trim() };
 }

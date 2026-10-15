@@ -109,14 +109,17 @@ model Project {
 }
 
 /// One workspace row. New clients inherit `defaultCurrency`.
+/// `timeZone` is an IANA name. Timesheet days and rate effective dates use 00:00 in that zone.
 model WorkspaceSettings {
   id              String   @id @default("workspace")
   defaultCurrency String   @default("USD")
+  timeZone        String   @default("Asia/Colombo")
   updatedAt       DateTime @updatedAt
 }
 
 /// Hourly bill rate history. Money is integer minor units, never a float.
-/// `scope` is client, project, or member. `effectiveFrom` is a UTC calendar date.
+/// `scope` is client, project, or member. `effectiveFrom` is a calendar date.
+/// The rate starts at 00:00 in the workspace timezone on that date.
 model BillRate {
   id            String    @id @default(cuid())
   scope         String

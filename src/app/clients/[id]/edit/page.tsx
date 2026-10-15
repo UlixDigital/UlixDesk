@@ -11,9 +11,10 @@ import { RateHistory } from "@/components/rate-history";
 import { TrackedTime } from "@/components/tracked-time";
 import { authCopy } from "@/lib/auth-copy";
 import { clientsHref } from "@/lib/client-display";
-import { listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
+import { getWorkspaceTimeZone, listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
 import { getClient } from "@/lib/clients";
 import { rateCopy } from "@/lib/rate-copy";
+import { todayInTimeZone } from "@/lib/time-zone";
 import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { listActiveUsers } from "@/lib/users";
@@ -40,15 +41,16 @@ export default async function EditClientPage({ params }: EditPageProps) {
   const { id } = await params;
   const client = await getClient(id);
   if (!client) notFound();
-  const [projects, trackedMs, clientRates, memberRates, members, money] = await Promise.all([
+  const [projects, trackedMs, clientRates, memberRates, members, money, timeZone] = await Promise.all([
     listProjectsForClient(client.id),
     trackedMsForClient(client.id),
     listRateHistory({ scope: "client", clientId: client.id }),
     listRateHistory({ scope: "member", clientId: client.id }),
     listActiveUsers(),
     summarizeBillableMoney({ clientId: client.id }, user.role),
+    getWorkspaceTimeZone(),
   ]);
-  const today = new Date().toISOString().slice(0, 10);
+  const today = todayInTimeZone(timeZone);
 
   const archived = client.archivedAt !== null;
 
@@ -94,6 +96,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
               action={saveClientRateAction}
               today={today}
               currency={client.currency}
+              timeZone={timeZone}
               clientId={client.id}
             />
             <RateHistory rows={clientRates} empty={rateCopy.historyEmpty} />
@@ -105,6 +108,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
               action={saveMemberRateAction}
               today={today}
               currency={client.currency}
+              timeZone={timeZone}
               clientId={client.id}
               members={members.map((member) => ({ id: member.id, name: member.name }))}
             />
