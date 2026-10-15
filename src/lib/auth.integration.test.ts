@@ -156,6 +156,9 @@ describe("protected routes and roles", () => {
     expect(sessionGate({ pathname: "/login", hasValidSession: false, isTokenApi: false })).toEqual({
       type: "allow",
     });
+    expect(sessionGate({ pathname: "/api/health", hasValidSession: false, isTokenApi: false })).toEqual({
+      type: "allow",
+    });
     expect(sessionGate({ pathname: "/api/timer/start", hasValidSession: false, isTokenApi: true })).toEqual({
       type: "allow",
     });

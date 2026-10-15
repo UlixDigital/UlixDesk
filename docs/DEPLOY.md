@@ -146,6 +146,14 @@ Database passwords are letters and numbers only, because the first-boot SQL scri
 
 The container entrypoint takes the migrate lock, runs `prisma migrate deploy`, runs the owner bootstrap, releases the lock, and then starts Next. The image turns Prisma telemetry off (`CHECKPOINT_DISABLE`) and points migrate at the query and schema engines already in the image, so a start does not download anything.
 
+`PRISMA_QUERY_ENGINE_LIBRARY` is `/app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node`. That is the library next to the generated client. The slim image deletes the duplicate under `@prisma/engines`. Compose sets this path for both apps, and that setting overrides `env/staging.env` and `env/production.env`. The committed env examples do not set the variable. If a live env file still has this line, delete it:
+
+```
+PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+```
+
+No edit on the server is required for the corrected compose file to take effect. Leaving that line in place does not change the process, because the compose `environment` block wins.
+
 ### Bootstrap owner
 
 Set `ULIXDESK_BOOTSTRAP_EMAIL`, `ULIXDESK_BOOTSTRAP_PASSWORD` (at least 10 characters), and `ULIXDESK_BOOTSTRAP_NAME` in the env file before the first start. If the database has no users and those variables are missing, the app still starts and prints instructions. It does not create an open signup page, and it does not print the password.
@@ -342,6 +350,10 @@ cd /opt/ulixdesk
 ```
 
 The image reference must be `ghcr.io/<owner>/<repo>:<40-character sha>`. The promote workflow rejects any other `image_tag`.
+
+After each start, staging and production wait until the container is healthy. The image health check calls `http://127.0.0.1:3000/api/health` and requires HTTP 200. That route runs `SELECT 1` as the app role, so it passes only after migrate has finished and the query engine loads. The wait is 150 seconds. Three restarts during startup, or a Docker `unhealthy` status, fail immediately. On failure the script prints the last 200 log lines and exits non-zero, so both deploy workflows fail.
+
+A forward deploy that fails this check, and whose history file already has an earlier image, rolls back to that image and waits for it to become healthy. The workflow still exits non-zero. The first image for an environment has nothing to roll back to, and deploying the tag that is already last in the history file does not step further back. An explicit `--rollback` does not roll back a second time if the older image is also unhealthy.
 
 Create the GitHub Environment named `production` and add required reviewers before the first production run. Until those reviewers exist, GitHub will not ask anyone.
 
