@@ -9,11 +9,13 @@ import {
   TimesheetNav,
   WeeklyTimesheet,
 } from "@/components/timesheet-views";
+import { listAllBillRates } from "@/lib/bill-rates";
 import { getCurrentUser } from "@/lib/session";
+import { attachRates } from "@/lib/rates";
 import { cn } from "@/lib/cn";
 import { listClientsForFilter } from "@/lib/projects";
 import { listActiveUsers } from "@/lib/users";
-import { canManageWorkspace } from "@/lib/users-validation";
+import { canManageWorkspace, canSeeMoney } from "@/lib/users-validation";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { timeCopy } from "@/lib/time-copy";
 import {
@@ -90,7 +92,7 @@ export default async function TimesheetsPage({
   const userParam = viewedUserId === null ? "all" : viewedUserId === actor.id ? "" : viewedUserId;
   const now = new Date();
   const range = rangeFor(view, date, timeZone);
-  const [entries, runningRecord] = await Promise.all([
+  const [entries, runningRecord, rates] = await Promise.all([
     listEntriesOverlapping({
       rangeStart: range.start,
       rangeEnd: range.end,
@@ -99,12 +101,14 @@ export default async function TimesheetsPage({
       userId: viewedUserId,
     }),
     view === "day" && viewedUserId ? getRunningTimer(viewedUserId) : Promise.resolve(null),
+    canSeeMoney(actor.role) ? listAllBillRates() : Promise.resolve([]),
   ]);
+  const priced = attachRates(actor.role, entries, rates);
   const filtered = Boolean(projectId || clientId);
   const notice = parseNotice(params.notice);
   const daily =
     view === "day"
-      ? buildDailyTimesheet({ date, timeZone, entries })
+      ? buildDailyTimesheet({ date, timeZone, entries: priced })
       : null;
   const running =
     view === "day"
@@ -131,7 +135,7 @@ export default async function TimesheetsPage({
       : null;
   const weekly =
     view === "week"
-      ? buildWeeklyTimesheet({ date, timeZone, entries })
+      ? buildWeeklyTimesheet({ date, timeZone, entries: priced })
       : null;
   const empty =
     view === "day" ? daily!.rows.length === 0 && !running : weekly!.rows.length === 0;
@@ -236,6 +240,9 @@ export default async function TimesheetsPage({
           date={date}
           rows={daily.rows}
           totalMs={daily.totalMs}
+          moneyTotals={daily.moneyTotals}
+          unrated={daily.unrated}
+          showMoney={canSeeMoney(actor.role)}
           running={running}
           serverNow={now.getTime()}
         />
@@ -245,7 +252,11 @@ export default async function TimesheetsPage({
           today={today}
           rows={weekly.rows}
           columnTotals={weekly.columnTotals}
+          columnMoney={weekly.columnMoney}
           totalMs={weekly.totalMs}
+          moneyTotals={weekly.moneyTotals}
+          unrated={weekly.unrated}
+          showMoney={canSeeMoney(actor.role)}
           projectId={projectId}
           clientId={clientId}
           user={userParam}

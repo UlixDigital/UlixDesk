@@ -1,15 +1,21 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { saveProjectAction } from "@/app/projects/actions";
+import { saveProjectRateAction } from "@/app/rates/actions";
 import { PermissionNote } from "@/components/permission-note";
+import { BillRateForm } from "@/components/bill-rate-form";
+import { RateHistory } from "@/components/rate-history";
 import { ProjectForm } from "@/components/project-form";
 import { authCopy } from "@/lib/auth-copy";
 import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { RestoreButton } from "@/components/project-row-actions";
 import { TrackedTime } from "@/components/tracked-time";
+import { listRateHistory, summarizeBillableMoney } from "@/lib/bill-rates";
+import { rateCopy } from "@/lib/rate-copy";
 import { projectsHref, type ClientOption } from "@/lib/project-display";
 import { getProject, listClientChoices } from "@/lib/projects";
+import { prisma } from "@/lib/db";
 import { trackedMsForProject } from "@/lib/time-entries";
 
 type EditPageProps = {
@@ -33,10 +39,19 @@ export default async function EditProjectPage({ params }: EditPageProps) {
   const project = await getProject(id);
   if (!project) notFound();
 
-  const [choices, trackedMs] = await Promise.all([
+  const [choices, trackedMs, projectRates, billingClient, money] = await Promise.all([
     listClientChoices(project.clientId),
     trackedMsForProject(project.id),
+    listRateHistory({ scope: "project", projectId: project.id }),
+    project.clientId
+      ? prisma.client.findUnique({
+          where: { id: project.clientId },
+          select: { currency: true },
+        })
+      : Promise.resolve(null),
+    summarizeBillableMoney({ projectId: project.id }, user.role),
   ]);
+  const today = new Date().toISOString().slice(0, 10);
   const clients: ClientOption[] = choices.map((client) => ({
     id: client.id,
     name: client.name,
@@ -75,7 +90,31 @@ export default async function EditProjectPage({ params }: EditPageProps) {
           </div>
         ) : null
       }
-      after={<TrackedTime milliseconds={trackedMs} />}
+      after={
+        <div className="space-y-8">
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6">
+            <h2 className="text-lg font-semibold text-ink">{rateCopy.projectRateTitle}</h2>
+            {billingClient ? (
+              <>
+                <p className="mt-1 text-sm text-slate-600">{rateCopy.projectRateBody}</p>
+                {project.billable ? null : (
+                  <p className="mt-2 text-sm text-slate-600">{rateCopy.projectNonBillable}</p>
+                )}
+                <BillRateForm
+                  action={saveProjectRateAction}
+                  today={today}
+                  currency={billingClient.currency}
+                  projectId={project.id}
+                />
+                <RateHistory rows={projectRates} empty={rateCopy.historyEmpty} />
+              </>
+            ) : (
+              <p className="mt-2 text-sm text-slate-600">{rateCopy.projectNeedsClient}</p>
+            )}
+          </section>
+          <TrackedTime milliseconds={trackedMs} money={money} />
+        </div>
+      }
     />
   );
 }

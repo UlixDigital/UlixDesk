@@ -1,4 +1,6 @@
 import { countLabel } from "@/lib/client-display";
+import { sumMoney, type MoneyTotal } from "@/lib/money";
+import { portionAmount, portionIsUnrated, type ResolvedRate } from "@/lib/rates";
 import { LONG_OVERNIGHT_MS, longOvernightWarning, timeCopy } from "@/lib/time-copy";
 import {
   addCalendarDays,
@@ -20,9 +22,13 @@ export type TimesheetEntry = {
   projectArchived: boolean;
   clientId: string | null;
   clientName: string | null;
+  userId: string | null;
   startedAt: Date;
   endedAt: Date;
   billable: boolean;
+  projectBillable: boolean;
+  /** Null for members, and when no rate covers this entry. */
+  rate: ResolvedRate | null;
   note: string | null;
   source: "manual" | "timer";
 };
@@ -51,6 +57,7 @@ export type DailyRow = {
   endLabel: string;
   durationMs: number;
   billable: boolean;
+  amount: MoneyTotal | null;
   note: string | null;
   source: "manual" | "timer";
   continuesFromPrevious: boolean;
@@ -66,6 +73,8 @@ export type WeeklyRow = {
   continuesFromPrevious: boolean[];
   continuesToNext: boolean[];
   totalMs: number;
+  dayMoney: MoneyTotal[][];
+  totalMoney: MoneyTotal[];
 };
 
 export type TimesheetNotice = "overlap" | "running";
@@ -222,10 +231,18 @@ export function buildDailyTimesheet(input: {
   const dayStart = zonedDayStart(input.date, input.timeZone);
   const dayEnd = zonedDayEnd(input.date, input.timeZone);
   const rows: DailyRow[] = [];
+  let unrated = false;
 
   for (const entry of input.entries) {
     const durationMs = portionMs(entry.startedAt, entry.endedAt, dayStart, dayEnd);
     if (durationMs <= 0) continue;
+    const slice = {
+      projectBillable: entry.projectBillable,
+      entryBillable: entry.billable,
+      durationMs,
+      rate: entry.rate,
+    };
+    if (portionIsUnrated(slice)) unrated = true;
     const segmentStart = new Date(
       Math.max(entry.startedAt.getTime(), dayStart.getTime()),
     );
@@ -241,7 +258,8 @@ export function buildDailyTimesheet(input: {
       startLabel: formatZonedTime(segmentStart, input.timeZone),
       endLabel: formatZonedTime(segmentEnd, input.timeZone),
       durationMs,
-      billable: entry.billable,
+      billable: entry.billable && entry.projectBillable,
+      amount: portionAmount(slice),
       note: entry.note,
       source: entry.source,
       continuesFromPrevious: entry.startedAt < dayStart,
@@ -261,6 +279,8 @@ export function buildDailyTimesheet(input: {
   return {
     totalMs: rows.reduce((sum, row) => sum + row.durationMs, 0),
     rows,
+    moneyTotals: sumMoney(rows.map((row) => row.amount)),
+    unrated,
   };
 }
 
@@ -275,6 +295,7 @@ export function buildWeeklyTimesheet(input: {
     end: zonedDayEnd(day, input.timeZone),
   }));
   const grouped = new Map<string, WeeklyRow>();
+  let unrated = false;
 
   for (const entry of input.entries) {
     const dayMs = ranges.map((range) =>
@@ -282,6 +303,16 @@ export function buildWeeklyTimesheet(input: {
     );
     const added = dayMs.reduce((sum, value) => sum + value, 0);
     if (added <= 0) continue;
+    const dayAmounts = dayMs.map((durationMs) => {
+      const slice = {
+        projectBillable: entry.projectBillable,
+        entryBillable: entry.billable,
+        durationMs,
+        rate: entry.rate,
+      };
+      if (portionIsUnrated(slice)) unrated = true;
+      return portionAmount(slice);
+    });
     const continuesFromPrevious = dayMs.map(
       (value, index) => value > 0 && entry.startedAt < ranges[index].start,
     );
@@ -299,10 +330,16 @@ export function buildWeeklyTimesheet(input: {
         continuesFromPrevious,
         continuesToNext,
         totalMs: added,
+        dayMoney: dayAmounts.map((amount) => (amount ? [amount] : [])),
+        totalMoney: sumMoney(dayAmounts),
       });
       continue;
     }
     existing.dayMs = existing.dayMs.map((value, index) => value + dayMs[index]);
+    existing.dayMoney = existing.dayMoney.map((amounts, index) =>
+      sumMoney([...amounts, dayAmounts[index]]),
+    );
+    existing.totalMoney = sumMoney([...existing.totalMoney, ...dayAmounts]);
     existing.continuesFromPrevious = existing.continuesFromPrevious.map(
       (value, index) => value || continuesFromPrevious[index],
     );
@@ -322,13 +359,19 @@ export function buildWeeklyTimesheet(input: {
   const columnTotals = dates.map((_, index) =>
     rows.reduce((sum, row) => sum + row.dayMs[index], 0),
   );
+  const columnMoney = dates.map((_, index) =>
+    sumMoney(rows.flatMap((row) => row.dayMoney[index])),
+  );
 
   return {
     dates,
     weekStart: startOfWeekDate(input.date),
     rows,
     columnTotals,
+    columnMoney,
     totalMs: columnTotals.reduce((sum, value) => sum + value, 0),
+    moneyTotals: sumMoney(rows.flatMap((row) => row.totalMoney)),
+    unrated,
   };
 }
 

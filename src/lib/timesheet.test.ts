@@ -19,7 +19,10 @@ function entry(overrides: Partial<TimesheetEntry> & Pick<TimesheetEntry, "id" | 
     projectArchived: false,
     clientId: "client-1",
     clientName: "Acme",
+    userId: "user-1",
     billable: true,
+    projectBillable: true,
+    rate: null,
     note: null,
     source: "manual",
     ...overrides,
@@ -261,5 +264,50 @@ describe("timesheet totals and day boundaries", () => {
     });
     expect(completed.rows).toEqual([]);
     expect(completed.totalMs).toBe(0);
+  });
+
+  it("groups billable amounts by currency and leaves a missing rate blank", () => {
+    const rows = [
+      entry({
+        id: "usd",
+        startedAt: new Date("2026-10-09T09:00:00.000Z"),
+        endedAt: new Date("2026-10-09T10:00:00.000Z"),
+        rate: { amountMinor: 5000, currency: "USD" },
+      }),
+      entry({
+        id: "lkr",
+        projectId: "project-2",
+        projectName: "Brand",
+        startedAt: new Date("2026-10-09T11:00:00.000Z"),
+        endedAt: new Date("2026-10-09T12:00:00.000Z"),
+        rate: { amountMinor: 800000, currency: "LKR" },
+      }),
+      entry({
+        id: "missing",
+        projectId: "project-3",
+        projectName: "Internal",
+        startedAt: new Date("2026-10-09T13:00:00.000Z"),
+        endedAt: new Date("2026-10-09T14:00:00.000Z"),
+        rate: null,
+      }),
+      entry({
+        id: "off",
+        projectId: "project-4",
+        projectName: "Free",
+        startedAt: new Date("2026-10-09T15:00:00.000Z"),
+        endedAt: new Date("2026-10-09T16:00:00.000Z"),
+        projectBillable: false,
+        rate: { amountMinor: 5000, currency: "USD" },
+      }),
+    ];
+    const daily = buildDailyTimesheet({ date: "2026-10-09", timeZone: "UTC", entries: rows });
+    expect(daily.moneyTotals).toEqual([
+      { currency: "LKR", amountMinor: 800000 },
+      { currency: "USD", amountMinor: 5000 },
+    ]);
+    expect(daily.unrated).toBe(true);
+    expect(daily.rows.find((row) => row.id === "missing")?.amount).toBeNull();
+    expect(daily.rows.find((row) => row.id === "off")?.amount).toBeNull();
+    expect(daily.rows.find((row) => row.id === "off")?.billable).toBe(false);
   });
 });

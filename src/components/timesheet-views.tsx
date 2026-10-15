@@ -1,8 +1,10 @@
 import Link from "next/link";
+import { MoneyAmount, MoneySummary } from "@/components/money-summary";
 import { DeleteTimeEntryButton } from "@/components/time-entry-delete";
 import { RunningEntryRow } from "@/components/running-entry-row";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
+import { formatMoneyTotals, type MoneyTotal } from "@/lib/money";
 import { timeCopy } from "@/lib/time-copy";
 import { startOfWeekDate } from "@/lib/time-zone";
 import {
@@ -23,12 +25,18 @@ export function DailyTimesheet({
   date,
   rows,
   totalMs,
+  moneyTotals = [],
+  unrated = false,
+  showMoney = false,
   running = null,
   serverNow,
 }: {
   date: string;
   rows: DailyRow[];
   totalMs: number;
+  moneyTotals?: MoneyTotal[];
+  unrated?: boolean;
+  showMoney?: boolean;
   running?: RunningDailyEntry | null;
   serverNow: number;
 }) {
@@ -37,6 +45,7 @@ export function DailyTimesheet({
       <p className="mt-4 text-sm text-slate-600">
         {entryCountLabel(rows.length)} · {formatTrackedDuration(totalMs)}
       </p>
+      {showMoney ? <MoneySummary totals={moneyTotals} unrated={unrated} /> : null}
       <div className="mt-4 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
         <ul className="divide-y divide-slate-200">
           {running ? (
@@ -50,6 +59,12 @@ export function DailyTimesheet({
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
                   {formatTrackedDuration(row.durationMs)}
+                  {showMoney ? (
+                    <>
+                      {" · "}
+                      <MoneyAmount amount={row.amount} />
+                    </>
+                  ) : null}
                 </p>
               </div>
               <div className="min-w-0">
@@ -107,7 +122,11 @@ export function WeeklyTimesheet({
   today,
   rows,
   columnTotals,
+  columnMoney = [],
   totalMs,
+  moneyTotals = [],
+  unrated = false,
+  showMoney = false,
   projectId,
   clientId,
   user = "",
@@ -116,16 +135,24 @@ export function WeeklyTimesheet({
   today: string;
   rows: WeeklyRow[];
   columnTotals: number[];
+  columnMoney?: MoneyTotal[][];
   totalMs: number;
+  moneyTotals?: MoneyTotal[];
+  unrated?: boolean;
+  showMoney?: boolean;
   projectId: string;
   clientId: string;
   user?: string;
 }) {
+  const moneyCaption = showMoney ? formatMoneyTotals(moneyTotals).join(", ") : "";
   return (
+    <div className="mt-4">
+      {showMoney ? <MoneySummary totals={moneyTotals} unrated={unrated} /> : null}
     <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
       <table className="min-w-[52rem] w-full border-collapse text-sm">
         <caption className="sr-only">
           Weekly timesheet totaling {formatTrackedDuration(totalMs)}
+          {moneyCaption ? `. ${moneyCaption}` : ""}
         </caption>
         <thead>
           <tr className="border-b border-slate-200 text-left text-xs font-medium text-slate-500">
@@ -190,6 +217,13 @@ export function WeeklyTimesheet({
                       >
                         {formatTrackedDuration(value)}
                       </Link>
+                      {showMoney
+                        ? formatMoneyTotals(row.dayMoney[index] ?? []).map((line) => (
+                            <span key={line} className="mt-1 block text-[11px] leading-snug font-normal text-slate-600">
+                              {line}
+                            </span>
+                          ))
+                        : null}
                       {row.continuesFromPrevious[index] ? (
                         <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-500">
                           {timeCopy.continuesPrevious}
@@ -202,12 +236,13 @@ export function WeeklyTimesheet({
                       ) : null}
                     </>
                   ) : (
-                    <span className="text-slate-300">—</span>
+                    <span className="text-slate-500">—</span>
                   )}
                 </td>
               ))}
               <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">
                 {formatTrackedDuration(row.totalMs)}
+                {showMoney ? <MoneyLines totals={row.totalMoney} /> : null}
               </td>
             </tr>
           ))}
@@ -225,16 +260,29 @@ export function WeeklyTimesheet({
                   dates[index] === today && "bg-primary-50/70",
                 )}
               >
-                {formatTrackedDuration(value)}
+                <div>{formatTrackedDuration(value)}</div>
+                {showMoney ? <MoneyLines totals={columnMoney[index] ?? []} /> : null}
               </td>
             ))}
             <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">
-              {formatTrackedDuration(totalMs)}
+              <div>{formatTrackedDuration(totalMs)}</div>
+              {showMoney ? <MoneyLines totals={moneyTotals} /> : null}
             </td>
           </tr>
         </tfoot>
       </table>
     </div>
+    </div>
+  );
+}
+
+function MoneyLines({ totals }: { totals: MoneyTotal[] }) {
+  const lines = formatMoneyTotals(totals);
+  if (lines.length === 0) return null;
+  return (
+    <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-600">
+      {lines.join(" · ")}
+    </span>
   );
 }
 

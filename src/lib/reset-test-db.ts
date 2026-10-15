@@ -4,6 +4,8 @@ import { clearRequestTestState } from "@/lib/test-hooks";
 /** Deletes workspace rows in foreign-key order. Shared by every integration test. */
 export async function resetTestDatabase() {
   clearRequestTestState();
+  await prisma.billRate.deleteMany();
+  await prisma.workspaceSettings.deleteMany();
   await prisma.runningTimer.deleteMany();
   await prisma.session.deleteMany();
   await prisma.passwordSetup.deleteMany();

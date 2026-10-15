@@ -1,7 +1,8 @@
 import type { Client, ClientEmail } from "@prisma/client";
 import type { ClientStatus } from "@/lib/client-display";
+import { isCurrencyCode } from "@/lib/currencies";
 import { prisma } from "@/lib/db";
-import type { NormalizedClient } from "@/lib/validation";
+import { getWorkspaceCurrency } from "@/lib/bill-rates";
 
 export type ClientRecord = {
   id: string;
@@ -9,9 +10,18 @@ export type ClientRecord = {
   address: string | null;
   phone: string | null;
   emails: string[];
+  currency: string;
   archivedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
+};
+
+type ClientWrite = {
+  name: string;
+  address: string | null;
+  phone: string | null;
+  emails: string[];
+  currency?: string;
 };
 
 const clientInclude = {
@@ -29,6 +39,7 @@ function toClientRecord(row: ClientWithEmails): ClientRecord {
     emails: [...row.emails]
       .sort((a, b) => a.position - b.position)
       .map((email) => email.email),
+    currency: row.currency,
     archivedAt: row.archivedAt,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
@@ -86,12 +97,15 @@ export async function getClient(id: string) {
   return row ? toClientRecord(row) : null;
 }
 
-export async function createClient(data: NormalizedClient) {
+export async function createClient(data: ClientWrite) {
+  const currency =
+    data.currency && isCurrencyCode(data.currency) ? data.currency : await getWorkspaceCurrency();
   const created = await prisma.client.create({
     data: {
       name: data.name,
       address: data.address,
       phone: data.phone,
+      currency,
       emails: {
         create: data.emails.map((email, position) => ({ email, position })),
       },
@@ -101,9 +115,11 @@ export async function createClient(data: NormalizedClient) {
   return toClientRecord(created);
 }
 
-export async function updateClient(id: string, data: NormalizedClient) {
+export async function updateClient(id: string, data: ClientWrite) {
   const existing = await prisma.client.findUnique({ where: { id } });
   if (!existing) return null;
+  const currency =
+    data.currency && isCurrencyCode(data.currency) ? data.currency : existing.currency;
 
   const updated = await prisma.$transaction(async (tx) => {
     await tx.clientEmail.deleteMany({ where: { clientId: id } });
@@ -113,6 +129,7 @@ export async function updateClient(id: string, data: NormalizedClient) {
         name: data.name,
         address: data.address,
         phone: data.phone,
+        currency,
         emails: {
           create: data.emails.map((email, position) => ({ email, position })),
         },

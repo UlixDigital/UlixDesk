@@ -1,10 +1,13 @@
 import type { Metadata } from "next";
 import { AccessTokenSettings } from "@/components/access-token-settings";
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { WorkspaceCurrencyForm } from "@/components/workspace-currency-form";
 import { listAccessTokens } from "@/lib/access-tokens";
+import { getWorkspaceCurrency } from "@/lib/bill-rates";
 import { listExtensionSessions } from "@/lib/extension-session";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
 import { getCurrentUser } from "@/lib/session";
+import { canSeeMoney } from "@/lib/users-validation";
 
 export const metadata: Metadata = {
   title: "Extension access",
@@ -12,14 +15,16 @@ export const metadata: Metadata = {
 
 export default async function SettingsPage() {
   const user = await getCurrentUser();
-  const [tokens, sessions, timeZone] = await Promise.all([
+  const [tokens, sessions, timeZone, currency] = await Promise.all([
     user ? listAccessTokens(user.id) : Promise.resolve([]),
     user ? listExtensionSessions(user.id) : Promise.resolve([]),
     getRequestTimeZone(),
+    user && canSeeMoney(user.role) ? getWorkspaceCurrency() : Promise.resolve(null),
   ]);
 
   return (
-    <div className="mx-auto w-full max-w-3xl">
+    <div className="mx-auto w-full max-w-3xl space-y-8">
+      {currency ? <WorkspaceCurrencyForm currency={currency} /> : null}
       <ChangePasswordForm />
       <AccessTokenSettings
         timeZone={timeZone ?? "UTC"}

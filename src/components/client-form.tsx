@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useActionState, useEffect, useId, useState, type ReactNode } from "react";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { cn } from "@/lib/cn";
+import { CURRENCIES, currencyOptionLabel } from "@/lib/currencies";
+import { rateCopy } from "@/lib/rate-copy";
 import { ui } from "@/lib/ui";
 import { isValidEmail, type ClientFormState } from "@/lib/validation";
 
@@ -42,11 +44,13 @@ export function ClientForm({
   const [name, setName] = useSyncedState(state.values.name, serverKey);
   const [phone, setPhone] = useSyncedState(state.values.phone, serverKey);
   const [address, setAddress] = useSyncedState(state.values.address, serverKey);
+  const [currency, setCurrency] = useSyncedState(state.values.currency, serverKey);
 
   useEffect(() => {
-    const order = ["name", "emails", "phone", "address"] as const;
+    const order = ["name", "currency", "emails", "phone", "address"] as const;
     const fieldIds = {
       name: "client-name",
+      currency: "client-currency",
       emails: "client-email",
       phone: "client-phone",
       address: "client-address",
@@ -123,6 +127,33 @@ export function ClientForm({
             aria-describedby={state.errors.name ? "client-name-error" : undefined}
             className={cn(ui.input, state.errors.name && ui.inputError)}
           />
+        </Field>
+        <Field
+          id="client-currency"
+          label={rateCopy.currencyLabel}
+          required
+          error={state.errors.currency}
+          hint={`${rateCopy.currencyHint} ${rateCopy.currencyKeepHint}`}
+        >
+          <select
+            id="client-currency"
+            name="currency"
+            required
+            value={currency}
+            onChange={(event) => setCurrency(event.target.value)}
+            aria-invalid={state.errors.currency ? true : undefined}
+            aria-describedby={describedBy(
+              "client-currency-hint",
+              state.errors.currency ? "client-currency-error" : undefined,
+            )}
+            className={cn(ui.input, state.errors.currency && ui.inputError)}
+          >
+            {CURRENCIES.map((item) => (
+              <option key={item.code} value={item.code}>
+                {currencyOptionLabel(item)}
+              </option>
+            ))}
+          </select>
         </Field>
         <EmailField
           emails={state.values.emails}

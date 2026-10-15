@@ -23,6 +23,8 @@ model User {
   accessTokens      AccessToken[]
   extensionSessions ExtensionSession[]
   timeEntries       TimeEntry[]
+  memberBillRates   BillRate[] @relation("MemberBillRate")
+  billRatesCreated  BillRate[] @relation("BillRateAuthor")
 
   @@index([role])
   @@index([deactivatedAt])
@@ -63,10 +65,13 @@ model Client {
   address    String?
   phone      String?
   emails     ClientEmail[]
+  /// ISO 4217 code. New clients copy the workspace default. Existing rows start as USD.
+  currency   String        @default("USD")
   archivedAt DateTime?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
   projects   Project[]
+  billRates  BillRate[]
 
   @@index([archivedAt])
   @@index([name])
@@ -96,10 +101,41 @@ model Project {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   timeEntries TimeEntry[]
+  billRates   BillRate[]
 
   @@index([clientId])
   @@index([archivedAt])
   @@index([name])
+}
+
+/// One workspace row. New clients inherit `defaultCurrency`.
+model WorkspaceSettings {
+  id              String   @id @default("workspace")
+  defaultCurrency String   @default("USD")
+  updatedAt       DateTime @updatedAt
+}
+
+/// Hourly bill rate history. Money is integer minor units, never a float.
+/// `scope` is client, project, or member. `effectiveFrom` is a UTC calendar date.
+model BillRate {
+  id            String    @id @default(cuid())
+  scope         String
+  clientId      String?
+  client        Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  userId        String?
+  user          User?     @relation("MemberBillRate", fields: [userId], references: [id], onDelete: Cascade)
+  amountMinor   Int
+  currency      String
+  effectiveFrom DateTime  @db.Date
+  createdById   String
+  createdBy     User      @relation("BillRateAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt     DateTime  @default(now())
+
+  @@index([clientId, effectiveFrom])
+  @@index([projectId, effectiveFrom])
+  @@index([userId, clientId, effectiveFrom])
 }
 
 /// One block of tracked time. `endedAt` is null only while its timer is running.

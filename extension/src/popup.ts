@@ -12,7 +12,7 @@ import {
 import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
 import { hostAccessRequest } from "./host-permission";
-import { derivePopup, failureAfterRefresh, projectOptionLabel, type PopupModel } from "./popup-state";
+import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
 import {
@@ -45,6 +45,7 @@ let serverUrl = PRODUCTION_ORIGIN;
 let token = "";
 let tick = 0;
 let signedIn = false;
+let authResolved = false;
 let accountName = "";
 let accountEmail = "";
 let serverPreset: ServerPreset = "production";
@@ -90,6 +91,7 @@ function chosenServerUrl() {
 
 async function load() {
   loading = true;
+  authResolved = false;
   startedHere = false;
   projectNotice = null;
   render();
@@ -101,6 +103,7 @@ async function load() {
 
   if (!settings.token && !settings.refreshToken) {
     signedIn = false;
+    authResolved = true;
     token = "";
     projects = null;
     timer = null;
@@ -110,6 +113,10 @@ async function load() {
     requestBadgeRefresh();
     return;
   }
+
+  signedIn = true;
+  authResolved = true;
+  render();
 
   const parsed = normalizeServerUrl(serverUrl);
   const [ready, allowed] = await Promise.all([
@@ -256,7 +263,12 @@ function scheduleTick(startedAt: string) {
 function view() {
   const shell = el("div", "shell");
   shell.append(header());
-  if (!signedIn) {
+  const chrome = popupChrome({ authResolved, signedIn });
+  if (chrome === "pending") {
+    shell.append(el("p", "state-body", popupCopy.opening));
+    return shell;
+  }
+  if (chrome === "sign-in") {
     shell.append(signInForm());
     return shell;
   }

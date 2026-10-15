@@ -21,6 +21,7 @@ export const popupCopy = {
   unexpectedTitle: "Unexpected response",
   unexpectedBody:
     "The server returned an unexpected response. Check that the server URL points at UlixDesk.",
+  opening: "Opening UlixDesk…",
   loading: "Checking the timer…",
   idle: "No timer running",
   chooseProject: "Choose a project to start the timer.",
