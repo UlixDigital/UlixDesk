@@ -36,7 +36,9 @@ services:
     environment:
       CHECKPOINT_DISABLE: "1"
       PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
-      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+      # The slim image deletes the duplicate library under @prisma/engines.
+      # This is the copy next to the generated client. It overrides env_file.
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
     env_file:
       - ./env/staging.env
     depends_on:
@@ -52,7 +54,8 @@ services:
     environment:
       CHECKPOINT_DISABLE: "1"
       PRISMA_SCHEMA_ENGINE_BINARY: /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
-      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+      # Same library path as app-staging. Migrate and the server both use it.
+      PRISMA_QUERY_ENGINE_LIBRARY: /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
     env_file:
       - ./env/production.env
     depends_on:

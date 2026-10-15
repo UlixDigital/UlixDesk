@@ -35,6 +35,8 @@ describe("invoice view tokens", () => {
   it("lets the client link through without a session", () => {
     const token = generateViewToken();
     expect(isPublicPath(`/v/${token}`)).toBe(true);
+    expect(isPublicPath("/api/health")).toBe(true);
+    expect(isPublicPath("/api/health/live")).toBe(true);
     expect(sessionGate({ pathname: `/v/${token}`, hasValidSession: false, isTokenApi: false })).toEqual({
       type: "allow",
     });

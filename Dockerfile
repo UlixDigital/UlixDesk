@@ -52,8 +52,10 @@ RUN node -e "const [major,minor]=process.versions.node.split('.').map(Number); i
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV CHECKPOINT_DISABLE=1
-# Use the engine already copied from the build stage. Otherwise Prisma
+# Use the engines already copied from the build stage. Otherwise Prisma
 # tries to download one on startup and the container hangs without egress.
+# The query library is the generated-client copy. The duplicate under
+# @prisma/engines is deleted in the build stage.
 ENV PRISMA_SCHEMA_ENGINE_BINARY=/app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x
 ENV PRISMA_QUERY_ENGINE_LIBRARY=/app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node
 ENV HOME=/home/nextjs
@@ -89,6 +91,12 @@ COPY --from=build --chown=nextjs:nodejs /opt/pdfkit-runtime/ ./node_modules/
 # nodemailer stays external (serverExternalPackages) and has no runtime dependencies.
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/nodemailer ./node_modules/nodemailer
 COPY --from=migrate --chown=nextjs:nodejs /opt/migrate /opt/migrate
+# Fail the build if slimming removes the engine the env var names.
+RUN test -s /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node \
+  && test -s /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
+  && test ! -e /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
 USER nextjs
 EXPOSE 3000
+HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=12 \
+  CMD node -e "fetch('http://127.0.0.1:3000/api/health',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"
 CMD ["node", "scripts/docker-entrypoint.mjs"]

@@ -52,5 +52,68 @@ jobs:
         run: npm run build
       - name: Install Playwright
         run: npx playwright install --with-deps chromium
+      - name: Install system tools for end-to-end tests
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
       - name: End-to-end tests
         run: npm run test:e2e
+
+  image-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: ulixdesk
+          POSTGRES_PASSWORD: ulixdesk
+          POSTGRES_DB: ulixdesk
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ulixdesk -d ulixdesk"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build the image
+        run: docker build -t ulixdesk:ci .
+      - name: Migrate, start, and render a PDF
+        run: |
+          set -eu
+          query_engine=$(grep 'PRISMA_QUERY_ENGINE_LIBRARY:' docker-compose.prod.yml | awk '{print $2}' | sort -u)
+          schema_engine=$(grep 'PRISMA_SCHEMA_ENGINE_BINARY:' docker-compose.prod.yml | awk '{print $2}' | sort -u)
+          [ "$query_engine" = "/app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node" ]
+          [ "$schema_engine" = "/app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x" ]
+          grep -q "ENV PRISMA_QUERY_ENGINE_LIBRARY=$query_engine" Dockerfile
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" \
+            -c "CREATE ROLE ulixdesk_app LOGIN PASSWORD 'ulixdeskapp';"
+          docker run -d -t --name ulixdesk-smoke --network host --memory=384m \
+            -e DATABASE_URL='postgresql://ulixdesk_app:ulixdeskapp@127.0.0.1:5432/ulixdesk' \
+            -e MIGRATE_DATABASE_URL='postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk?connection_limit=1' \
+            -e ULIXDESK_SESSION_SECRET='ci-session-secret-at-least-32-characters' \
+            -e ULIXDESK_EXTENSION_IDS='abcdefghijklmnopabcdefghijklmnop' \
+            -e CHECKPOINT_DISABLE=1 \
+            -e "PRISMA_SCHEMA_ENGINE_BINARY=$schema_engine" \
+            -e "PRISMA_QUERY_ENGINE_LIBRARY=$query_engine" \
+            ulixdesk:ci
+          ok=0
+          for _ in $(seq 1 40); do
+            if docker exec ulixdesk-smoke node -e "fetch('http://127.0.0.1:3000/api/health',{redirect:'manual'}).then(r=>process.exit(r.status===200?0:1)).catch(()=>process.exit(1))"; then
+              ok=1
+              break
+            fi
+            sleep 3
+          done
+          echo "----- container logs -----"
+          docker logs ulixdesk-smoke
+          echo "----- end logs -----"
+          docker inspect --format 'image_bytes={{.Size}}' ulixdesk:ci
+          [ "$ok" = 1 ]
+          docker logs ulixdesk-smoke 2>&1 | grep -q "Migrations applied."
+          docker logs ulixdesk-smoke 2>&1 | grep -q "Connecting for migrations as ulixdesk."
+          docker logs ulixdesk-smoke 2>&1 | grep -q "Starting the app as ulixdesk_app."
+          docker run --rm --memory=384m --memory-swap=384m ulixdesk:ci \
+            node scripts/render-invoice-sample.mjs /tmp/invoice-sample.pdf
+          echo "PDF render exited 0 under --memory=384m."

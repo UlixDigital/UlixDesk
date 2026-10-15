@@ -5,6 +5,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/login/") ||
     pathname === "/set-password" ||
     pathname.startsWith("/set-password/") ||
+    pathname === "/api/health" ||
+    pathname.startsWith("/api/health/") ||
     isClientInvoicePath(pathname)
   );
 }
