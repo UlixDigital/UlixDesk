@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeActivityFilters,
   parseReportSearchParams,
   rangeForPreset,
   reportDescription,
@@ -70,5 +71,26 @@ describe("report query", () => {
     ]);
     expect(resolveColumns("work-sessions", null, true, true)).toContain("member");
     expect(resolveColumns("work-sessions", null, false, false)).not.toContain("member");
+  });
+
+  it("describes the filters the Time & Activity PDF applies, without group by", () => {
+    expect(
+      describeActivityFilters({
+        showMember: true,
+        memberName: "Sam Rivera",
+        clientName: "Acme",
+        projectName: null,
+        billable: "billable",
+      }),
+    ).toBe("Member: Sam Rivera · Client: Acme · Billable: Billable");
+    expect(
+      describeActivityFilters({
+        showMember: false,
+        memberName: "Sam Rivera",
+        clientName: null,
+        projectName: null,
+        billable: "all",
+      }),
+    ).toBe("");
   });
 });

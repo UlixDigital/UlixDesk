@@ -82,12 +82,14 @@ export function canReadSavedReport(
 
 /** Format and invisible characters. A name made only of these is empty. */
 const INVISIBLE_NAME = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+/** Combining marks (Mn, Mc, Me). A name made only of these is empty. */
+const COMBINING_MARK = /\p{M}/gu;
 
 export function parseSavedReportName(raw: string):
   | { ok: true; name: string }
   | { ok: false; code: "SAVED_REPORT_NAME" | "SAVED_REPORT_NAME_LONG"; error: string } {
   const name = raw.replace(INVISIBLE_NAME, "").replace(/\s+/g, " ").trim();
-  if (!name) {
+  if (!name.replace(COMBINING_MARK, "").trim()) {
     return { ok: false, code: savedReportCodes.SAVED_REPORT_NAME, error: reportCopy.nameRequired };
   }
   if (name.length > SAVED_REPORT_NAME_MAX) {

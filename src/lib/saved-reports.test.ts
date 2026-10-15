@@ -96,6 +96,8 @@ describe("saved report params", () => {
     });
     expect(parseSavedReportName("   ").ok).toBe(false);
     expect(parseSavedReportName("\u200B\uFEFF").ok).toBe(false);
+    expect(parseSavedReportName("\u0301\u0301\u20E3").ok).toBe(false);
+    expect(parseSavedReportName("Octo\u0301ber")).toEqual({ ok: true, name: "Octo\u0301ber" });
     expect(parseSavedReportName("October\u200B activity")).toEqual({
       ok: true,
       name: "October activity",

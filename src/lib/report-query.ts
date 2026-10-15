@@ -240,6 +240,29 @@ export function billableFilterLabel(billable: BillableFilter) {
   return reportCopy.billableAll;
 }
 
+/**
+ * Filters the Time & Activity PDF applies. The PDF keeps its own layout, so
+ * this line does not mention Group by or the column chooser.
+ */
+export function describeActivityFilters(input: {
+  showMember: boolean;
+  memberName: string | null;
+  clientName: string | null;
+  projectName: string | null;
+  billable: BillableFilter;
+}) {
+  const parts: string[] = [];
+  if (input.showMember && input.memberName) {
+    parts.push(`${reportCopy.memberLabel}: ${input.memberName}`);
+  }
+  if (input.clientName) parts.push(`${reportCopy.clientLabel}: ${input.clientName}`);
+  if (input.projectName) parts.push(`${reportCopy.projectLabel}: ${input.projectName}`);
+  if (input.billable !== "all") {
+    parts.push(`${reportCopy.billableLabel}: ${billableFilterLabel(input.billable)}`);
+  }
+  return parts.join(" · ");
+}
+
 /** Header lines for the PDF. Names, not ids. Members do not get a member line. */
 export function describeReportFilters(input: {
   kind: ReportKind;

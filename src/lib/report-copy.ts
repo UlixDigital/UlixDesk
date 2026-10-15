@@ -48,7 +48,7 @@ export const reportCopy = {
   exportAll:
     "The CSV and PDF include every matching row, with these filters, groups, and columns. The PDF matches this screen. In the CSV, hours and amounts are numbers.",
   activityExportAll:
-    "The CSV includes every matching row, with these filters, groups, and columns. In the CSV, hours and amounts are numbers. The PDF is a Time & Activity report for the same dates, filters, and timezone.",
+    "The PDF uses the standard Time & Activity layout and applies your filters. The CSV includes every matching row, with these filters, groups, and columns. In the CSV, hours and amounts are numbers.",
   activityReportTitle: "Time & Activity Report",
   organizationName: "Ulix Digital",
   grandTotal: "Grand total",

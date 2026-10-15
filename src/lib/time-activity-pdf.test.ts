@@ -3,6 +3,8 @@ import { reportCopy } from "@/lib/report-copy";
 import { pdfPlainText } from "@/lib/report-pdf";
 import { slicesForEntry, type SourceEntry } from "@/lib/reports";
 import {
+  ACTIVITY_NOTES_MAX,
+  activityNoAmount,
   buildTimeActivityModel,
   formatActivityDate,
   formatActivityDuration,
@@ -35,8 +37,16 @@ describe("time activity layout", () => {
     expect(formatActivityDuration(5 * 60 * 1000 + 22 * 1000)).toBe("0:05:22");
     expect(formatActivityDuration(10 * 60 * 60 * 1000)).toBe("10:00:00");
     expect(formatActivityDuration(28 * 3600 * 1000 + 55 * 60 * 1000 + 43 * 1000)).toBe("28:55:43");
-    expect(formatActivityMoney([{ currency: "USD", amountMinor: 72322 }], "USD")).toBe("$723.22");
-    expect(formatActivityMoney([{ currency: "JPY", amountMinor: 1500 }], "USD")).toBe("¥1,500");
+    expect(formatActivityMoney([{ currency: "USD", amountMinor: 72322 }])).toBe("$723.22");
+    expect(formatActivityMoney([{ currency: "JPY", amountMinor: 1500 }])).toBe("¥1,500");
+    expect(formatActivityMoney([{ currency: "JPY", amountMinor: 0 }])).toBe("¥0");
+    expect(formatActivityMoney([])).toBe("");
+    expect(
+      formatActivityMoney([
+        { currency: "JPY", amountMinor: 1500 },
+        { currency: "USD", amountMinor: 1000 },
+      ]),
+    ).toBe("¥1,500\n$10.00");
     expect(formatActivityDate("2026-09-28")).toBe("Mon, Sep 28, 2026");
     expect(formatActivityDate("2026-10-04")).toBe("Sun, Oct 4, 2026");
   });
@@ -46,7 +56,6 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-10-04",
       showMoney: true,
-      workspaceCurrency: "USD",
       lines: [
         line({ clientName: "Zebra", memberName: "Sam Rivera", amount: { currency: "USD", amountMinor: 1000 } }),
         line({
@@ -139,7 +148,6 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-09-29",
       showMoney: true,
-      workspaceCurrency: "USD",
       lines: slices.map((slice) => ({
         clientName: slice.clientName,
         date: slice.date,
@@ -164,7 +172,6 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-10-04",
       showMoney: true,
-      workspaceCurrency: "USD",
       lines: [
         line({
           clientName: "Acme",
@@ -204,7 +211,6 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-10-04",
       showMoney: false,
-      workspaceCurrency: "USD",
       lines: [line()],
     });
     expect(model.showMoney).toBe(false);
@@ -239,7 +245,11 @@ describe("time activity layout", () => {
       ],
     });
     expect(kinds(pages[0])).toEqual(["heading", "columns", "group", "detail", "detail"]);
-    expect(kinds(pages[1])).toEqual(["columns", "detail", "total"]);
+    expect(kinds(pages[1])).toEqual(["heading", "columns", "detail", "total"]);
+    expect(pages[1]?.find((slice) => slice.type === "heading")).toMatchObject({
+      client: "Acme",
+      continued: true,
+    });
     expect(pages[0]?.some((slice) => slice.type === "group" && slice.id === "g1")).toBe(true);
     expect(pages[1]?.some((slice) => slice.type === "group")).toBe(false);
   });
@@ -263,7 +273,10 @@ describe("time activity layout", () => {
     });
     expect(kinds(pages[0])).toEqual(["heading", "columns", "group", "detail"]);
     expect(pages[0]?.find((slice) => slice.type === "group")?.id).toBe("g1");
-    expect(kinds(pages[1])).toEqual(["columns", "group", "detail", "total"]);
+    expect(kinds(pages[1])).toEqual(["heading", "columns", "group", "detail", "total"]);
+    expect(pages[1]?.find((slice) => slice.type === "heading")).toMatchObject({
+      continued: true,
+    });
     expect(pages[1]?.find((slice) => slice.type === "group")?.id).toBe("g2");
   });
 
@@ -286,7 +299,8 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-10-04",
       showMoney: true,
-      workspaceCurrency: "USD",
+      timeZone: "Asia/Colombo",
+      filterSummary: "Client: Acme · Billable: Billable",
     });
     const pdf = await renderTimeActivityPdf({
       model,
@@ -310,6 +324,9 @@ describe("time activity layout", () => {
     expect(text).toContain("https://desk.example");
     expect(text).toContain("Page 1 of");
     expect(text).toContain("Page 2 of");
+    expect(text).toContain("Client: Acme · Billable: Billable");
+    expect(text.split("Timezone: Asia/Colombo").length - 1).toBeGreaterThan(1);
+    expect(text).toContain("(continued)");
     expect(text.split("To-do ID").length - 1).toBeGreaterThan(1);
     const declared = Number(text.match(/Page 1 of (\d+)/)?.[1]);
     expect(pdfPageCount(pdf)).toBe(declared);
@@ -319,7 +336,6 @@ describe("time activity layout", () => {
       from: "2026-09-28",
       to: "2026-10-04",
       showMoney: false,
-      workspaceCurrency: "USD",
     });
     const memberPdf = await renderTimeActivityPdf({
       model: member,
@@ -330,6 +346,84 @@ describe("time activity layout", () => {
     expect(memberText).not.toMatch(/\$|Billed|USD/);
     expect(memberText).toContain("0:05:22");
     expect(memberText).toContain("Billable Time");
+  });
+
+  it("marks unrated time, leaves non-billable blank, and keeps each currency", () => {
+    const model = buildTimeActivityModel({
+      from: "2026-09-28",
+      to: "2026-10-04",
+      showMoney: true,
+      lines: [
+        line({
+          clientName: "Acme",
+          projectName: "Website",
+          amount: null,
+          billableMs: 60 * 60 * 1000,
+          durationMs: 60 * 60 * 1000,
+        }),
+        line({
+          clientName: "Acme",
+          projectName: "Internal",
+          amount: null,
+          billableMs: 0,
+          durationMs: 30 * 60 * 1000,
+        }),
+        line({
+          clientName: "Acme",
+          projectName: "Zero",
+          amount: { currency: "USD", amountMinor: 0 },
+          billableMs: 60 * 1000,
+          durationMs: 60 * 1000,
+        }),
+        line({
+          clientName: "Yen Co",
+          projectName: "Support",
+          amount: { currency: "JPY", amountMinor: 1500 },
+          billableMs: 60 * 60 * 1000,
+          durationMs: 60 * 60 * 1000,
+        }),
+        line({
+          clientName: "Yen Co",
+          projectName: "Launch",
+          amount: { currency: "USD", amountMinor: 1000 },
+          billableMs: 60 * 60 * 1000,
+          durationMs: 60 * 60 * 1000,
+        }),
+      ],
+    });
+
+    const acme = model.clients[0];
+    const unrated = acme?.groups[0]?.details.find((detail) => detail.todo === "Website");
+    const internal = acme?.groups[0]?.details.find((detail) => detail.todo === "Internal");
+    const zero = acme?.groups[0]?.details.find((detail) => detail.todo === "Zero");
+    expect(unrated?.billed).toBe(activityNoAmount);
+    expect(internal?.billed).toBe("");
+    expect(zero?.billed).toBe("$0.00");
+    expect(acme?.groups[0]?.billed).toBe(`$0.00\n${activityNoAmount}`);
+    expect(acme?.billed).toBe(`$0.00\n${activityNoAmount}`);
+    expect(acme?.billed).not.toContain("$0.00,");
+
+    const yen = model.clients[1];
+    expect(yen?.billed).toBe("¥1,500\n$10.00");
+    expect(yen?.billed).not.toContain("¥1,500,");
+    expect(yen?.groups[0]?.details.find((detail) => detail.todo === "Support")?.billed).toBe("¥1,500");
+    expect(model.grand.billed).toBe(`¥1,500\n$10.00\n${activityNoAmount}`);
+    expect(model.grand.billed).not.toMatch(/\$0\.00/);
+  });
+
+  it("truncates a long note so one row cannot fill the page", () => {
+    const note = `Start ${"n".repeat(400)} end`;
+    const model = buildTimeActivityModel({
+      from: "2026-09-28",
+      to: "2026-10-04",
+      showMoney: true,
+      lines: [line({ note, manual: true })],
+    });
+    const notes = model.clients[0]?.groups[0]?.details[0]?.notes ?? "";
+    expect(notes.startsWith("Manually added; Start n")).toBe(true);
+    expect(notes.endsWith("…")).toBe(true);
+    expect(notes.length).toBeLessThanOrEqual(ACTIVITY_NOTES_MAX + 1);
+    expect(notes).not.toContain("end");
   });
 });
 

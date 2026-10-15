@@ -58,7 +58,7 @@ export function renderReportPdf(input: PdfReportInput): Promise<Buffer> {
   return new Promise((resolve, reject) => {
     const wide = (input.table?.columns.length ?? 0) >= 7;
     const doc = new PDFDocument({
-      size: wide ? "LETTER" : "A4",
+      size: "LETTER",
       layout: wide ? "landscape" : "portrait",
       margin: MARGIN,
       bufferPages: true,

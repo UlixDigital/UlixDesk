@@ -70,6 +70,9 @@ export type ActivityClient = {
 export type ActivityModel = {
   title: string;
   dateRange: string;
+  /** Narrowed filters only. Empty when the PDF is the whole workspace for the dates. */
+  filterSummary: string;
+  timeZone: string;
   organization: string;
   showMoney: boolean;
   grand: { time: string; billed: string; billable: string };
@@ -77,7 +80,7 @@ export type ActivityModel = {
 };
 
 export type ActivitySlice =
-  | { type: "heading"; client: string; height: number }
+  | { type: "heading"; client: string; continued: boolean; height: number }
   | { type: "columns"; height: number }
   | { type: "group"; id: string; height: number }
   | { type: "detail"; id: string; height: number }
@@ -100,10 +103,19 @@ export function formatActivityDuration(ms: number) {
   return `${hours}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 }
 
-/** Symbol and the currency's own decimals. USD is $723.22. JPY stays ¥1,500. */
-export function formatActivityMoney(totals: MoneyTotal[], fallbackCurrency: string) {
-  const list = totals.length > 0 ? totals : [{ currency: fallbackCurrency, amountMinor: 0 }];
-  return list.map(formatOneMoney).join(", ");
+/** The timesheet draws this em dash, with the accessible name "No amount". */
+export const activityNoAmount = "—";
+
+/** One note row stays on the page. Longer text is cut here. */
+export const ACTIVITY_NOTES_MAX = 300;
+
+/**
+ * One line per currency, in the currency's own symbol and decimals.
+ * An empty list is blank. Callers add the no-amount mark themselves.
+ * USD is $723.22. JPY stays ¥1,500. An explicit zero is $0.00 or ¥0.
+ */
+export function formatActivityMoney(totals: MoneyTotal[]) {
+  return totals.map(formatOneMoney).join("\n");
 }
 
 export function formatActivityDate(date: string) {
@@ -124,7 +136,8 @@ export function buildTimeActivityModel(input: {
   from: string;
   to: string;
   showMoney: boolean;
-  workspaceCurrency: string;
+  filterSummary?: string;
+  timeZone?: string;
 }): ActivityModel {
   const byClient = new Map<string, ActivityLine[]>();
   for (const line of input.lines) {
@@ -139,9 +152,11 @@ export function buildTimeActivityModel(input: {
   return {
     title: reportCopy.activityReportTitle,
     dateRange: formatActivityRange(input.from, input.to),
+    filterSummary: input.filterSummary ?? "",
+    timeZone: input.timeZone ?? "",
     organization: reportCopy.organizationName,
     showMoney: input.showMoney,
-    grand: totalsFor(grandLines, input.showMoney, input.workspaceCurrency),
+    grand: totalsFor(grandLines, input.showMoney),
     clients,
   };
 }
@@ -160,18 +175,21 @@ export function paginateActivity(input: {
   let used = 0;
   let room = input.firstRoom;
   let columnsOnPage = false;
+  let headingOnPage = false;
 
   const freshPage = () => {
     pages.push([]);
     used = 0;
     room = input.nextRoom;
     columnsOnPage = false;
+    headingOnPage = false;
   };
 
   const place = (slice: ActivitySlice) => {
     pages[pages.length - 1].push(slice);
     used += slice.height;
     if (slice.type === "columns") columnsOnPage = true;
+    if (slice.type === "heading") headingOnPage = true;
   };
 
   const reserve = (height: () => number) => {
@@ -182,29 +200,44 @@ export function paginateActivity(input: {
     }
   };
 
+  const preface = (section: SectionMeasure) =>
+    (headingOnPage ? 0 : section.heading) + (columnsOnPage ? 0 : section.columns);
+
+  const continueSection = (section: SectionMeasure) => {
+    if (!headingOnPage) {
+      place({
+        type: "heading",
+        client: section.client,
+        continued: true,
+        height: section.heading,
+      });
+    }
+    if (!columnsOnPage) place({ type: "columns", height: section.columns });
+  };
+
   for (const section of input.sections) {
     const first = section.groups[0];
     const firstBundle = first ? first.height + (first.details[0]?.height ?? 0) : section.total;
     reserve(() => section.heading + section.columns + firstBundle);
-    place({ type: "heading", client: section.client, height: section.heading });
+    place({ type: "heading", client: section.client, continued: false, height: section.heading });
     place({ type: "columns", height: section.columns });
     for (const group of section.groups) {
       const bundle = group.height + (group.details[0]?.height ?? 0);
-      reserve(() => (columnsOnPage ? 0 : section.columns) + bundle);
-      if (!columnsOnPage) place({ type: "columns", height: section.columns });
+      reserve(() => preface(section) + bundle);
+      continueSection(section);
       place({ type: "group", id: group.id, height: group.height });
       group.details.forEach((detail, index) => {
         if (index === 0) {
           place({ type: "detail", id: detail.id, height: detail.height });
           return;
         }
-        reserve(() => (columnsOnPage ? 0 : section.columns) + detail.height);
-        if (!columnsOnPage) place({ type: "columns", height: section.columns });
+        reserve(() => preface(section) + detail.height);
+        continueSection(section);
         place({ type: "detail", id: detail.id, height: detail.height });
       });
     }
-    reserve(() => (columnsOnPage ? 0 : section.columns) + section.total);
-    if (!columnsOnPage) place({ type: "columns", height: section.columns });
+    reserve(() => preface(section) + section.total);
+    continueSection(section);
     place({ type: "total", client: section.client, height: section.total });
   }
 
@@ -239,11 +272,7 @@ export function renderTimeActivityPdf(input: {
   });
 }
 
-function buildClient(
-  name: string,
-  lines: ActivityLine[],
-  input: { showMoney: boolean; workspaceCurrency: string },
-): ActivityClient {
+function buildClient(name: string, lines: ActivityLine[], input: { showMoney: boolean }): ActivityClient {
   const groups = new Map<string, ActivityLine[]>();
   for (const line of lines) {
     const key = `${line.date}\t${line.memberName}`;
@@ -259,7 +288,7 @@ function buildClient(
   });
   return {
     name,
-    ...totalsFor(lines, input.showMoney, input.workspaceCurrency),
+    ...totalsFor(lines, input.showMoney),
     groups: keys.map((key) => buildGroup(name, key, groups.get(key) ?? [], input)),
   };
 }
@@ -268,7 +297,7 @@ function buildGroup(
   clientName: string,
   key: string,
   lines: ActivityLine[],
-  input: { showMoney: boolean; workspaceCurrency: string },
+  input: { showMoney: boolean },
 ): ActivityGroup {
   const [date, memberName] = key.split("\t");
   const byTodo = new Map<string, ActivityLine[]>();
@@ -285,8 +314,10 @@ function buildGroup(
     id: `${clientName}\t${key}`,
     dateLabel: formatActivityDate(date),
     memberName,
-    ...totalsFor(lines, input.showMoney, input.workspaceCurrency),
-    details: todos.map((todo) => buildDetail(key, todo, byTodo.get(todo) ?? [], input)),
+    ...totalsFor(lines, input.showMoney),
+    details: todos.map((todo) =>
+      buildDetail(`${clientName}\t${key}`, todo, byTodo.get(todo) ?? [], input),
+    ),
   };
 }
 
@@ -294,7 +325,7 @@ function buildDetail(
   groupId: string,
   todoKey: string,
   lines: ActivityLine[],
-  input: { showMoney: boolean; workspaceCurrency: string },
+  input: { showMoney: boolean },
 ): ActivityDetail {
   const missingTodo = todoKey === "";
   return {
@@ -302,7 +333,7 @@ function buildDetail(
     todo: missingTodo ? reportCopy.noTodo : todoKey,
     missingTodo,
     notes: detailNotes(lines),
-    ...totalsFor(lines, input.showMoney, input.workspaceCurrency),
+    ...totalsFor(lines, input.showMoney),
   };
 }
 
@@ -316,16 +347,34 @@ function detailNotes(lines: ActivityLine[]) {
     seen.add(line.note);
     parts.push(line.note);
   }
-  return parts.join("; ");
+  return limitNotes(parts.join("; "));
 }
 
-function totalsFor(lines: ActivityLine[], showMoney: boolean, workspaceCurrency: string) {
+function limitNotes(text: string) {
+  const flat = text.replace(/[\r\n]+/g, " ");
+  if (flat.length <= ACTIVITY_NOTES_MAX) return flat;
+  return `${flat.slice(0, ACTIVITY_NOTES_MAX).trimEnd()}…`;
+}
+
+function totalsFor(lines: ActivityLine[], showMoney: boolean) {
   const amounts = sumMoney(lines.map((line) => line.amount));
   return {
     time: formatActivityDuration(lines.reduce((sum, line) => sum + line.durationMs, 0)),
-    billed: showMoney ? formatActivityMoney(amounts, workspaceCurrency) : "",
+    billed: showMoney ? billedAmount(lines, amounts) : "",
     billable: formatActivityDuration(lines.reduce((sum, line) => sum + line.billableMs, 0)),
   };
+}
+
+/**
+ * Rated amounts use that rate's currency, including an explicit zero.
+ * Unrated billable time is the em dash. Non-billable time adds nothing:
+ * the amount cell on screen is blank, and billable time is already 0:00:00.
+ */
+function billedAmount(lines: ActivityLine[], amounts: MoneyTotal[]) {
+  const parts = amounts.map(formatOneMoney);
+  const unrated = lines.some((line) => line.amount === null && line.billableMs > 0);
+  if (unrated) parts.push(activityNoAmount);
+  return parts.join("\n");
 }
 
 function formatOneMoney(total: MoneyTotal) {
@@ -353,7 +402,8 @@ function contentBottom(doc: Doc) {
 }
 
 function drawActivity(doc: Doc, model: ActivityModel, empty: string | null) {
-  drawRunningHeader(doc, model.dateRange);
+  const chrome = headerChrome(doc, model);
+  drawRunningHeader(doc, model, chrome);
   drawIntro(doc, model);
   if (model.clients.length === 0) {
     doc.font("Helvetica").fontSize(11).fillColor(INK).text(pdfText(empty ?? reportCopy.empty), {
@@ -364,35 +414,73 @@ function drawActivity(doc: Doc, model: ActivityModel, empty: string | null) {
   const widths = columnWidths(model.showMoney, contentWidth(doc));
   const sections = model.clients.map((client) => measureSection(doc, client, widths, model.showMoney));
   const firstRoom = contentBottom(doc) - doc.y;
-  const nextRoom = contentBottom(doc) - headerBottom();
+  const nextRoom = contentBottom(doc) - chrome.contentY;
   const pages = paginateActivity({ sections, firstRoom, nextRoom });
   pages.forEach((page, index) => {
     if (page.length === 0) return;
     if (index > 0) {
       doc.addPage();
-      drawRunningHeader(doc, model.dateRange);
+      drawRunningHeader(doc, model, chrome);
     }
     for (const slice of page) drawSlice(doc, model, slice, widths);
   });
 }
 
-function headerBottom() {
-  return 58;
+function headerTextWidth(doc: Doc) {
+  return Math.min(460, contentWidth(doc) - 130);
 }
 
-function drawRunningHeader(doc: Doc, dateRange: string) {
+/** Date on the right, then the filter summary and timezone, then the rule. */
+function headerChrome(doc: Doc, model: ActivityModel) {
+  const width = headerTextWidth(doc);
+  doc.font("Helvetica").fontSize(8);
+  let y = 36;
+  if (model.filterSummary) {
+    y += doc.heightOfString(pdfText(model.filterSummary) || " ", { width }) + 2;
+  }
+  if (model.timeZone) {
+    y += doc.heightOfString(pdfText(`${reportCopy.timezoneLabel}: ${model.timeZone}`), { width }) + 2;
+  }
+  const ruleY = Math.max(y + 2, 48);
+  return { width, ruleY, contentY: ruleY + 10 };
+}
+
+function drawRunningHeader(
+  doc: Doc,
+  model: ActivityModel,
+  chrome: { width: number; ruleY: number; contentY: number },
+) {
+  const x = MARGIN + contentWidth(doc) - chrome.width;
   doc.image(ulixLogoPng, MARGIN, 20, { height: 22 });
   doc.font("Helvetica-Bold").fontSize(10).fillColor(INK);
-  doc.text(pdfText(dateRange), MARGIN, 26, {
-    width: contentWidth(doc),
+  doc.text(pdfText(model.dateRange), x, 22, {
+    width: chrome.width,
     align: "right",
     lineBreak: false,
+    height: 14,
   });
-  const ruleY = 48;
+  let y = 36;
+  doc.font("Helvetica").fontSize(8).fillColor(MUTED);
+  if (model.filterSummary) {
+    doc.text(pdfText(model.filterSummary), x, y, { width: chrome.width, align: "right" });
+    y = doc.y + 2;
+  }
+  if (model.timeZone) {
+    doc.text(pdfText(`${reportCopy.timezoneLabel}: ${model.timeZone}`), x, y, {
+      width: chrome.width,
+      align: "right",
+    });
+  }
   doc.save();
-  doc.moveTo(MARGIN, ruleY).lineTo(MARGIN + contentWidth(doc), ruleY).strokeColor(RULE).lineWidth(0.7).stroke();
+  doc
+    .moveTo(MARGIN, chrome.ruleY)
+    .lineTo(MARGIN + contentWidth(doc), chrome.ruleY)
+    .strokeColor(RULE)
+    .lineWidth(0.7)
+    .stroke();
   doc.restore();
-  doc.y = headerBottom();
+  doc.x = MARGIN;
+  doc.y = chrome.contentY;
 }
 
 function drawIntro(doc: Doc, model: ActivityModel) {
@@ -432,13 +520,18 @@ function drawGrandTotal(doc: Doc, model: ActivityModel) {
     });
   });
   doc.font("Helvetica").fontSize(9);
+  const valueH = Math.max(
+    18,
+    ...values.map(
+      (value) => doc.heightOfString(pdfText(value) || " ", { width: col - 8 }) + 8,
+    ),
+  );
   values.forEach((value, index) => {
     doc.text(pdfText(value), MARGIN + index * col + 4, y + rowH + 4, {
       width: col - 8,
-      lineBreak: false,
     });
   });
-  doc.y = y + rowH * 2 + 2;
+  doc.y = y + rowH + valueH + 2;
 }
 
 function columnWidths(showMoney: boolean, total: number) {
@@ -466,10 +559,13 @@ function measureSection(doc: Doc, client: ActivityClient, widths: number[], show
   return {
     client: client.name,
     heading: Math.max(
-      22,
-      doc.font("Helvetica-Bold").fontSize(12).heightOfString(pdfText(client.name) || " ", {
-        width: contentWidth(doc),
-      }) + 8,
+      16,
+      doc
+        .font("Helvetica-Bold")
+        .fontSize(8)
+        .heightOfString(pdfText(`${client.name} (continued)`) || " ", {
+          width: contentWidth(doc),
+        }) + 6,
     ),
     columns: 18,
     total: measureCells(doc, totalCells(client, showMoney), widths, true),
@@ -521,8 +617,9 @@ function measureCells(doc: Doc, cells: string[], widths: number[], bold: boolean
 function drawSlice(doc: Doc, model: ActivityModel, slice: ActivitySlice, widths: number[]) {
   const y = doc.y;
   if (slice.type === "heading") {
-    doc.font("Helvetica-Bold").fontSize(12).fillColor(INK);
-    doc.text(pdfText(slice.client), MARGIN, y + 4, {
+    const label = slice.continued ? `${slice.client} (continued)` : slice.client;
+    doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
+    doc.text(pdfText(label), MARGIN, y + 3, {
       width: contentWidth(doc),
       height: Math.max(slice.height - 4, 8),
     });
