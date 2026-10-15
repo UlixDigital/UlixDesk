@@ -6,7 +6,8 @@ import { apiCodes } from "@/lib/api-errors";
 import { prisma } from "@/lib/db";
 import { InvoicedTimeError } from "@/lib/invoice-lock";
 import { dateColumn } from "@/lib/invoice-form";
-import { allocateInvoiceNumber, createInvoice, deleteDraft, getInvoice, listInvoices, saveDraft } from "@/lib/invoices";
+import { invoiceCopy } from "@/lib/invoice-copy";
+import { allocateInvoiceNumber, createInvoice, deleteDraft, getInvoice, listInvoices, refreshDraftFromTime, saveDraft } from "@/lib/invoices";
 import { resetTestDatabase } from "@/lib/reset-test-db";
 import { createTestUser, signInAs } from "@/lib/test-actor";
 import { setTestSessionToken } from "@/lib/test-hooks";
@@ -70,8 +71,9 @@ async function addTime(input: {
 
 describe("invoice numbers", () => {
   it("allocates the next number and does not reuse it after a draft is deleted", async () => {
-    const { owner, client } = await workspace();
+    const { owner, client, project } = await workspace();
     const actor = { id: owner.id, role: owner.role };
+    await addTime({ projectId: project.id, userId: owner.id, day: "2026-10-06", seconds: 3600 });
     const first = await createInvoice({
       actor,
       clientId: client.id,
@@ -205,10 +207,8 @@ describe("invoice drafts", () => {
       periodEnd: "2026-10-11",
       grouping: "period",
     });
-    expect(again.ok).toBe(true);
-    if (!again.ok) return;
-    const second = await getInvoice(owner.role, again.id);
-    expect(second?.lines).toHaveLength(0);
+    expect(again).toEqual({ ok: false, error: invoiceCopy.noEligible });
+    expect(await prisma.invoice.count()).toBe(1);
 
     const yenInvoice = await createInvoice({
       actor: { id: owner.id, role: owner.role },
@@ -226,8 +226,9 @@ describe("invoice drafts", () => {
   });
 
   it("saves a custom line, discount, and tax, then issues the draft", async () => {
-    const { owner, client } = await workspace();
+    const { owner, client, project } = await workspace();
     const actor = { id: owner.id, role: owner.role };
+    await addTime({ projectId: project.id, userId: owner.id, day: "2026-10-06", seconds: 60 });
     const created = await createInvoice({
       actor,
       clientId: client.id,
@@ -237,6 +238,7 @@ describe("invoice drafts", () => {
     });
     expect(created.ok).toBe(true);
     if (!created.ok) return;
+    await prisma.timeEntry.deleteMany({ where: { projectId: project.id } });
     const saved = await saveDraft({
       actor,
       id: created.id,
@@ -401,7 +403,8 @@ describe("issued time locking", () => {
 
 describe("invoice access", () => {
   it("hides invoices and the PDF from members", async () => {
-    const { owner, client } = await workspace();
+    const { owner, client, project } = await workspace();
+    await addTime({ projectId: project.id, userId: owner.id, day: "2026-10-06", seconds: 60 });
     const created = await createInvoice({
       actor: { id: owner.id, role: owner.role },
       clientId: client.id,
@@ -423,8 +426,8 @@ describe("invoice access", () => {
           periodEnd: "2026-10-11",
           grouping: "period",
         })
-      ).ok,
-    ).toBe(false);
+      ),
+    ).toEqual({ ok: false, error: invoiceCopy.denied });
     const denied = await invoicePdf(new Request("http://desk.example.com/invoices/x/pdf"), {
       params: Promise.resolve({ id: created.id }),
     });
@@ -448,6 +451,183 @@ describe("invoice access", () => {
     const listed = await listInvoices(owner.role, { clientId: client.id, status: "draft" });
     expect(listed.map((row) => row.number)).toEqual([created.number]);
   });
+});
+
+describe("invoice qa", () => {
+  it("does not create a draft or consume a number when nothing is eligible", async () => {
+    const { owner, client } = await workspace();
+    await prisma.workspaceSettings.upsert({
+      where: { id: "workspace" },
+      update: {},
+      create: { id: "workspace" },
+    });
+    const before = await prisma.invoiceNumber.count();
+    const next = (await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextInvoiceNumber;
+    const created = await createInvoice({
+      actor: { id: owner.id, role: owner.role },
+      clientId: client.id,
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      grouping: "period",
+    });
+    expect(created).toEqual({ ok: false, error: invoiceCopy.noEligible });
+    expect(await prisma.invoice.count()).toBe(0);
+    expect(await prisma.invoiceNumber.count()).toBe(before);
+    expect((await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextInvoiceNumber).toBe(next);
+  });
+
+  it("refreshes stale draft lines and asks before issuing the new time", async () => {
+    const { owner, member, client, project } = await workspace();
+    const entry = await addTime({ projectId: project.id, userId: member.id, day: "2026-10-06", seconds: 3600 });
+    const actor = { id: owner.id, role: owner.role };
+    const created = await createInvoice({
+      actor,
+      clientId: client.id,
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      grouping: "period",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    await prisma.timeEntry.update({
+      where: { id: entry.id },
+      data: { endedAt: new Date(entry.startedAt.getTime() + 7200 * 1000) },
+    });
+    const invoice = await getInvoice(owner.role, created.id);
+    const blocked = await saveDraft({ actor, id: created.id, issue: true, draft: draftWrite(invoice!) });
+    expect(blocked.ok).toBe(false);
+    if (blocked.ok || !("confirm" in blocked)) return;
+    expect(blocked.diffs.join("\n")).toContain("2:00:00");
+    expect((await getInvoice(owner.role, created.id))?.status).toBe("draft");
+    expect((await getInvoice(owner.role, created.id))?.lines[0]?.quantitySeconds).toBe(3600);
+
+    expect((await refreshDraftFromTime({ actor, id: created.id, draft: draftWrite(invoice!) })).ok).toBe(true);
+    const refreshed = await getInvoice(owner.role, created.id);
+    expect(refreshed?.status).toBe("draft");
+    expect(refreshed?.lines[0]?.quantitySeconds).toBe(7200);
+
+    await prisma.timeEntry.update({
+      where: { id: entry.id },
+      data: { endedAt: new Date(entry.startedAt.getTime() + 1800 * 1000) },
+    });
+    const current = await getInvoice(owner.role, created.id);
+    const pending = await saveDraft({ actor, id: created.id, issue: true, draft: draftWrite(current!) });
+    expect(pending.ok).toBe(false);
+    const issued = await saveDraft({
+      actor,
+      id: created.id,
+      issue: true,
+      confirm: true,
+      draft: draftWrite(current!),
+    });
+    expect(issued.ok).toBe(true);
+    const finalInvoice = await getInvoice(owner.role, created.id);
+    expect(finalInvoice?.status).toBe("open");
+    expect(finalInvoice?.lines[0]?.quantitySeconds).toBe(1800);
+  });
+
+  it("splits a crossing entry at midnight in the workspace timezone", async () => {
+    const { owner, member, client, project } = await workspace();
+    await prisma.workspaceSettings.upsert({
+      where: { id: "workspace" },
+      update: { timeZone: "Asia/Colombo" },
+      create: { id: "workspace", timeZone: "Asia/Colombo" },
+    });
+    await prisma.billRate.create({
+      data: {
+        scope: "project",
+        projectId: project.id,
+        amountMinor: 3000,
+        currency: "USD",
+        effectiveFrom: new Date("2026-10-12T00:00:00.000Z"),
+        createdById: owner.id,
+      },
+    });
+    const startedAt = new Date(zonedDayStart("2026-10-11", "Asia/Colombo").getTime() + 22 * 3600 * 1000);
+    const endedAt = new Date(zonedDayStart("2026-10-12", "Asia/Colombo").getTime() + 2 * 3600 * 1000);
+    await prisma.timeEntry.create({
+      data: { projectId: project.id, userId: member.id, startedAt, endedAt, billable: true, source: "manual" },
+    });
+    const overlap = await createInvoice({
+      actor: { id: owner.id, role: owner.role },
+      clientId: client.id,
+      periodStart: "2026-10-12",
+      periodEnd: "2026-10-12",
+      grouping: "day",
+    });
+    expect(overlap.ok).toBe(true);
+    if (!overlap.ok) return;
+    const overlapInvoice = await getInvoice(owner.role, overlap.id);
+    expect(overlapInvoice?.lines.map((line) => [line.quantitySeconds, line.unitPriceMinor, line.amountMinor])).toEqual([
+      [7200, 3000, 6000],
+    ]);
+
+    await prisma.timeEntry.create({
+      data: { projectId: project.id, userId: member.id, startedAt, endedAt, billable: true, source: "manual" },
+    });
+    const both = await createInvoice({
+      actor: { id: owner.id, role: owner.role },
+      clientId: client.id,
+      periodStart: "2026-10-11",
+      periodEnd: "2026-10-12",
+      grouping: "day",
+    });
+    expect(both.ok).toBe(true);
+    if (!both.ok) return;
+    const invoice = await getInvoice(owner.role, both.id);
+    expect(invoice?.lines.map((line) => [line.quantitySeconds, line.unitPriceMinor, line.amountMinor])).toEqual([
+      [7200, 2500, 5000],
+      [7200, 3000, 6000],
+    ]);
+    expect(await prisma.invoiceTime.count({ where: { invoiceId: both.id } })).toBe(1);
+  });
+
+  it("locks the time rows inside the issue transaction", async () => {
+    const { owner, member, client, project } = await workspace();
+    const entry = await addTime({ projectId: project.id, userId: member.id, day: "2026-10-06", seconds: 3600 });
+    const actor = { id: owner.id, role: owner.role };
+    const created = await createInvoice({
+      actor,
+      clientId: client.id,
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      grouping: "period",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const invoice = await getInvoice(owner.role, created.id);
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let acquired!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      acquired = resolve;
+    });
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await tx.$queryRaw`SELECT "id" FROM "TimeEntry" WHERE "id" = ${entry.id} FOR UPDATE`;
+        acquired();
+        await gate;
+      },
+      { timeout: 15_000 },
+    );
+    try {
+      await ready;
+      let settled = false;
+      const issuing = saveDraft({ actor, id: created.id, issue: true, draft: draftWrite(invoice!) }).then((result) => {
+        settled = true;
+        return result;
+      });
+      await new Promise((resolve) => setTimeout(resolve, 500));
+      expect(settled).toBe(false);
+      release();
+      expect((await issuing).ok).toBe(true);
+    } finally {
+      release();
+      await holder;
+    }
+  }, 20_000);
 });
 
 function draftWrite(invoice: {

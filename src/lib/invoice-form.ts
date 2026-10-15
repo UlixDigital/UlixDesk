@@ -8,7 +8,10 @@ import {
   type DiscountKind,
 } from "@/lib/invoice-money";
 import { parseRateInput } from "@/lib/money";
+import { hasVisibleCharacters } from "@/lib/saved-reports";
 import { isRealCalendarDate } from "@/lib/time-zone";
+
+export const MAX_INVOICE_NUMBER = 1_000_000_000;
 
 export const INVOICE_GROUPINGS = ["period", "project", "member", "day"] as const;
 export const INVOICE_STATUSES = ["draft", "open", "paid", "partially_paid", "void"] as const;
@@ -93,8 +96,11 @@ export function parseInvoiceSettings(input: {
   invoiceTaxRate: string;
 }): { ok: true; data: InvoiceSettingsWrite } | { ok: false; error: string } {
   const companyName = input.companyName.trim().replace(/\s+/g, " ");
-  if (!companyName || companyName.length > NAME_MAX) {
-    return { ok: false, error: companyName ? invoiceCopy.tooLong : invoiceCopy.companyRequired };
+  if (!hasVisibleCharacters(companyName)) {
+    return { ok: false, error: invoiceCopy.companyRequired };
+  }
+  if (companyName.length > NAME_MAX) {
+    return { ok: false, error: invoiceCopy.tooLong };
   }
   const companyAddress = input.companyAddress.trim();
   if (!companyAddress || companyAddress.length > ADDRESS_MAX) {
@@ -108,7 +114,7 @@ export function parseInvoiceSettings(input: {
     return { ok: false, error: invoiceCopy.numberInvalid };
   }
   const nextInvoiceNumber = Number(input.nextInvoiceNumber.trim());
-  if (!Number.isSafeInteger(nextInvoiceNumber) || nextInvoiceNumber < 1 || nextInvoiceNumber > 1_000_000_000) {
+  if (!Number.isSafeInteger(nextInvoiceNumber) || nextInvoiceNumber < 1 || nextInvoiceNumber > MAX_INVOICE_NUMBER) {
     return { ok: false, error: invoiceCopy.numberInvalid };
   }
   if (!/^\d+$/.test(input.invoiceNetTermsDays.trim())) {
@@ -184,7 +190,7 @@ export function parseDraftInvoice(
   if (!dateOk(input.issueDate) || !dateOk(input.dueDate)) {
     return { ok: false, error: invoiceCopy.dateInvalid };
   }
-  if (input.dueDate < input.issueDate) return { ok: false, error: invoiceCopy.dateOrder };
+  if (input.dueDate < input.issueDate) return { ok: false, error: invoiceCopy.dueBeforeIssue };
   const po = input.poNumber.trim();
   if (po.length > PO_MAX) return { ok: false, error: invoiceCopy.tooLong };
   if (input.notes.length > TEXT_MAX || input.bankDetails.length > TEXT_MAX) {
@@ -197,12 +203,16 @@ export function parseDraftInvoice(
   let discountBps = 0;
   if (input.discountKind === "percent") {
     discountKind = "percent";
-    const parsed = parsePercentBps(input.discountValue.trim() || "0");
+    const discountValue = input.discountValue.trim() || "0";
+    if (isNegativeDiscount(discountValue)) return { ok: false, error: invoiceCopy.discountNegative };
+    const parsed = parsePercentBps(discountValue);
     if (!parsed.ok) return { ok: false, error: invoiceCopy.percentInvalid };
     discountBps = parsed.bps;
   } else if (input.discountKind === "amount") {
     discountKind = "amount";
-    const parsed = parseRateInput(input.discountValue.trim() || "0", currency);
+    const discountValue = input.discountValue.trim() || "0";
+    if (isNegativeDiscount(discountValue)) return { ok: false, error: invoiceCopy.discountNegative };
+    const parsed = parseRateInput(discountValue, currency);
     if (!parsed.ok) return { ok: false, error: parsed.error };
     discountAmountMinor = parsed.amountMinor;
   } else if (input.discountKind !== "none") {
@@ -258,6 +268,10 @@ export function parseDraftInvoice(
       lines,
     },
   };
+}
+
+function isNegativeDiscount(value: string) {
+  return value.startsWith("-") || value.startsWith("−");
 }
 
 export function civilDate(value: Date) {

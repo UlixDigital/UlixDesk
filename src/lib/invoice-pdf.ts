@@ -1,15 +1,26 @@
+import { existsSync } from "node:fs";
+import path from "node:path";
 import PDFDocument from "pdfkit";
 import { pdfText } from "@/lib/report-pdf";
 import { ulixLogoPng } from "@/lib/ulix-logo";
 
-const PAGE_WIDTH = 612;
 const PAGE_HEIGHT = 792;
-const MARGIN = 40;
+const LEFT = 28;
+const RIGHT = 584;
 const INK = "#333333";
 const MUTED = "#6b7280";
 const RULE = "#e5e7eb";
 const SHADE = "#f9fafb";
-const CONTENT_RIGHT = PAGE_WIDTH - MARGIN;
+const FONT = "DejaVu";
+const FONT_BOLD = "DejaVu-Bold";
+const PAD = 9;
+const HOURS_X = 374;
+const PRICE_RIGHT = 504;
+const AMOUNT_RIGHT = 575;
+const DATE_X = 407;
+const TOTAL_GAP = 8;
+/** Wide enough that "to Ulix Digital" stays on one line at 9pt DejaVu. */
+export const INVOICE_NOTES_WIDTH = 380;
 
 export type InvoicePdfLine = {
   title: string;
@@ -65,6 +76,8 @@ export function renderInvoicePdf(
     doc.on("error", reject);
     doc.on("end", () => resolve(Buffer.concat(chunks)));
     try {
+      doc.registerFont(FONT, fontFile("DejaVuSans.ttf"));
+      doc.registerFont(FONT_BOLD, fontFile("DejaVuSans-Bold.ttf"));
       drawInvoice(doc, cleanInput(input), options?.trace);
       doc.end();
     } catch (error) {
@@ -106,54 +119,48 @@ function traceText(trace: PdfTrace[] | undefined, text: string, x: number, y: nu
   trace.push({ text, x, y });
 }
 
-function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
-  let y = 48;
-  doc.fillColor(INK).font("Helvetica-Bold").fontSize(18);
-  doc.text(`Invoice ${input.number}`, MARGIN, y, { lineBreak: false });
-  traceText(trace, `Invoice ${input.number}`, MARGIN, y);
-  doc.image(ulixLogoPng, CONTENT_RIGHT - 150, 42, { fit: [150, 42], align: "right" });
-
-  y = 108;
-  const dateRows = [
-    ["Issue date:", input.issueDate],
-    ["Due date:", input.dueDate],
-    ...(input.poNumber ? [["PO number:", input.poNumber]] : []),
+function fontFile(name: string) {
+  const candidates = [
+    path.join(process.cwd(), "assets/fonts", name),
+    path.join(process.cwd(), "..", "assets/fonts", name),
   ];
-  let dateY = y;
-  for (const [label, value] of dateRows) {
-    doc.font("Helvetica").fontSize(10).fillColor(MUTED);
-    doc.text(label ?? "", 360, dateY, { lineBreak: false });
-    traceText(trace, label ?? "", 360, dateY);
-    doc.font("Helvetica-Bold").fontSize(10).fillColor(INK);
-    const width = doc.widthOfString(value ?? "");
-    doc.text(value ?? "", CONTENT_RIGHT - width, dateY, { lineBreak: false });
-    traceText(trace, value ?? "", CONTENT_RIGHT - width, dateY);
-    dateY += 16;
-  }
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (!found) throw new Error(`Missing invoice font ${name}.`);
+  return found;
+}
 
-  doc.font("Helvetica").fontSize(9).fillColor(MUTED);
-  doc.text("FROM", MARGIN, y, { lineBreak: false });
-  traceText(trace, "FROM", MARGIN, y);
-  y += 14;
-  doc.font("Helvetica-Bold").fontSize(13).fillColor(INK);
-  doc.text(input.companyName, MARGIN, y, { width: 280, lineBreak: false });
-  traceText(trace, input.companyName, MARGIN, y);
-  y += 18;
-  y = drawWrapped(doc, trace, input.companyAddress, MARGIN, y, 280, 10, "Helvetica", INK);
+function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
+  doc.fillColor(INK).font(FONT).fontSize(14);
+  doc.text(`Invoice ${input.number}`, LEFT, 84, { lineBreak: false });
+  traceText(trace, `Invoice ${input.number}`, LEFT, 84);
+  doc.image(ulixLogoPng, 482, 100, { fit: [90, 28], align: "right" });
+
+  let y = 115;
+  doc.font(FONT).fontSize(8).fillColor(MUTED);
+  doc.text("FROM", LEFT, y, { lineBreak: false });
+  traceText(trace, "FROM", LEFT, y);
+  y = 130;
+  doc.font(FONT).fontSize(12).fillColor(INK);
+  doc.text(input.companyName, LEFT, y, { width: 300, lineBreak: false });
+  traceText(trace, input.companyName, LEFT, y);
+  y = 145;
+  y = drawWrapped(doc, trace, input.companyAddress, LEFT, y, 320, 9, FONT, INK);
 
   y += 16;
-  doc.font("Helvetica").fontSize(9).fillColor(MUTED);
-  doc.text("TO", MARGIN, y, { lineBreak: false });
-  traceText(trace, "TO", MARGIN, y);
-  y += 14;
-  doc.font("Helvetica-Bold").fontSize(13).fillColor(INK);
-  doc.text(input.clientName, MARGIN, y, { width: 280, lineBreak: false });
-  traceText(trace, input.clientName, MARGIN, y);
-  y += 18;
+  const toY = y;
+  doc.font(FONT).fontSize(8).fillColor(MUTED);
+  doc.text("TO", LEFT, toY, { lineBreak: false });
+  traceText(trace, "TO", LEFT, toY);
+  drawDateBlock(doc, trace, input, toY);
+  y = toY + 15;
+  doc.font(FONT).fontSize(12).fillColor(INK);
+  doc.text(input.clientName, LEFT, y, { width: 300, lineBreak: false });
+  traceText(trace, input.clientName, LEFT, y);
+  y += 15;
   if (input.clientAddress) {
-    y = drawWrapped(doc, trace, input.clientAddress, MARGIN, y, 280, 10, "Helvetica", INK);
+    y = drawWrapped(doc, trace, input.clientAddress, LEFT, y, 360, 9, FONT, INK);
   }
-  y = Math.max(y, dateY) + 22;
+  y += 38;
 
   const columns = columnLayout();
   y = drawTableHeader(doc, trace, columns, y);
@@ -161,65 +168,70 @@ function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
     const block = measureLine(doc, line, columns);
     if (y + block > PAGE_HEIGHT - 180) {
       doc.addPage();
-      y = 48;
+      y = 84;
       y = drawTableHeader(doc, trace, columns, y);
     }
     y = drawLine(doc, trace, line, columns, y);
   }
   rule(doc, y);
-  y += 18;
+  y += 16;
 
-  const totalsTop = y;
-  drawNotes(doc, trace, input, y);
-  drawTotals(doc, trace, input.totals, totalsTop);
+  const notesWidth = Math.min(INVOICE_NOTES_WIDTH, RIGHT - (LEFT + PAD) - totalPairWidth(doc, input.totals) - 16);
+  drawNotes(doc, trace, input, y, notesWidth);
+  drawTotals(doc, trace, input.totals, y);
+}
+
+function drawDateBlock(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInput, y: number) {
+  const rows = [
+    ["Issue date:", input.issueDate],
+    ["Due date:", input.dueDate],
+    ...(input.poNumber ? [["PO number:", input.poNumber]] : []),
+  ];
+  let cursor = y;
+  for (const [label, value] of rows) {
+    doc.font(FONT).fontSize(9).fillColor(MUTED);
+    doc.text(label ?? "", DATE_X, cursor, { lineBreak: false });
+    traceText(trace, label ?? "", DATE_X, cursor);
+    drawRight(doc, trace, value ?? "", RIGHT, cursor, FONT, 9, INK);
+    cursor += 12;
+  }
 }
 
 function columnLayout() {
-  const width = CONTENT_RIGHT - MARGIN;
-  const amount = 78;
-  const price = 78;
-  const hours = 88;
-  const description = width - amount - price - hours;
   return {
-    description,
-    hours,
-    price,
-    amount,
-    x: [MARGIN, MARGIN + description, MARGIN + description + hours, MARGIN + description + hours + price],
+    description: HOURS_X - LEFT - PAD,
+    hoursX: HOURS_X,
+    priceRight: PRICE_RIGHT,
+    amountRight: AMOUNT_RIGHT,
   };
 }
 
 function drawTableHeader(
   doc: Doc,
   trace: PdfTrace[] | undefined,
-  columns: ReturnType<typeof columnLayout>,
+  _columns: ReturnType<typeof columnLayout>,
   y: number,
 ) {
   doc.save();
-  doc.rect(MARGIN, y, CONTENT_RIGHT - MARGIN, 28).fill(SHADE);
+  doc.rect(LEFT, y, RIGHT - LEFT, 28).fill(SHADE);
   doc.restore();
-  doc.rect(MARGIN, y + 27, CONTENT_RIGHT - MARGIN, 1).fill(RULE);
-  const labels = ["Description", "Total hours (qty)", "Unit price", "Amount"];
-  labels.forEach((label, index) => {
-    const x = columns.x[index] ?? MARGIN;
-    const columnWidth = [columns.description, columns.hours, columns.price, columns.amount][index] ?? 40;
-    doc.font("Helvetica-Bold").fontSize(8).fillColor(INK);
-    if (index === 0) {
-      doc.text(label, x + 8, y + 10, { lineBreak: false });
-      traceText(trace, label, x + 8, y + 10);
-      return;
-    }
-    const textWidth = doc.widthOfString(label);
-    doc.text(label, x + columnWidth - textWidth - 8, y + 10, { lineBreak: false });
-    traceText(trace, label, x + columnWidth - textWidth - 8, y + 10);
-  });
-  return y + 36;
+  doc.rect(LEFT, y + 27, RIGHT - LEFT, 1).fill(RULE);
+  doc.font(FONT_BOLD).fontSize(8).fillColor(INK);
+  doc.text("Total hours", HOURS_X, y + 4, { lineBreak: false });
+  traceText(trace, "Total hours", HOURS_X, y + 4);
+  doc.text("(qty)", HOURS_X, y + 15, { lineBreak: false });
+  traceText(trace, "(qty)", HOURS_X, y + 15);
+  doc.text("Description", LEFT + PAD, y + 15, { lineBreak: false });
+  traceText(trace, "Description", LEFT + PAD, y + 15);
+  drawRight(doc, trace, "Unit price", PRICE_RIGHT, y + 15, FONT_BOLD, 8, INK);
+  drawRight(doc, trace, "Amount", AMOUNT_RIGHT, y + 15, FONT_BOLD, 8, INK);
+  return y + 42;
 }
 
 function measureLine(doc: Doc, line: InvoicePdfLine, columns: ReturnType<typeof columnLayout>) {
-  doc.font("Helvetica").fontSize(9);
-  const detail = line.detail ? doc.heightOfString(line.detail, { width: columns.description - 16 }) : 0;
-  return 16 + detail + 12;
+  doc.font(FONT).fontSize(9);
+  const detail = line.detail ? doc.heightOfString(line.detail, { width: columns.description - 8 }) : 0;
+  return 14 + detail + 4;
 }
 
 function drawLine(
@@ -229,58 +241,81 @@ function drawLine(
   columns: ReturnType<typeof columnLayout>,
   y: number,
 ) {
-  doc.font("Helvetica-Bold").fontSize(11).fillColor(INK);
-  doc.text(line.title, (columns.x[0] ?? MARGIN) + 8, y, {
-    width: columns.description - 16,
+  doc.font(FONT).fontSize(9).fillColor(INK);
+  doc.text(line.title, LEFT + PAD, y, {
+    width: columns.description - 8,
     lineBreak: false,
   });
-  traceText(trace, line.title, (columns.x[0] ?? MARGIN) + 8, y);
-  let next = y + 16;
+  traceText(trace, line.title, LEFT + PAD, y);
+  let next = y + 12;
   if (line.detail) {
-    doc.font("Helvetica").fontSize(9).fillColor(MUTED);
-    doc.text(line.detail, (columns.x[0] ?? MARGIN) + 8, next, { width: columns.description - 16 });
-    traceText(trace, line.detail, (columns.x[0] ?? MARGIN) + 8, next);
-    next += doc.heightOfString(line.detail, { width: columns.description - 16 });
+    doc.font(FONT).fontSize(9).fillColor(MUTED);
+    doc.text(line.detail, LEFT + PAD, next, { width: columns.description - 8 });
+    traceText(trace, line.detail, LEFT + PAD, next);
+    next += doc.heightOfString(line.detail, { width: columns.description - 8 });
   }
-  const values = [line.quantity, line.unitPrice, line.amount];
-  const widths = [columns.hours, columns.price, columns.amount];
-  values.forEach((value, index) => {
-    const x = columns.x[index + 1] ?? MARGIN;
-    const columnWidth = widths[index] ?? 40;
-    doc.font("Helvetica").fontSize(10).fillColor(INK);
-    const textWidth = doc.widthOfString(value);
-    doc.text(value, x + columnWidth - textWidth - 8, y, { lineBreak: false });
-    traceText(trace, value, x + columnWidth - textWidth - 8, y);
-  });
-  return next + 12;
+  doc.font(FONT).fontSize(9).fillColor(INK);
+  doc.text(line.quantity, HOURS_X, y, { lineBreak: false });
+  traceText(trace, line.quantity, HOURS_X, y);
+  drawRight(doc, trace, line.unitPrice, PRICE_RIGHT, y, FONT, 9, INK);
+  drawRight(doc, trace, line.amount, AMOUNT_RIGHT, y, FONT, 9, INK);
+  return next + 4;
 }
 
-function drawNotes(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInput, y: number) {
-  doc.font("Helvetica-Bold").fontSize(10).fillColor(INK);
-  doc.text("Notes", MARGIN, y, { lineBreak: false });
-  traceText(trace, "Notes", MARGIN, y);
+function drawNotes(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInput, y: number, width: number) {
+  doc.font(FONT_BOLD).fontSize(10).fillColor(INK);
+  doc.text("Notes", LEFT + PAD, y, { lineBreak: false });
+  traceText(trace, "Notes", LEFT + PAD, y);
   const body = [input.notes, input.bankDetails].filter(Boolean).join("\n\n");
   if (!body) return;
-  drawWrapped(doc, trace, body, MARGIN, y + 16, 300, 9, "Helvetica", INK);
+  drawWrapped(doc, trace, body, LEFT + PAD, y + 14, width, 9, FONT, INK);
+}
+
+function totalPairWidth(doc: Doc, totals: InvoicePdfTotal[]) {
+  doc.font(FONT_BOLD).fontSize(9);
+  let max = 0;
+  for (const total of totals) {
+    max = Math.max(max, doc.widthOfString(total.label) + TOTAL_GAP + doc.widthOfString(total.value));
+  }
+  return max;
 }
 
 function drawTotals(doc: Doc, trace: PdfTrace[] | undefined, totals: InvoicePdfTotal[], y: number) {
   let cursor = y;
   for (const total of totals) {
+    doc.font(FONT_BOLD).fontSize(9);
+    const valueWidth = doc.widthOfString(total.value);
+    const labelWidth = doc.widthOfString(total.label);
+    const valueX = AMOUNT_RIGHT - valueWidth;
+    const labelX = valueX - TOTAL_GAP - labelWidth;
     if (total.emphasize) {
       doc.save();
-      doc.rect(348, cursor - 4, CONTENT_RIGHT - 348, 20).fill(SHADE);
+      doc.rect(labelX - 6, cursor - 3, AMOUNT_RIGHT - labelX + 10, 16).fill(SHADE);
       doc.restore();
     }
-    const font = total.emphasize ? "Helvetica-Bold" : "Helvetica";
-    doc.font(font).fontSize(10).fillColor(INK);
-    doc.text(total.label, 360, cursor, { lineBreak: false });
-    traceText(trace, total.label, 360, cursor);
-    const width = doc.widthOfString(total.value);
-    doc.text(total.value, CONTENT_RIGHT - width, cursor, { lineBreak: false });
-    traceText(trace, total.value, CONTENT_RIGHT - width, cursor);
-    cursor += 18;
+    doc.font(FONT_BOLD).fontSize(9).fillColor(INK);
+    doc.text(total.label, labelX, cursor, { lineBreak: false });
+    traceText(trace, total.label, labelX, cursor);
+    doc.text(total.value, valueX, cursor, { lineBreak: false });
+    traceText(trace, total.value, valueX, cursor);
+    cursor += 16;
   }
+}
+
+function drawRight(
+  doc: Doc,
+  trace: PdfTrace[] | undefined,
+  text: string,
+  right: number,
+  y: number,
+  font: string,
+  size: number,
+  color: string,
+) {
+  doc.font(font).fontSize(size).fillColor(color);
+  const x = right - doc.widthOfString(text);
+  doc.text(text, x, y, { lineBreak: false });
+  traceText(trace, text, x, y);
 }
 
 function drawWrapped(
@@ -302,7 +337,7 @@ function drawWrapped(
 
 function rule(doc: Doc, y: number) {
   doc.save();
-  doc.moveTo(MARGIN, y).lineTo(CONTENT_RIGHT, y).lineWidth(1).strokeColor(RULE).stroke();
+  doc.moveTo(LEFT, y).lineTo(RIGHT, y).lineWidth(1).strokeColor(RULE).stroke();
   doc.restore();
 }
 
@@ -337,23 +372,75 @@ function applyMatrix(matrix: PdfMatrix, x: number, y: number) {
  */
 export function pdfTextPositions(buffer: Buffer) {
   const raw = buffer.toString("latin1");
+  const fonts = fontUnicodeMaps(raw);
   const found: Array<{ text: string; x: number; yFromTop: number }> = [];
   for (const match of raw.matchAll(/stream\n([\s\S]*?)endstream/g)) {
     const stream = match[1] ?? "";
-    if (!stream.includes("/F1") && !stream.includes("/F2")) continue;
-    found.push(...readPdfTextStream(stream));
+    if (!/\/F\d+\s/.test(stream) || !stream.includes("TJ")) continue;
+    found.push(...readPdfTextStream(stream, fonts));
   }
   return found;
 }
 
-function readPdfTextStream(stream: string) {
+function objectIdBefore(raw: string, index: number) {
+  const matches = [...raw.slice(0, index).matchAll(/(\d+)\s+0\s+obj/g)];
+  return matches.at(-1)?.[1] ?? "";
+}
+
+function fontUnicodeMaps(raw: string) {
+  const cmaps = new Map<string, Map<number, string>>();
+  for (const match of raw.matchAll(/beginbfrange([\s\S]*?)endcmap/g)) {
+    cmaps.set(objectIdBefore(raw, match.index ?? 0), parseToUnicode(match[1] ?? ""));
+  }
+  const byFontObject = new Map<string, Map<number, string>>();
+  for (const match of raw.matchAll(/\/ToUnicode\s+(\d+)\s+0\s+R/g)) {
+    const map = cmaps.get(match[1] ?? "");
+    if (map) byFontObject.set(objectIdBefore(raw, match.index ?? 0), map);
+  }
+  const fonts = new Map<string, Map<number, string>>();
+  for (const block of raw.matchAll(/\/Font\s*<<([\s\S]*?)>>/g)) {
+    for (const ref of (block[1] ?? "").matchAll(/\/(F\d+)\s+(\d+)\s+0\s+R/g)) {
+      const map = byFontObject.get(ref[2] ?? "");
+      if (map) fonts.set(ref[1] ?? "", map);
+    }
+  }
+  return fonts;
+}
+
+function parseToUnicode(stream: string) {
+  const map = new Map<number, string>();
+  const pattern = /<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(?:<([0-9A-Fa-f]+)>|\[([\s\S]*?)\])/g;
+  for (const match of stream.matchAll(pattern)) {
+    const start = Number.parseInt(match[1] ?? "", 16);
+    const end = Number.parseInt(match[2] ?? "", 16);
+    if (Number.isNaN(start) || Number.isNaN(end)) continue;
+    if (match[3]) {
+      let dest = Number.parseInt(match[3], 16);
+      for (let code = start; code <= end; code += 1) {
+        map.set(code, String.fromCodePoint(dest));
+        dest += 1;
+      }
+      continue;
+    }
+    const dests = [...(match[4] ?? "").matchAll(/<([0-9A-Fa-f]+)>/g)].map((item) =>
+      Number.parseInt(item[1] ?? "", 16),
+    );
+    dests.forEach((dest, index) => {
+      if (!Number.isNaN(dest)) map.set(start + index, String.fromCodePoint(dest));
+    });
+  }
+  return map;
+}
+
+function readPdfTextStream(stream: string, fonts: Map<string, Map<number, string>>) {
   const found: Array<{ text: string; x: number; yFromTop: number }> = [];
   let ctm = identityMatrix();
   const stack: PdfMatrix[] = [];
   let textX = 0;
   let textY = 0;
+  let font = "";
   const pattern =
-    /\bq\b|\bQ\b|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?(?:\s+[+-]?\d*\.?\d+(?:[eE][+-]?\d+)?){5})\s+(cm|Tm)|\[([\s\S]*?)\]\s*TJ/g;
+    /\bq\b|\bQ\b|\/(F\d+)\s+[0-9.]+\s+Tf|([+-]?\d*\.?\d+(?:[eE][+-]?\d+)?(?:\s+[+-]?\d*\.?\d+(?:[eE][+-]?\d+)?){5})\s+(cm|Tm)|\[([\s\S]*?)\]\s*TJ/g;
   for (const token of stream.matchAll(pattern)) {
     if (token[0] === "q") {
       stack.push(ctm);
@@ -363,18 +450,23 @@ function readPdfTextStream(stream: string) {
       ctm = stack.pop() ?? identityMatrix();
       continue;
     }
-    const body = token[3];
+    if (token[1]) {
+      font = token[1];
+      continue;
+    }
+    const body = token[4];
     if (body !== undefined) {
       let text = "";
+      const map = fonts.get(font);
       for (const hex of body.matchAll(/<([0-9A-Fa-f\s]+)>/g)) {
-        text += decodePdfHex(hex[1] ?? "");
+        text += map ? decodeGlyphs(hex[1] ?? "", map) : decodePdfHex(hex[1] ?? "");
       }
       if (!text) continue;
       const point = applyMatrix(ctm, textX, textY);
       found.push({ text, x: point.x, yFromTop: PAGE_HEIGHT - point.y });
       continue;
     }
-    const numbers = (token[1] ?? "").trim().split(/\s+/).map(Number);
+    const numbers = (token[2] ?? "").trim().split(/\s+/).map(Number);
     if (numbers.length !== 6 || numbers.some((value) => Number.isNaN(value))) continue;
     const matrix = {
       a: numbers[0] ?? 1,
@@ -384,7 +476,7 @@ function readPdfTextStream(stream: string) {
       e: numbers[4] ?? 0,
       f: numbers[5] ?? 0,
     };
-    if (token[2] === "cm") {
+    if (token[3] === "cm") {
       ctm = concatMatrix(ctm, matrix);
       continue;
     }
@@ -392,6 +484,15 @@ function readPdfTextStream(stream: string) {
     textY = matrix.f;
   }
   return found;
+}
+
+function decodeGlyphs(value: string, map: Map<number, string>) {
+  const hex = value.replaceAll(/\s/g, "");
+  let text = "";
+  for (let index = 0; index + 4 <= hex.length; index += 4) {
+    text += map.get(Number.parseInt(hex.slice(index, index + 4), 16)) ?? "";
+  }
+  return text;
 }
 
 function decodePdfHex(value: string) {

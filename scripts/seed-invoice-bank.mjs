@@ -1,12 +1,13 @@
 import { readFileSync } from "node:fs";
 import { PrismaClient } from "@prisma/client";
+import { parseInvoiceBankFile } from "./invoice-bank-file.mjs";
 
 loadEnvFile(new URL("../.env", import.meta.url));
 
 const file = new URL("../secrets/invoice-bank-details.txt", import.meta.url);
 let bankDetails = "";
 try {
-  bankDetails = readFileSync(file, "utf8").trim();
+  bankDetails = parseInvoiceBankFile(readFileSync(file, "utf8"));
 } catch {
   console.error(
     "Missing secrets/invoice-bank-details.txt. Copy secrets/invoice-bank-details.example.txt and fill it in. That file stays gitignored.",

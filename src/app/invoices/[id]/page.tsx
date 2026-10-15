@@ -59,6 +59,12 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
         </a>
       </div>
 
+      {!invoice.bankDetails.trim() ? (
+        <p role="status" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {invoiceCopy.emptyBank}
+        </p>
+      ) : null}
+
       {unrated.length > 0 ? (
         <div role="status" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
           <p className="font-semibold">{invoiceCopy.unratedTitle}</p>
@@ -207,7 +213,7 @@ function IssuedInvoice({
           <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{notes}</p>
         </section>
       ) : null}
-      {bankDetails ? (
+      {bankDetails.trim() ? (
         <section>
           <h2 className="text-sm font-semibold text-ink">{invoiceCopy.bank}</h2>
           <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{bankDetails}</p>

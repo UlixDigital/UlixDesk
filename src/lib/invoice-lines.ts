@@ -1,6 +1,7 @@
 import {
   formatDurationHms,
   formatInvoiceDate,
+  formatInvoiceMoney,
   formatInvoiceRange,
   lineAmountMinor,
   periodLineTitle,
@@ -15,7 +16,7 @@ export type InvoiceSlice = {
   projectName: string;
   userId: string | null;
   userName: string;
-  /** Workspace calendar date of startedAt. */
+  /** Workspace calendar date of this slice, after the midnight split. */
   day: string;
   durationMs: number;
   /** Null when the entry has no rate, or the rate currency is not the client's. */
@@ -98,7 +99,9 @@ export function buildInvoiceLines(input: {
     const existing = groups.get(key);
     if (existing) {
       existing.durationMs += slice.durationMs;
-      existing.timeEntryIds.push(slice.timeEntryId);
+      if (!existing.timeEntryIds.includes(slice.timeEntryId)) {
+        existing.timeEntryIds.push(slice.timeEntryId);
+      }
       continue;
     }
     groups.set(key, {
@@ -135,6 +138,50 @@ export function buildInvoiceLines(input: {
 
   unrated.sort((a, b) => a.day.localeCompare(b.day) || a.userName.localeCompare(b.userName));
   return { lines, unrated };
+}
+
+export type TimeLineSnapshot = {
+  title: string;
+  detail: string;
+  quantitySeconds: number;
+  unitPriceMinor: number;
+  amountMinor: number;
+};
+
+/** Human-readable differences between the draft's time lines and a fresh derive. */
+export function describeTimeLineChanges(
+  stored: TimeLineSnapshot[],
+  derived: TimeLineSnapshot[],
+  currency: string,
+) {
+  const unused = derived.map((line, index) => ({ line, index }));
+  const diffs: string[] = [];
+  for (const line of stored) {
+    const match = unused.findIndex(
+      (candidate) =>
+        candidate.line.title === line.title &&
+        candidate.line.detail === line.detail &&
+        candidate.line.unitPriceMinor === line.unitPriceMinor,
+    );
+    if (match < 0) {
+      diffs.push(`Removed ${lineLabel(line, currency)}`);
+      continue;
+    }
+    const next = unused[match]?.line;
+    unused.splice(match, 1);
+    if (!next) continue;
+    if (next.quantitySeconds !== line.quantitySeconds || next.amountMinor !== line.amountMinor) {
+      diffs.push(`${line.title}: ${lineLabel(line, currency)} → ${lineLabel(next, currency)}`);
+    }
+  }
+  for (const candidate of unused) {
+    diffs.push(`Added ${lineLabel(candidate.line, currency)}`);
+  }
+  return diffs;
+}
+
+function lineLabel(line: TimeLineSnapshot, currency: string) {
+  return `${formatDurationHms(line.quantitySeconds)} ${formatInvoiceMoney(line.amountMinor, currency)}`;
 }
 
 export function unratedLineLabel(item: UnratedTime) {

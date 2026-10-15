@@ -140,7 +140,7 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
     await expect(memberPage.getByRole("link", { name: "Invoices" })).toHaveCount(0);
     const denied = await memberPage.goto("/invoices");
     expect(denied?.status()).toBe(200);
-    await expect(memberPage.getByText("You don't have permission to view invoices.")).toBeVisible();
+    await expect(memberPage.getByText("Only owners and admins can manage invoices.")).toBeVisible();
     const forbidden = await memberPage.request.get(pdf.url());
     expect(forbidden.status()).toBe(403);
   } finally {

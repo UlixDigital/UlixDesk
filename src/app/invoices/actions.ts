@@ -6,11 +6,12 @@ import { gateManager } from "@/lib/auth";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import { isInvoiceGrouping, parseCreateInvoice } from "@/lib/invoice-form";
 import { saveInvoiceSettings } from "@/lib/invoice-settings";
-import { createInvoice, deleteDraft, getInvoice, parseDraftFromForm, saveDraft } from "@/lib/invoices";
+import { createInvoice, deleteDraft, getInvoice, parseDraftFromForm, refreshDraftFromTime, saveDraft } from "@/lib/invoices";
 
 export type InvoiceFormState = {
   error: string | null;
   notice: string | null;
+  confirmDiffs?: string[] | null;
 };
 
 export async function saveInvoiceSettingsAction(
@@ -67,8 +68,25 @@ export async function saveDraftAction(
   if (!invoice) return { error: invoiceCopy.notFound, notice: null };
   const parsed = parseDraftFromForm(formData, invoice.currency);
   if (!parsed.ok) return { error: parsed.error, notice: null };
-  const issue = String(formData.get("intent") ?? "") === "issue";
-  const saved = await saveDraft({ actor: gate.user, id, draft: parsed.data, issue });
+  const intent = String(formData.get("intent") ?? "save");
+  if (intent === "refresh") {
+    const refreshed = await refreshDraftFromTime({ actor: gate.user, id, draft: parsed.data });
+    if (!refreshed.ok) return { error: refreshed.error, notice: null };
+    revalidatePath("/invoices");
+    revalidatePath(`/invoices/${id}`);
+    redirect(`/invoices/${id}`);
+  }
+  const issue = intent === "issue" || intent === "issue-confirm";
+  const saved = await saveDraft({
+    actor: gate.user,
+    id,
+    draft: parsed.data,
+    issue,
+    confirm: intent === "issue-confirm",
+  });
+  if (!saved.ok && "confirm" in saved && saved.confirm) {
+    return { error: null, notice: null, confirmDiffs: saved.diffs };
+  }
   if (!saved.ok) return { error: saved.error, notice: null };
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${id}`);

@@ -62,6 +62,16 @@ export function InvoiceDraftForm({
           {state.notice}
         </p>
       ) : null}
+      {state.confirmDiffs && state.confirmDiffs.length > 0 ? (
+        <div role="alert" className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-950">
+          <p className="font-medium">{invoiceCopy.issueConfirm}</p>
+          <ul className="mt-2 list-disc space-y-1 pl-5">
+            {state.confirmDiffs.map((diff) => (
+              <li key={diff}>{diff}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
       <div className="grid gap-4 sm:grid-cols-3">
         <label className="block text-sm font-medium text-slate-800" htmlFor="invoice-issue-date">
           {invoiceCopy.issueDate}
@@ -160,6 +170,14 @@ export function InvoiceDraftForm({
       >
         {invoiceCopy.addLine}
       </button>
+      <button
+        type="submit"
+        className={ui.secondaryButton}
+        disabled={pending}
+        onClick={(event) => setIntent(event.currentTarget.form, "refresh")}
+      >
+        {invoiceCopy.refresh}
+      </button>
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium text-slate-800" htmlFor="invoice-discount-kind">
           {invoiceCopy.discount}
@@ -214,6 +232,16 @@ export function InvoiceDraftForm({
         >
           {invoiceCopy.issue}
         </button>
+        {state.confirmDiffs && state.confirmDiffs.length > 0 ? (
+          <button
+            type="submit"
+            className={ui.primaryButton}
+            disabled={pending}
+            onClick={(event) => setIntent(event.currentTarget.form, "issue-confirm")}
+          >
+            {invoiceCopy.issueUpdated}
+          </button>
+        ) : null}
       </div>
     </form>
   );

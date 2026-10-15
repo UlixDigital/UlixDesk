@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { DEFAULT_CURRENCY, isCurrencyCode } from "@/lib/currencies";
 import { prisma } from "@/lib/db";
 import { invoiceCopy } from "@/lib/invoice-copy";
@@ -10,10 +10,17 @@ import {
   type DraftWrite,
   type InvoiceStatus,
 } from "@/lib/invoice-form";
-import { buildInvoiceLines, type InvoiceGrouping, type InvoiceSlice } from "@/lib/invoice-lines";
+import {
+  buildInvoiceLines,
+  describeTimeLineChanges,
+  type BuiltInvoiceLine,
+  type InvoiceGrouping,
+  type InvoiceSlice,
+} from "@/lib/invoice-lines";
 import { invoiceTotals } from "@/lib/invoice-money";
 import { pickRate, utcDateKey, type BillRateRecord } from "@/lib/rates";
-import { addCalendarDays, todayInTimeZone, zonedDayEnd, zonedDayStart, zonedParts } from "@/lib/time-zone";
+import { slicesForEntry, type SourceEntry } from "@/lib/reports";
+import { addCalendarDays, todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { DEFAULT_TIME_ZONE } from "@/lib/workspace-time";
 
@@ -161,60 +168,21 @@ export async function createInvoice(input: {
       const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
       const rangeStart = zonedDayStart(input.periodStart, timeZone);
       const rangeEnd = zonedDayEnd(input.periodEnd, timeZone);
-      const number = await allocateInvoiceNumber(tx);
-      const rows = await tx.timeEntry.findMany({
-        where: {
-          endedAt: { not: null },
-          billable: true,
-          startedAt: { gte: rangeStart, lt: rangeEnd },
-          project: { clientId: client.id, billable: true },
-          invoiceTime: { is: null },
-        },
-        include: {
-          project: { select: { id: true, name: true, clientId: true } },
-          user: { select: { id: true, name: true } },
-        },
+      const rows = await overlappingEntries(tx, {
+        clientId: client.id,
+        rangeStart,
+        rangeEnd,
+        invoiceId: null,
       });
-      const rateRows = await tx.billRate.findMany();
-      const rates = rateRows.flatMap((row) => {
-        const record = toRate(row);
-        return record ? [record] : [];
-      });
-      const slices: InvoiceSlice[] = rows.map((row) => {
-        const rate = pickRate(
-          rates,
-          {
-            projectId: row.projectId,
-            clientId: row.project.clientId,
-            userId: row.userId,
-            startedAt: row.startedAt,
-          },
-          timeZone,
-        );
-        const duration = entryDurationMs(row);
-        let rateMinor: number | null = null;
-        let unratedReason: InvoiceSlice["unratedReason"] = null;
-        if (!rate) unratedReason = "no-rate";
-        else if (rate.currency !== client.currency) unratedReason = "currency";
-        else rateMinor = rate.amountMinor;
-        return {
-          timeEntryId: row.id,
-          projectId: row.projectId,
-          projectName: row.project.name,
-          userId: row.userId,
-          userName: row.user?.name ?? "Unknown member",
-          day: zonedParts(row.startedAt, timeZone).date,
-          durationMs: duration,
-          rateMinor,
-          unratedReason,
-        };
-      });
+      const rates = await loadRates(tx);
       const built = buildInvoiceLines({
         grouping: input.grouping,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
-        slices,
+        slices: rowsToSlices(rows, rates, client.currency, timeZone, rangeStart, rangeEnd),
       });
+      if (built.lines.length === 0) return fail(invoiceCopy.noEligible);
+      const number = await allocateInvoiceNumber(tx);
       const totals = invoiceTotals({
         lineAmounts: built.lines.map((line) => line.amountMinor),
         discountKind: "none",
@@ -261,17 +229,7 @@ export async function createInvoice(input: {
         },
         include: { lines: { orderBy: { position: "asc" } } },
       });
-      for (const line of invoice.lines) {
-        const source = built.lines[line.position];
-        if (!source || source.timeEntryIds.length === 0) continue;
-        await tx.invoiceTime.createMany({
-          data: source.timeEntryIds.map((timeEntryId) => ({
-            timeEntryId,
-            invoiceId: invoice.id,
-            invoiceLineId: line.id,
-          })),
-        });
-      }
+      await linkTimeLines(tx, invoice.id, invoice.lines, built.lines);
       return {
         ok: true as const,
         id: invoice.id,
@@ -288,7 +246,14 @@ export async function createInvoice(input: {
   }
 }
 
-export async function saveDraft(input: { actor: InvoiceActor; id: string; draft: DraftWrite; issue: boolean }) {
+export async function saveDraft(input: {
+  actor: InvoiceActor;
+  id: string;
+  draft: DraftWrite;
+  issue: boolean;
+  /** Issue even when the re-derived time lines differ from the draft. */
+  confirm?: boolean;
+}) {
   if (!canManageWorkspace(input.actor.role)) return denied();
   try {
     return await prisma.$transaction(async (tx) => {
@@ -298,15 +263,36 @@ export async function saveDraft(input: { actor: InvoiceActor; id: string; draft:
       });
       if (!invoice) return fail(invoiceCopy.notFound);
       if (invoice.status !== "draft") return fail(invoiceCopy.notDraft);
-      const keptIds = new Set(input.draft.lines.flatMap((line) => (line.id ? [line.id] : [])));
+
+      let draftLines = input.draft.lines;
+      let preservedIds: string[] = [];
+      let derivedAmounts: number[] = [];
+      if (input.issue) {
+        const prepared = await prepareIssue(tx, invoice);
+        if (prepared.diffs.length > 0 && !input.confirm) {
+          return { ok: false as const, confirm: true as const, diffs: prepared.diffs };
+        }
+        if (prepared.diffs.length > 0 && input.confirm) {
+          const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
+          await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
+          preservedIds = await insertTimeLines(tx, invoice.id, prepared.derived);
+          draftLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
+          derivedAmounts = prepared.derived.map((line) => line.amountMinor);
+        }
+      }
+
+      const keptIds = new Set([
+        ...draftLines.flatMap((line) => (line.id ? [line.id] : [])),
+        ...preservedIds,
+      ]);
       const existing = new Map(invoice.lines.map((line) => [line.id, line]));
       for (const id of keptIds) {
-        if (!existing.has(id)) return fail(invoiceCopy.notDraft);
+        if (!existing.has(id) && !preservedIds.includes(id)) return fail(invoiceCopy.notDraft);
       }
       let totals: ReturnType<typeof invoiceTotals>;
       try {
         totals = invoiceTotals({
-          lineAmounts: input.draft.lines.map((line) => line.amountMinor),
+          lineAmounts: [...derivedAmounts, ...draftLines.map((line) => line.amountMinor)],
           discountKind: input.draft.discountKind,
           discountAmountMinor: input.draft.discountAmountMinor,
           discountBps: input.draft.discountBps,
@@ -322,8 +308,8 @@ export async function saveDraft(input: { actor: InvoiceActor; id: string; draft:
         await tx.invoiceLine.deleteMany({ where: { id: { in: removed.map((line) => line.id) } } });
       }
 
-      for (let position = 0; position < input.draft.lines.length; position += 1) {
-        const line = input.draft.lines[position];
+      for (let position = 0; position < draftLines.length; position += 1) {
+        const line = draftLines[position];
         if (!line) continue;
         if (line.id) {
           const prior = existing.get(line.id);
@@ -376,10 +362,117 @@ export async function saveDraft(input: { actor: InvoiceActor; id: string; draft:
           ...(input.issue ? { status: "open", issuedAt: new Date() } : {}),
         },
       });
+      if (preservedIds.length > 0) await renumberLines(tx, invoice.id);
       return { ok: true as const, issued: input.issue };
     });
   } catch (error) {
     if (isUniqueViolation(error)) return fail(invoiceCopy.timeTaken);
+    throw error;
+  }
+}
+
+export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: string; draft: DraftWrite }) {
+  if (!canManageWorkspace(input.actor.role)) return denied();
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const invoice = await tx.invoice.findUnique({
+        where: { id: input.id },
+        include: { lines: true },
+      });
+      if (!invoice) return fail(invoiceCopy.notFound);
+      if (invoice.status !== "draft") return fail(invoiceCopy.notDraft);
+      const settings = await ensureWorkspace(tx);
+      const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
+      const periodStart = utcDateKey(invoice.periodStart);
+      const periodEnd = utcDateKey(invoice.periodEnd);
+      const rangeStart = zonedDayStart(periodStart, timeZone);
+      const rangeEnd = zonedDayEnd(periodEnd, timeZone);
+      const rows = await overlappingEntries(tx, {
+        clientId: invoice.clientId,
+        rangeStart,
+        rangeEnd,
+        invoiceId: invoice.id,
+      });
+      const derived = buildInvoiceLines({
+        grouping: groupingOf(invoice.grouping),
+        periodStart,
+        periodEnd,
+        slices: rowsToSlices(rows, await loadRates(tx), invoice.currency, timeZone, rangeStart, rangeEnd),
+      }).lines;
+      const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
+      await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
+      const preservedIds = await insertTimeLines(tx, invoice.id, derived);
+      const customLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
+      const keptIds = new Set([
+        ...customLines.flatMap((line) => (line.id ? [line.id] : [])),
+        ...preservedIds,
+      ]);
+      const removed = invoice.lines.filter((line) => line.kind !== "time" && !keptIds.has(line.id));
+      if (removed.length > 0) {
+        await tx.invoiceLine.deleteMany({ where: { id: { in: removed.map((line) => line.id) } } });
+      }
+      for (const line of customLines) {
+        if (line.id) {
+          await tx.invoiceLine.update({
+            where: { id: line.id },
+            data: {
+              title: line.title,
+              detail: line.detail,
+              quantitySeconds: line.quantitySeconds,
+              unitPriceMinor: line.unitPriceMinor,
+              amountMinor: line.amountMinor,
+            },
+          });
+        } else {
+          await tx.invoiceLine.create({
+            data: {
+              invoiceId: invoice.id,
+              position: preservedIds.length,
+              kind: "custom",
+              title: line.title,
+              detail: line.detail,
+              quantitySeconds: line.quantitySeconds,
+              unitPriceMinor: line.unitPriceMinor,
+              amountMinor: line.amountMinor,
+            },
+          });
+        }
+      }
+      await renumberLines(tx, invoice.id);
+      const totals = invoiceTotals({
+        lineAmounts: [...derived.map((line) => line.amountMinor), ...customLines.map((line) => line.amountMinor)],
+        discountKind: input.draft.discountKind,
+        discountAmountMinor: input.draft.discountAmountMinor,
+        discountBps: input.draft.discountBps,
+        taxEnabled: input.draft.taxEnabled,
+        taxRateBps: input.draft.taxRateBps,
+      });
+      await tx.invoice.update({
+        where: { id: invoice.id },
+        data: {
+          issueDate: dateColumn(input.draft.issueDate),
+          dueDate: dateColumn(input.draft.dueDate),
+          poNumber: input.draft.poNumber,
+          notes: input.draft.notes,
+          bankDetails: input.draft.bankDetails,
+          discountKind: input.draft.discountKind,
+          discountAmountMinor: input.draft.discountAmountMinor,
+          discountBps: input.draft.discountBps,
+          taxEnabled: input.draft.taxEnabled,
+          taxLabel: input.draft.taxLabel,
+          taxRateBps: input.draft.taxRateBps,
+          subtotalMinor: totals.subtotalMinor,
+          discountMinor: totals.discountMinor,
+          taxMinor: totals.taxMinor,
+          totalMinor: totals.totalMinor,
+        },
+      });
+      return { ok: true as const };
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Amount is too large.") {
+      return fail(invoiceCopy.amountTooLarge);
+    }
     throw error;
   }
 }
@@ -406,52 +499,15 @@ export async function unratedForInvoice(invoice: {
   const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
   const start = utcDateKey(invoice.periodStart);
   const end = utcDateKey(invoice.periodEnd);
-  const rows = await prisma.timeEntry.findMany({
-    where: {
-      endedAt: { not: null },
-      billable: true,
-      startedAt: { gte: zonedDayStart(start, timeZone), lt: zonedDayEnd(end, timeZone) },
-      project: { clientId: invoice.clientId, billable: true },
-      invoiceTime: { is: null },
-    },
-    include: {
-      project: { select: { id: true, name: true, clientId: true } },
-      user: { select: { name: true } },
-    },
+  const rangeStart = zonedDayStart(start, timeZone);
+  const rangeEnd = zonedDayEnd(end, timeZone);
+  const rows = await overlappingEntries(prisma, {
+    clientId: invoice.clientId,
+    rangeStart,
+    rangeEnd,
+    invoiceId: null,
   });
-  const rateRows = await prisma.billRate.findMany();
-  const rates = rateRows.flatMap((row) => {
-    const record = toRate(row);
-    return record ? [record] : [];
-  });
-  const slices: InvoiceSlice[] = rows.map((row) => {
-    const rate = pickRate(
-      rates,
-      {
-        projectId: row.projectId,
-        clientId: row.project.clientId,
-        userId: row.userId,
-        startedAt: row.startedAt,
-      },
-      timeZone,
-    );
-    let rateMinor: number | null = null;
-    let unratedReason: InvoiceSlice["unratedReason"] = null;
-    if (!rate) unratedReason = "no-rate";
-    else if (rate.currency !== invoice.currency) unratedReason = "currency";
-    else rateMinor = rate.amountMinor;
-    return {
-      timeEntryId: row.id,
-      projectId: row.projectId,
-      projectName: row.project.name,
-      userId: row.userId,
-      userName: row.user?.name ?? "Unknown member",
-      day: zonedParts(row.startedAt, timeZone).date,
-      durationMs: entryDurationMs(row),
-      rateMinor,
-      unratedReason,
-    };
-  });
+  const slices = rowsToSlices(rows, await loadRates(prisma), invoice.currency, timeZone, rangeStart, rangeEnd);
   return buildInvoiceLines({ grouping: "period", periodStart: start, periodEnd: end, slices }).unrated;
 }
 
@@ -493,9 +549,256 @@ export function invoiceDateKey(value: Date) {
 
 export type { InvoiceStatus };
 
-function entryDurationMs(row: { startedAt: Date; endedAt: Date | null }) {
-  if (!row.endedAt) return 0;
-  return Math.max(0, row.endedAt.getTime() - row.startedAt.getTime());
+type EntryRow = {
+  id: string;
+  projectId: string;
+  userId: string | null;
+  startedAt: Date;
+  endedAt: Date | null;
+  billable: boolean;
+  project: { id: string; name: string; clientId: string | null; billable: boolean };
+  user: { id: string; name: string } | null;
+};
+
+const entryInclude = {
+  project: { select: { id: true, name: true, clientId: true, billable: true } },
+  user: { select: { id: true, name: true } },
+} as const;
+
+/**
+ * Lock every time row this issue might bill or unlink, before any write.
+ * A row that crosses midnight is still one TimeEntry, so the lock covers the
+ * whole entry even when only part of it is billed.
+ */
+async function lockIssueTimeEntries(
+  tx: Tx,
+  input: { invoiceId: string; clientId: string; rangeStart: Date; rangeEnd: Date },
+) {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT te."id"
+    FROM "TimeEntry" te
+    INNER JOIN "Project" p ON p."id" = te."projectId"
+    LEFT JOIN "InvoiceTime" it ON it."timeEntryId" = te."id"
+    WHERE te."endedAt" IS NOT NULL
+      AND (
+        (
+          te."billable" = true
+          AND p."billable" = true
+          AND p."clientId" = ${input.clientId}
+          AND te."startedAt" < ${input.rangeEnd}
+          AND te."endedAt" > ${input.rangeStart}
+          AND (it."invoiceId" IS NULL OR it."invoiceId" = ${input.invoiceId})
+        )
+        OR it."invoiceId" = ${input.invoiceId}
+      )
+    ORDER BY te."id"
+    FOR UPDATE OF te
+  `;
+  return rows.map((row) => row.id);
+}
+
+async function prepareIssue(
+  tx: Tx,
+  invoice: {
+    id: string;
+    clientId: string;
+    currency: string;
+    grouping: string;
+    periodStart: Date;
+    periodEnd: Date;
+    lines: Array<{ kind: string; title: string; detail: string; quantitySeconds: number; unitPriceMinor: number; amountMinor: number }>;
+  },
+) {
+  const settings = await tx.workspaceSettings.findUnique({ where: { id: WORKSPACE_ID } });
+  const timeZone = settings?.timeZone || DEFAULT_TIME_ZONE;
+  const periodStart = utcDateKey(invoice.periodStart);
+  const periodEnd = utcDateKey(invoice.periodEnd);
+  const rangeStart = zonedDayStart(periodStart, timeZone);
+  const rangeEnd = zonedDayEnd(periodEnd, timeZone);
+  const lockedIds = await lockIssueTimeEntries(tx, {
+    invoiceId: invoice.id,
+    clientId: invoice.clientId,
+    rangeStart,
+    rangeEnd,
+  });
+  const rows = lockedIds.length
+    ? await tx.timeEntry.findMany({ where: { id: { in: lockedIds } }, include: entryInclude })
+    : [];
+  const derived = buildInvoiceLines({
+    grouping: groupingOf(invoice.grouping),
+    periodStart,
+    periodEnd,
+    slices: rowsToSlices(
+      rows.filter((row) => row.billable && row.project.billable && row.project.clientId === invoice.clientId),
+      await loadRates(tx),
+      invoice.currency,
+      timeZone,
+      rangeStart,
+      rangeEnd,
+    ),
+  }).lines;
+  return {
+    derived,
+    diffs: describeTimeLineChanges(
+      invoice.lines.filter((line) => line.kind === "time"),
+      derived,
+      invoice.currency,
+    ),
+  };
+}
+
+async function overlappingEntries(
+  tx: Tx | typeof prisma,
+  input: { clientId: string; rangeStart: Date; rangeEnd: Date; invoiceId: string | null },
+) {
+  return tx.timeEntry.findMany({
+    where: {
+      billable: true,
+      startedAt: { lt: input.rangeEnd },
+      endedAt: { gt: input.rangeStart },
+      project: { clientId: input.clientId, billable: true },
+      OR: [
+        { invoiceTime: { is: null } },
+        ...(input.invoiceId ? [{ invoiceTime: { invoiceId: input.invoiceId } }] : []),
+      ],
+    },
+    include: entryInclude,
+  });
+}
+
+async function loadRates(tx: Tx | typeof prisma) {
+  const rateRows = await tx.billRate.findMany();
+  return rateRows.flatMap((row) => {
+    const record = toRate(row);
+    return record ? [record] : [];
+  });
+}
+
+/**
+ * Split each entry on workspace midnights with the report helper, then price
+ * the slice at its own start so a rate that begins at midnight applies only
+ * after midnight.
+ */
+function rowsToSlices(
+  rows: EntryRow[],
+  rates: BillRateRecord[],
+  currency: string,
+  timeZone: string,
+  rangeStart: Date,
+  rangeEnd: Date,
+) {
+  const slices: InvoiceSlice[] = [];
+  for (const row of rows) {
+    if (!row.endedAt) continue;
+    const source: SourceEntry = {
+      id: row.id,
+      userId: row.userId,
+      userName: row.user?.name ?? "Unknown member",
+      projectId: row.projectId,
+      projectName: row.project.name,
+      clientId: row.project.clientId,
+      clientName: null,
+      startedAt: row.startedAt,
+      endedAt: row.endedAt,
+      billable: row.billable,
+      projectBillable: row.project.billable,
+      note: null,
+      rate: null,
+    };
+    for (const slice of slicesForEntry(source, rangeStart, rangeEnd, timeZone)) {
+      const sliceStart = new Date(
+        Math.max(row.startedAt.getTime(), zonedDayStart(slice.date, timeZone).getTime(), rangeStart.getTime()),
+      );
+      const rate = pickRate(
+        rates,
+        { projectId: row.projectId, clientId: row.project.clientId, userId: row.userId, startedAt: sliceStart },
+        timeZone,
+      );
+      let rateMinor: number | null = null;
+      let unratedReason: InvoiceSlice["unratedReason"] = null;
+      if (!rate) unratedReason = "no-rate";
+      else if (rate.currency !== currency) unratedReason = "currency";
+      else rateMinor = rate.amountMinor;
+      slices.push({
+        timeEntryId: row.id,
+        projectId: row.projectId,
+        projectName: row.project.name,
+        userId: row.userId,
+        userName: row.user?.name ?? "Unknown member",
+        day: slice.date,
+        durationMs: slice.durationMs,
+        rateMinor,
+        unratedReason,
+      });
+    }
+  }
+  return slices;
+}
+
+async function insertTimeLines(tx: Tx, invoiceId: string, lines: BuiltInvoiceLine[]) {
+  const ids: string[] = [];
+  const linked = new Set<string>();
+  for (let position = 0; position < lines.length; position += 1) {
+    const line = lines[position];
+    if (!line) continue;
+    const created = await tx.invoiceLine.create({
+      data: {
+        invoiceId,
+        position,
+        kind: "time",
+        title: line.title.slice(0, 200),
+        detail: line.detail.slice(0, 200),
+        quantitySeconds: line.quantitySeconds,
+        unitPriceMinor: line.unitPriceMinor,
+        amountMinor: line.amountMinor,
+      },
+    });
+    ids.push(created.id);
+    const timeEntryIds = line.timeEntryIds.filter((id) => !linked.has(id));
+    for (const id of timeEntryIds) linked.add(id);
+    if (timeEntryIds.length === 0) continue;
+    await tx.invoiceTime.createMany({
+      data: timeEntryIds.map((timeEntryId) => ({ timeEntryId, invoiceId, invoiceLineId: created.id })),
+    });
+  }
+  return ids;
+}
+
+async function linkTimeLines(
+  tx: Tx,
+  invoiceId: string,
+  lines: Array<{ id: string; position: number }>,
+  built: BuiltInvoiceLine[],
+) {
+  const linked = new Set<string>();
+  for (const line of lines) {
+    const source = built[line.position];
+    if (!source) continue;
+    const timeEntryIds = source.timeEntryIds.filter((id) => !linked.has(id));
+    for (const id of timeEntryIds) linked.add(id);
+    if (timeEntryIds.length === 0) continue;
+    await tx.invoiceTime.createMany({
+      data: timeEntryIds.map((timeEntryId) => ({ timeEntryId, invoiceId, invoiceLineId: line.id })),
+    });
+  }
+}
+
+async function renumberLines(tx: Tx, invoiceId: string) {
+  const lines = await tx.invoiceLine.findMany({ where: { invoiceId } });
+  const ordered = [
+    ...lines.filter((line) => line.kind === "time").sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
+    ...lines.filter((line) => line.kind !== "time").sort((a, b) => a.position - b.position || a.id.localeCompare(b.id)),
+  ];
+  for (let position = 0; position < ordered.length; position += 1) {
+    const line = ordered[position];
+    if (!line || line.position === position) continue;
+    await tx.invoiceLine.update({ where: { id: line.id }, data: { position } });
+  }
+}
+
+function groupingOf(value: string): InvoiceGrouping {
+  if (value === "project" || value === "member" || value === "day") return value;
+  return "period";
 }
 
 function isUniqueViolation(error: unknown) {
