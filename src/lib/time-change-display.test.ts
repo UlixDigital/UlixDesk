@@ -55,6 +55,7 @@ describe("time change display", () => {
       before: null,
       after: snap(),
       projectNames: names,
+      clientNames: new Map([["client-1", "Acme"]]),
     });
     expect(view.byline).toBe("Added by Sam");
     expect(view.forOther).toBe(false);
@@ -65,6 +66,9 @@ describe("time change display", () => {
     expect(startField?.changed).toBe(true);
     expect(view.fields.find((field) => field.label === timeChangeCopy.fieldProject)?.after).toBe(
       "Website",
+    );
+    expect(view.fields.find((field) => field.label === timeChangeCopy.fieldClient)?.after).toBe(
+      "Acme",
     );
     expect(view.fields.find((field) => field.label === timeChangeCopy.fieldBillable)?.after).toBe(
       rateCopy.billablePrefix,
@@ -88,6 +92,7 @@ describe("time change display", () => {
       before,
       after,
       projectNames: names,
+      clientNames: new Map([["client-1", "Acme"]]),
     });
     expect(view.byline).toBe("Edited by Jane for Sam");
     expect(view.forOther).toBe(true);
@@ -129,6 +134,7 @@ describe("time change display", () => {
       before: null,
       after: running,
       projectNames: names,
+      clientNames: new Map([["client-1", "Acme"]]),
     });
     expect(started.byline).toBe("Timer started by Sam");
     expect(started.sourceLabel).toBe(timeChangeCopy.sourceExtension);
@@ -156,6 +162,7 @@ describe("time change display", () => {
       before: snap(),
       after: null,
       projectNames: names,
+      clientNames: new Map([["client-1", "Acme"]]),
     });
     expect(deleted.sourceLabel).toBe("API");
     expect(deleted.fields.find((field) => field.label === timeChangeCopy.fieldProject)?.after).toBe(
@@ -181,6 +188,7 @@ describe("time change display", () => {
       before: snap(),
       after: { ...snap(), projectId: "gone" },
       projectNames: names,
+      clientNames: new Map([["client-1", "Acme"]]),
     });
     expect(view.fields.find((field) => field.label === timeChangeCopy.fieldProject)?.after).toBe(
       timeChangeCopy.removedProject,

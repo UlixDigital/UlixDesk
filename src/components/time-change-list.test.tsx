@@ -48,6 +48,7 @@ describe("manual time edits list", () => {
         "c1",
       ),
       projectNames: new Map([["p1", "Website"]]),
+      clientNames: new Map([["c1", "Acme"]]),
     });
 
     const container = document.createElement("div");

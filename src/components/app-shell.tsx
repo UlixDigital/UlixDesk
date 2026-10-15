@@ -17,11 +17,11 @@ export async function AppShell({ children }: { children: ReactNode }) {
           role={roleLabel(user.role)}
           showTeam={canManageWorkspace(user.role)}
         />
-        <div className="min-w-0">
+        <div className="min-w-0 max-w-full">
           <TimerBar />
           <main
             id="main-content"
-            className="mx-auto w-full max-w-5xl px-4 py-6 sm:px-6 sm:py-8"
+            className="mx-auto w-full min-w-0 max-w-5xl overflow-x-clip px-4 py-6 sm:px-6 sm:py-8"
           >
             {children}
           </main>

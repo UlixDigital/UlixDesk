@@ -11,7 +11,7 @@ export type ChangeActionFilter = (typeof changeActionFilters)[number];
 
 export const timeChangeCopy = {
   navLabel: "Time edits",
-  pageTitle: "Manual time edits",
+  pageTitle: "Time edits",
   intro:
     "Adds, edits, deletes, and timer start and stop. The date range uses the workspace timezone.",
   historyNote:
@@ -46,10 +46,12 @@ export const timeChangeCopy = {
   fieldEnd: "End",
   fieldDuration: "Duration",
   fieldProject: "Project",
+  fieldClient: "Client",
   fieldNotes: "Notes",
   fieldBillable: "Billable",
   emptyValue: "—",
   removedProject: "Removed project",
+  removedClient: "Removed client",
   previous: "Previous",
   next: "Next",
   unchanged: "No tracked fields changed.",

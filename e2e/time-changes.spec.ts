@@ -2,12 +2,12 @@ import "./env";
 import { mkdir } from "node:fs/promises";
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry, deleteTimeEntry, startTimer, stopTimer, updateManualEntry } from "../src/lib/time-entries";
 import { signIn } from "./auth";
 
-const shots = "/opt/cursor/artifacts";
-
-test("owners see every time change and members see only their own", async ({ browser }) => {
+test("owners see every time change and members see only their own", async ({ browser }, testInfo) => {
+  const shots = process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
   const prisma = new PrismaClient();
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
   const sam = await prisma.user.create({
@@ -80,7 +80,8 @@ test("owners see every time change and members see only their own", async ({ bro
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto("/reports/manual-time-edits");
     const filters = ownerPage.getByRole("form", { name: "Filters" });
-    await expect(ownerPage.getByRole("heading", { name: "Manual time edits" })).toBeVisible();
+    await expect(ownerPage.getByRole("heading", { name: "Time edits" })).toBeVisible();
+    await expect(ownerPage.getByRole("definition").filter({ hasText: "Acme" }).first()).toBeVisible();
     await expect(ownerPage.getByText("Time entries that already existed before this log have no history.")).toBeVisible();
     await expect(filters.getByLabel("From")).toBeVisible();
     await expect(filters.getByLabel("Client")).toBeVisible();
@@ -115,7 +116,7 @@ test("owners see every time change and members see only their own", async ({ bro
   } finally {
     await ownerContext.close();
     await memberContext.close();
-    await prisma.$executeRaw`TRUNCATE TABLE "TimeChange"`;
+    await deleteTimeChangesForTests(prisma);
     await prisma.runningTimer.deleteMany({ where: { id: { in: [sam.id, jane.id, owner.id] } } });
     await prisma.timeEntry.deleteMany({ where: { projectId: { in: [website.id, internal.id] } } });
     await prisma.session.deleteMany({ where: { userId: { in: [sam.id, jane.id] } } });

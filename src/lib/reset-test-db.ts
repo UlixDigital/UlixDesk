@@ -1,11 +1,23 @@
 import { prisma } from "@/lib/db";
 import { clearRequestTestState } from "@/lib/test-hooks";
 
+/**
+ * Test-only. DELETE and TRUNCATE on TimeChange are rejected, including for the
+ * table owner. Disabling the delete trigger is allowed for the owner and for a
+ * superuser, and is refused for the app role.
+ */
+export async function deleteTimeChangesForTests(db: {
+  $executeRawUnsafe: (query: string) => Promise<unknown>;
+}) {
+  await db.$executeRawUnsafe(`ALTER TABLE "TimeChange" DISABLE TRIGGER "time_change_no_delete"`);
+  await db.$executeRawUnsafe(`DELETE FROM "TimeChange"`);
+  await db.$executeRawUnsafe(`ALTER TABLE "TimeChange" ENABLE TRIGGER "time_change_no_delete"`);
+}
+
 /** Deletes workspace rows in foreign-key order. Shared by every integration test. */
 export async function resetTestDatabase() {
   clearRequestTestState();
-  // TRUNCATE skips the append-only DELETE trigger. The app never deletes these rows.
-  await prisma.$executeRaw`TRUNCATE TABLE "TimeChange"`;
+  await deleteTimeChangesForTests(prisma);
   await prisma.billRate.deleteMany();
   await prisma.workspaceSettings.deleteMany();
   await prisma.runningTimer.deleteMany();

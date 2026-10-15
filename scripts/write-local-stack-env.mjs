@@ -12,6 +12,8 @@ await writeFile(
     "POSTGRES_DB=postgres",
     "STAGING_DB_PASSWORD=localstagingdb",
     "PRODUCTION_DB_PASSWORD=localproductiondb",
+    "STAGING_APP_DB_PASSWORD=localstagingapp",
+    "PRODUCTION_APP_DB_PASSWORD=localproductionapp",
     "",
   ].join("\n"),
 );
@@ -21,7 +23,8 @@ await writeFile(
   [
     "# Local stand-in for staging. Host is staging.desk.localhost.",
     "NODE_ENV=production",
-    "DATABASE_URL=postgresql://ulixdesk_staging:localstagingdb@postgres:5432/ulixdesk_staging?connection_limit=5",
+    "MIGRATE_DATABASE_URL=postgresql://ulixdesk_staging:localstagingdb@postgres:5432/ulixdesk_staging?connection_limit=1",
+    "DATABASE_URL=postgresql://ulixdesk_staging_app:localstagingapp@postgres:5432/ulixdesk_staging?connection_limit=5",
     "ULIXDESK_SESSION_SECRET=local-staging-session-secret-32-characters",
     "ULIXDESK_APP_HOSTS=staging.desk.localhost",
     "ULIXDESK_EXTENSION_IDS=cjlaoflbipaehclleojofopapalhiooe",
@@ -42,7 +45,8 @@ await writeFile(
   [
     "# Local stand-in for production. Host is desk.localhost.",
     "NODE_ENV=production",
-    "DATABASE_URL=postgresql://ulixdesk_production:localproductiondb@postgres:5432/ulixdesk_production?connection_limit=5",
+    "MIGRATE_DATABASE_URL=postgresql://ulixdesk_production:localproductiondb@postgres:5432/ulixdesk_production?connection_limit=1",
+    "DATABASE_URL=postgresql://ulixdesk_production_app:localproductionapp@postgres:5432/ulixdesk_production?connection_limit=5",
     "ULIXDESK_SESSION_SECRET=local-production-session-secret-32-chars",
     "ULIXDESK_APP_HOSTS=desk.localhost",
     "ULIXDESK_EXTENSION_IDS=cjlaoflbipaehclleojofopapalhiooe",

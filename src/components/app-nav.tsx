@@ -2,15 +2,15 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, ClockIcon, FolderIcon, HistoryIcon, KeyIcon, UsersIcon } from "@/components/icons";
+import { BuildingIcon, ChartIcon, ClockIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
-import { timeChangeCopy } from "@/lib/time-change-copy";
+import { reportCopy } from "@/lib/report-copy";
 
 const items = [
   { href: "/clients", label: "Clients", icon: BuildingIcon },
   { href: "/projects", label: "Projects", icon: FolderIcon },
   { href: "/timesheets", label: "Timesheets", icon: ClockIcon },
-  { href: "/reports/manual-time-edits", label: timeChangeCopy.navLabel, icon: HistoryIcon },
+  { href: "/reports", label: reportCopy.navLabel, icon: ChartIcon },
   { href: "/settings", label: "Settings", icon: KeyIcon },
 ];
 

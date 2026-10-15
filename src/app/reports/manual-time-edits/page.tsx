@@ -11,27 +11,20 @@ import {
   parseDateParam,
   parsePage,
 } from "@/lib/time-changes";
+import { firstSearchParam } from "@/lib/search-params";
 import { listProjectsForTimesheetFilter } from "@/lib/time-entries";
 import { startOfWeekDate, todayInTimeZone, weekDates, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 import { listActiveUsers } from "@/lib/users";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 export const metadata: Metadata = {
-  title: "Manual time edits",
+  title: timeChangeCopy.pageTitle,
 };
 
 export default async function ManualTimeEditsPage({
   searchParams,
 }: {
-  searchParams: Promise<{
-    from?: string;
-    to?: string;
-    member?: string;
-    client?: string;
-    project?: string;
-    action?: string;
-    page?: string;
-  }>;
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const actor = await getCurrentUser();
   if (!actor) return null;
@@ -49,9 +42,9 @@ export default async function ManualTimeEditsPage({
     listClientsForFilter(),
     manager ? listActiveUsers() : Promise.resolve([]),
   ]);
-  const project = projects.find((item) => item.id === (params.project ?? "").trim()) ?? null;
-  const client = clients.find((item) => item.id === (params.client ?? "").trim()) ?? null;
-  const requestedMember = (params.member ?? "").trim();
+  const project = projects.find((item) => item.id === firstSearchParam(params.project)) ?? null;
+  const client = clients.find((item) => item.id === firstSearchParam(params.client)) ?? null;
+  const requestedMember = firstSearchParam(params.member);
   const member = manager ? (people.find((person) => person.id === requestedMember) ?? null) : null;
   const action = parseChangeAction(params.action);
   const projectId = project?.id ?? "";
