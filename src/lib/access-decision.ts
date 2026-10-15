@@ -4,7 +4,9 @@ export function isPublicPath(pathname: string) {
     pathname === "/login" ||
     pathname.startsWith("/login/") ||
     pathname === "/set-password" ||
-    pathname.startsWith("/set-password/")
+    pathname.startsWith("/set-password/") ||
+    pathname === "/api/health" ||
+    pathname.startsWith("/api/health/")
   );
 }
 
