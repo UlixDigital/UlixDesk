@@ -122,7 +122,7 @@ Both reports are for owners and admins. A member does not see the cards, cannot 
 
 Client invoices filter by client, status (all, open, or paid), and issue date. The date control is the same preset list as the other reports. The default preset is this month. Overdue is yes when the due date is before today in the workspace timezone and the amount due is above zero. Due today is not overdue. Each row keeps paid plus amount due equal to the total.
 
-Aging uses the end date of the same date control as the as-of date. The default preset is today, so the as-of date is today in Asia/Colombo. An invoice issued after that date is left out. Unpaid means the amount due is above zero. Days past due are calendar days from the due date to the as-of date:
+Aging uses the end date of the same date control as the as-of date. The default preset is today, so the as-of date is today in Asia/Colombo. An invoice issued after that date is left out. The balance is the invoice total minus payments whose paid-on date is on or before the as-of date. Both dates are Asia/Colombo calendar dates. A payment after the as-of date does not reduce the balance, so an invoice that is paid today can still appear when you look back. Unpaid means that balance is above zero. Days past due are calendar days from the due date to the as-of date:
 
 | Days past the due date | Bucket |
 | --- | --- |

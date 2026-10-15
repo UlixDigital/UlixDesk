@@ -15,7 +15,7 @@ Paid is the status once the amount due is 0. A partial payment leaves the status
 
 ## Payments
 
-Owners and admins record a payment on an open invoice. The amount is integer minor units of the invoice currency (the client's currency when the invoice was created). Each payment stores the paid-on date, the method (bank transfer, card, cash, check, or other), an optional note, and who recorded it. The invoice page lists that history. Correct replaces the amount, date, method, and note. Delete removes the row. Every record, correction, and deletion writes `InvoiceStatusEvent` with the actor, the status before and after, and a reason that names the amount.
+Owners and admins record a payment on an open invoice. The amount is integer minor units of the invoice currency (the client's currency when the invoice was created). The field accepts a plain number, or a comma in the same thousands places the invoice displays (`1,000` or `1,000.50`). A comma anywhere else is refused. Each payment stores the paid-on date, the method (bank transfer, card, cash, check, or other), an optional note, and who recorded it. The invoice page lists that history. Correct replaces the amount, date, method, and note. Delete removes the row. Every record, correction, and deletion writes `InvoiceStatusEvent` with the actor, the status before and after, and a reason that names the amount.
 
 Paid and amount due are shown on the invoice page, the public client page, and the PDF. Amount due is total minus paid. The page, the public page, and the PDF show Overdue when the due date is before today in the workspace timezone (Asia/Colombo) and a balance remains. Due today is not overdue.
 

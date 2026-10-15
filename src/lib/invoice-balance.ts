@@ -91,6 +91,20 @@ function dateOk(value: string) {
   return year >= 2000 && year <= 2100;
 }
 
+/**
+ * Payment amounts use the same grouping as `formatMoney`: a comma every three
+ * digits and a period for the fraction (`1,000` or `1,000.50`). Any other
+ * comma is refused. Bill rates and budgets keep the stricter parser.
+ */
+function paymentAmountText(raw: string): { ok: true; amount: string } | { ok: false; error: string } {
+  const trimmed = raw.trim();
+  if (!trimmed.includes(",")) return { ok: true, amount: trimmed };
+  if (!/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(trimmed)) {
+    return { ok: false, error: invoiceCopy.paymentAmountGrouped };
+  }
+  return { ok: true, amount: trimmed.replaceAll(",", "") };
+}
+
 export function parsePaymentInput(input: {
   amount: string;
   currency: string;
@@ -100,7 +114,9 @@ export function parsePaymentInput(input: {
 }):
   | { ok: true; amountMinor: number; paidOn: string; method: PaymentMethod; note: string | null }
   | { ok: false; error: string } {
-  const parsed = parseRateInput(input.amount, input.currency);
+  const amount = paymentAmountText(input.amount);
+  if (!amount.ok) return amount;
+  const parsed = parseRateInput(amount.amount, input.currency);
   if (!parsed.ok) return { ok: false, error: invoiceCopy.paymentAmountInvalid };
   if (parsed.amountMinor <= 0) return { ok: false, error: invoiceCopy.paymentAmountZero };
   if (!dateOk(input.paidOn.trim())) return { ok: false, error: invoiceCopy.dateInvalid };

@@ -254,8 +254,8 @@ type AgingSqlRow = {
   clientName: string;
   currency: string;
   dueDate: Date | string;
-  totalMinor: number | string;
-  paidMinor: number | string;
+  totalMinor: number | string | bigint;
+  paidMinor: number | string | bigint;
 };
 
 export async function loadAgingReport(input: {
@@ -276,13 +276,15 @@ export async function loadAgingReport(input: {
            i."currency" AS "currency",
            i."dueDate" AS "dueDate",
            i."totalMinor" AS "totalMinor",
-           i."paidMinor" AS "paidMinor"
+           COALESCE(SUM(p."amountMinor") FILTER (WHERE p."paidOn" <= ${asOf}), 0) AS "paidMinor"
     FROM "Invoice" i
     JOIN "Client" c ON c."id" = i."clientId"
+    LEFT JOIN "InvoicePayment" p ON p."invoiceId" = i."id"
     WHERE i."status" NOT IN ('draft', 'void')
-      AND i."paidMinor" < i."totalMinor"
       AND i."issueDate" <= ${asOf}
       ${clientClause}
+    GROUP BY i."id", i."clientId", c."name", i."currency", i."dueDate", i."totalMinor", i."number"
+    HAVING i."totalMinor" > COALESCE(SUM(p."amountMinor") FILTER (WHERE p."paidOn" <= ${asOf}), 0)
     ORDER BY c."name" ASC, i."currency" ASC, i."number" ASC
     LIMIT ${CLIENT_INVOICE_REPORT_CAP + 1}
   `;

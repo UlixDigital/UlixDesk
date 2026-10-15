@@ -229,6 +229,7 @@ export const invoiceCopy = {
   paidBanner:
     "This invoice is paid. The amount due is zero. Correct or delete a payment if that should change. Time on it stays locked.",
   paymentAmountInvalid: "Enter the payment in the invoice currency.",
+  paymentAmountGrouped: "Use a comma only to separate thousands, as in 1,000.00.",
   paymentAmountZero: "Enter a payment greater than zero.",
   paymentOverpay: "That payment is more than the amount due. Overpayment is not recorded.",
   paymentStatus: "Record a payment on an open invoice.",

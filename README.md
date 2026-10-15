@@ -309,11 +309,11 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 
 ## What shipped in Slice 15
 
-- Record a full or partial payment on an open invoice: amount in the client's currency, paid-on date, method, note, and who recorded it. The invoice keeps a payment history. Correct and delete update paid and amount due, and each change is written to the status history.
+- Record a full or partial payment on an open invoice: amount in the client's currency (a thousands comma is accepted, as in `1,000.00`), paid-on date, method, note, and who recorded it. The invoice keeps a payment history. Correct and delete update paid and amount due, and each change is written to the status history.
 - The status stays open while a balance remains and becomes paid when the amount due is 0. Overdue appears when the due date has passed in Asia/Colombo and a balance remains. The invoice page, the public client page, and the PDF show paid, amount due, and overdue.
 - An overpayment is refused. No credit balance is stored.
 - Void and reopen stay blocked while any payment exists. A paid invoice cannot be voided or reopened until its payments are removed, which returns it to open.
-- Client invoices and invoice aging reports, with CSV and PDF export and saved reports. Drafts and void invoices are excluded. Aging buckets are Current, 1-30, 31-60, 61-90, and 90+ days past the due date, totaled per currency. Members do not see these reports.
+- Client invoices and invoice aging reports, with CSV and PDF export and saved reports. Drafts and void invoices are excluded. Aging buckets are Current, 1-30, 31-60, 61-90, and 90+ days past the due date, totaled per currency. A past as-of date counts only payments on or before that date. Members do not see these reports.
 
 ## Deferred
 

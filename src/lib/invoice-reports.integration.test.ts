@@ -27,6 +27,18 @@ async function workspace() {
   return { owner, member, usd, eur };
 }
 
+async function pay(input: { invoiceId: string; ownerId: string; amountMinor: number; paidOn: string }) {
+  await prisma.invoicePayment.create({
+    data: {
+      invoiceId: input.invoiceId,
+      amountMinor: input.amountMinor,
+      paidOn: dateColumn(input.paidOn),
+      method: "bank_transfer",
+      recordedById: input.ownerId,
+    },
+  });
+}
+
 async function seed(input: {
   ownerId: string;
   clientId: string;
@@ -118,7 +130,7 @@ describe("client invoices and aging", () => {
       dueDate: addCalendarDays(asOf, -91),
       totalMinor: 8888,
     });
-    await seed({
+    const settled = await seed({
       ownerId: owner.id,
       clientId: usd.id,
       number: "LE3103",
@@ -129,6 +141,7 @@ describe("client invoices and aging", () => {
       totalMinor: 4000,
       paidMinor: 4000,
     });
+    await pay({ invoiceId: settled.id, ownerId: owner.id, amountMinor: 4000, paidOn: "2026-10-01" });
     await seed({
       ownerId: owner.id,
       clientId: usd.id,
@@ -222,5 +235,56 @@ describe("client invoices and aging", () => {
       ).ok,
     ).toBe(true);
     expect(invoiceReportCopy.denied).not.toMatch(/\d/);
+  });
+
+  it("ignores a payment dated after the as-of date when it buckets the balance", async () => {
+    const { owner, usd } = await workspace();
+    const invoice = await seed({
+      ownerId: owner.id,
+      clientId: usd.id,
+      number: "LE3200",
+      status: "paid",
+      currency: "USD",
+      issueDate: "2026-01-15",
+      dueDate: "2026-10-01",
+      totalMinor: 10_000,
+      paidMinor: 10_000,
+    });
+    await pay({ invoiceId: invoice.id, ownerId: owner.id, amountMinor: 4000, paidOn: "2026-10-15" });
+    await pay({ invoiceId: invoice.id, ownerId: owner.id, amountMinor: 6000, paidOn: "2026-10-16" });
+
+    const onDate = await loadAgingReport({
+      actor: owner,
+      params: { preset: "custom", from: "2026-01-01", to: "2026-10-15" },
+      today: "2026-10-15",
+    });
+    expect(onDate.ok).toBe(true);
+    if (!onDate.ok) return;
+    expect(onDate.rows).toEqual([
+      {
+        clientName: "Acme",
+        currency: "USD",
+        buckets: { current: 0, d1: 6000, d31: 0, d61: 0, d91: 0 },
+        totalMinor: 6000,
+      },
+    ]);
+
+    const before = await loadAgingReport({
+      actor: owner,
+      params: { preset: "custom", from: "2026-01-01", to: "2026-10-14" },
+      today: "2026-10-14",
+    });
+    expect(before.ok).toBe(true);
+    if (!before.ok) return;
+    expect(before.rows[0]?.buckets.d1).toBe(10_000);
+
+    const after = await loadAgingReport({
+      actor: owner,
+      params: { preset: "custom", from: "2026-01-01", to: "2026-10-16" },
+      today: "2026-10-16",
+    });
+    expect(after.ok).toBe(true);
+    if (!after.ok) return;
+    expect(after.rows).toEqual([]);
   });
 });

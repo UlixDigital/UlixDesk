@@ -86,4 +86,25 @@ describe("parse payment input", () => {
       }).ok,
     ).toBe(false);
   });
+
+  it("accepts a thousands comma and refuses any other comma", () => {
+    expect(
+      parsePaymentInput({ amount: "1,000", currency: "USD", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toMatchObject({ ok: true, amountMinor: 100_000 });
+    expect(
+      parsePaymentInput({ amount: "1,000.50", currency: "USD", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toMatchObject({ ok: true, amountMinor: 100_050 });
+    expect(
+      parsePaymentInput({ amount: "1,000", currency: "JPY", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toMatchObject({ ok: true, amountMinor: 1000 });
+    expect(
+      parsePaymentInput({ amount: "1,00", currency: "USD", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toEqual({ ok: false, error: invoiceCopy.paymentAmountGrouped });
+    expect(
+      parsePaymentInput({ amount: "1.000,50", currency: "USD", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toEqual({ ok: false, error: invoiceCopy.paymentAmountGrouped });
+    expect(
+      parsePaymentInput({ amount: "1,000.5", currency: "JPY", paidOn: "2026-10-15", method: "cash", note: "" }),
+    ).toEqual({ ok: false, error: invoiceCopy.paymentAmountInvalid });
+  });
 });

@@ -1,6 +1,6 @@
 import "./env";
 import { execFileSync } from "node:child_process";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
@@ -13,18 +13,13 @@ function dateColumn(date: string) {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
-const artifacts = "/opt/cursor/artifacts/slice-15";
-
 function artifactDir(testInfo: TestInfo) {
   return process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
 }
 
 async function shot(page: Page, dir: string, name: string) {
   await mkdir(dir, { recursive: true });
-  await mkdir(artifacts, { recursive: true });
-  const file = path.join(dir, `${name}.png`);
-  await page.screenshot({ path: file, fullPage: true });
-  await page.screenshot({ path: path.join(artifacts, `${name}.png`), fullPage: true });
+  await page.screenshot({ path: path.join(dir, `${name}.png`), fullPage: true });
 }
 
 async function waitForHydration(page: Page) {
@@ -181,17 +176,17 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
   const pdfResponse = await page.request.get(`/invoices/${invoice.id}/pdf`);
   expect(pdfResponse.status()).toBe(200);
   const pdfBuffer = Buffer.from(await pdfResponse.body());
-  const pdfPath = path.join(artifacts, "invoice-paid-due.pdf");
-  await mkdir(artifacts, { recursive: true });
+  const pdfPath = path.join(shots, "invoice-paid-due.pdf");
+  await mkdir(shots, { recursive: true });
   await writeFile(pdfPath, pdfBuffer);
-  execFileSync("pdftotext", ["-layout", pdfPath, path.join(artifacts, "invoice-paid-due.txt")]);
-  const pdfText = await import("node:fs/promises").then((fs) => fs.readFile(path.join(artifacts, "invoice-paid-due.txt"), "utf8"));
+  execFileSync("pdftotext", ["-layout", pdfPath, path.join(shots, "invoice-paid-due.txt")]);
+  const pdfText = await readFile(path.join(shots, "invoice-paid-due.txt"), "utf8");
   expect(pdfText).toContain("Paid");
   expect(pdfText).toContain("$40.00");
   expect(pdfText).toContain("Amount due");
   expect(pdfText).toContain("$60.00");
   expect(pdfText).toContain("Overdue");
-  execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", pdfPath, path.join(artifacts, "invoice-pdf-paid-due")]);
+  execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", pdfPath, path.join(shots, "invoice-pdf-paid-due")]);
 
   await page.locator("#payment-amount").fill("70.00");
   await page.locator("#record-payment button[type=submit]").click();
@@ -224,10 +219,10 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
   const csvBody = await csv.text();
   expect(csvBody).toContain("LE4201");
   expect(csvBody).not.toContain("LE4203");
-  await writeFile(path.join(artifacts, "client-invoices.csv"), csvBody);
+  await writeFile(path.join(shots, "client-invoices.csv"), csvBody);
   const reportPdf = await page.request.get(`/reports/client-invoices/export?preset=custom&from=${from}&to=${to}&format=pdf`);
   expect(reportPdf.status()).toBe(200);
-  await writeFile(path.join(artifacts, "client-invoices.pdf"), Buffer.from(await reportPdf.body()));
+  await writeFile(path.join(shots, "client-invoices.pdf"), Buffer.from(await reportPdf.body()));
 
   await page.goto(`/reports/invoice-aging?preset=custom&from=${from}&to=${to}`);
   await expect(page.getByRole("heading", { name: invoiceReportCopy.agingTitle })).toBeVisible();
@@ -242,12 +237,12 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
   expect(agingCsvBody).toContain("Euro Atelier");
   expect(agingCsvBody).not.toContain("Northwind Studio");
   expect(agingCsvBody).not.toContain("LE4203");
-  await writeFile(path.join(artifacts, "invoice-aging.csv"), agingCsvBody);
+  await writeFile(path.join(shots, "invoice-aging.csv"), agingCsvBody);
   const agingPdf = await page.request.get(`/reports/invoice-aging/export?preset=custom&from=${from}&to=${to}&format=pdf`);
   expect(agingPdf.status()).toBe(200);
-  const agingPdfPath = path.join(artifacts, "invoice-aging.pdf");
+  const agingPdfPath = path.join(shots, "invoice-aging.pdf");
   await writeFile(agingPdfPath, Buffer.from(await agingPdf.body()));
-  execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", agingPdfPath, path.join(artifacts, "aging-report-pdf")]);
+  execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", agingPdfPath, path.join(shots, "aging-report-pdf")]);
   execFileSync("pdftoppm", [
     "-png",
     "-f",
@@ -256,8 +251,8 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
     "1",
     "-r",
     "120",
-    path.join(artifacts, "client-invoices.pdf"),
-    path.join(artifacts, "client-invoices-pdf"),
+    path.join(shots, "client-invoices.pdf"),
+    path.join(shots, "client-invoices-pdf"),
   ]);
 
   const memberContext = await browser.newContext();
