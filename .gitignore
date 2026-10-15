@@ -40,6 +40,9 @@ yarn-error.log*
 /env/*.env
 !/env/*.env.example
 
+# Live invoice bank details. Copy secrets/invoice-bank-details.example.txt.
+/secrets/invoice-bank-details.txt
+
 # sqlite databases left over from earlier slices
 *.db
 *.db-journal

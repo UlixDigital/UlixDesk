@@ -1,0 +1,146 @@
+export const invoiceCopy = {
+  nav: "Invoices",
+  title: "Invoices",
+  intro: "Draft an invoice from one client's billable time, then mark it as issued.",
+  denied: "Only owners and admins can manage invoices.",
+  new: "New invoice",
+  settings: "Invoice settings",
+  settingsTitle: "Invoice settings",
+  settingsIntro:
+    "These details print on every new invoice. Bank account numbers are not stored in git. Use the one-time seed if you need to load them.",
+  settingsSaved: "Invoice settings saved.",
+  emptyTitle: "No invoices yet",
+  emptyBody: "Create an invoice from uninvoiced billable time for one client.",
+  filterEmpty: "No invoices match these filters.",
+  clearFilters: "Clear filters",
+  client: "Client",
+  number: "Number",
+  dates: "Dates",
+  total: "Total",
+  status: "Status",
+  period: "Period",
+  grouping: "Line grouping",
+  groupingPeriod: "One line for the period",
+  groupingProject: "Per project",
+  groupingMember: "Per member",
+  groupingDay: "Per day",
+  create: "Create draft",
+  creating: "Creating…",
+  issueDate: "Issue date",
+  dueDate: "Due date",
+  po: "PO number",
+  notes: "Notes",
+  bank: "Bank details",
+  description: "Description",
+  hours: "Total hours (qty)",
+  unitPrice: "Unit price",
+  amount: "Amount",
+  subtotal: "Subtotal",
+  discount: "Discount",
+  tax: "Tax",
+  paid: "Paid",
+  amountDue: "Amount due",
+  save: "Save draft",
+  saving: "Saving…",
+  saved: "Draft saved.",
+  refresh: "Refresh from time",
+  issue: "Mark as issued",
+  issueConfirm:
+    "Time on this draft is out of date. Review the differences, then issue the updated time.",
+  issueUpdated: "Issue with updated time",
+  issuing: "Issuing…",
+  issued: "Invoice marked as issued. The time on it can no longer be edited.",
+  download: "Download PDF",
+  delete: "Delete draft",
+  deleteBody: "This deletes the draft and frees its time. The invoice number is not reused.",
+  deleted: "Draft deleted.",
+  addLine: "Add line",
+  removeLine: "Remove",
+  customTitle: "Custom line",
+  discountNone: "No discount",
+  discountPercent: "Percent",
+  discountAmount: "Amount",
+  applyTax: "Apply tax",
+  taxLabel: "Tax label",
+  taxRate: "Tax rate (%)",
+  companyName: "Company name",
+  companyAddress: "Company address",
+  prefix: "Number prefix",
+  nextNumber: "Next number",
+  nextNumberHint:
+    "The next draft takes this number. A number that was already used is skipped. Deleting a draft does not free its number.",
+  netTerms: "Default net terms (days)",
+  defaultNotes: "Default notes",
+  defaultBank: "Default bank details",
+  bankSeedHint:
+    "The saved default uses placeholders. To load account details once, put them in secrets/invoice-bank-details.txt (gitignored) and run npm run invoice:seed-bank.",
+  defaultTax: "Default tax",
+  taxOff: "Off until you turn it on. New invoices copy this choice.",
+  unratedTitle: "Some time was left off this invoice",
+  unratedBody: "Unrated time is not billed. Set a bill rate, then create another draft for what is still open.",
+  from: "FROM",
+  to: "TO",
+  allClients: "All clients",
+  allStatuses: "All statuses",
+  applyFilters: "Apply",
+  back: "Invoices",
+  readOnly: "This invoice is issued. Time on it is locked. Sending and payments come later.",
+  lineHint: "Quantity is H:MM:SS. Amount is the quantity times the unit price, rounded with the bill-rate rule.",
+  notFound: "This invoice no longer exists.",
+  clientRequired: "Choose a client.",
+  clientArchived: "Choose an active client.",
+  dateInvalid: "Enter a valid date.",
+  dateOrder: "The end date must be on or after the start date.",
+  groupingInvalid: "Choose how to group the lines.",
+  prefixInvalid: "Use 1 to 12 letters or digits.",
+  numberInvalid: "Enter a whole number from 1 to 1,000,000,000.",
+  dueBeforeIssue: "Due date must be on or after the issue date.",
+  discountNegative: "Enter a discount of zero or more.",
+  noEligible:
+    "No uninvoiced billable time with a matching rate falls in this period. No invoice was created.",
+  emptyBank: "Bank details are empty. The PDF will leave them blank.",
+  termsInvalid: "Enter whole days from 0 to 365.",
+  companyRequired: "Enter the company name.",
+  addressRequired: "Enter the company address.",
+  tooLong: "That text is too long.",
+  percentInvalid: "Enter a percentage from 0 to 100, with at most two decimal places.",
+  priceInvalid: "Enter a unit price in the invoice currency.",
+  quantityInvalid: "Enter hours as H:MM:SS.",
+  titleRequired: "Enter a description.",
+  notDraft: "Only a draft can be edited.",
+  timeTaken: "Some of this time was just added to another invoice. Reload and try again.",
+  amountTooLarge: "This invoice amount is too large.",
+  saveFailed: "Something went wrong saving this invoice. Try again.",
+  billingAddress: "Billing address",
+  billingAddressHint: "Printed in the To block on invoices. If this is blank, the address above is used.",
+} as const;
+
+export function invoiceStatusLabel(status: string) {
+  switch (status) {
+    case "draft":
+      return "Draft";
+    case "open":
+      return "Open";
+    case "paid":
+      return "Paid";
+    case "partially_paid":
+      return "Partially paid";
+    case "void":
+      return "Void";
+    default:
+      return status;
+  }
+}
+
+export function groupingLabel(grouping: string) {
+  switch (grouping) {
+    case "project":
+      return invoiceCopy.groupingProject;
+    case "member":
+      return invoiceCopy.groupingMember;
+    case "day":
+      return invoiceCopy.groupingDay;
+    default:
+      return invoiceCopy.groupingPeriod;
+  }
+}

@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, ChartIcon, ClockIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
+import { BuildingIcon, ChartIcon, ClockIcon, DocumentIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
 import { cn } from "@/lib/cn";
 import { reportCopy } from "@/lib/report-copy";
 
@@ -23,7 +23,12 @@ export function AppNav({
 }) {
   const pathname = usePathname();
   const links = showTeam
-    ? [...items.slice(0, 4), { href: "/team", label: "Team", icon: UsersIcon }, items[4]]
+    ? [
+        ...items.slice(0, 4),
+        { href: "/invoices", label: "Invoices", icon: DocumentIcon },
+        { href: "/team", label: "Team", icon: UsersIcon },
+        items[4],
+      ]
     : items;
 
   return (

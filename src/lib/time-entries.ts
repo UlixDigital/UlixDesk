@@ -1,5 +1,6 @@
 import { BudgetReachedError, budgetAlertForViewer, guardProjectBudget } from "@/lib/budgets";
 import { prisma } from "@/lib/db";
+import { InvoicedTimeError, isInvoicedTimeError, timeEntryIsLocked } from "@/lib/invoice-lock";
 import {
   changeContext,
   recordTimeChange,
@@ -349,6 +350,7 @@ export async function updateManualEntry(
       include: entryInclude,
     });
     if (!existing || !existing.endedAt) return null;
+    if (await timeEntryIsLocked(tx, existing.id)) throw new InvoicedTimeError();
     const guard = await guardProjectBudget(tx, {
       projectId: input.projectId,
       at: input.startedAt,
@@ -396,24 +398,32 @@ export async function updateManualEntry(
 }
 
 export async function deleteTimeEntry(id: string, userId: string | null, change: ChangeContext) {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.timeEntry.findFirst({
-      where: { id, ...(userId ? { userId } : {}) },
-      include: entryInclude,
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const existing = await tx.timeEntry.findFirst({
+        where: { id, ...(userId ? { userId } : {}) },
+        include: entryInclude,
+      });
+      if (!existing) return { ok: false as const, reason: "missing" as const };
+      if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
+      if (await timeEntryIsLocked(tx, existing.id)) {
+        return { ok: false as const, reason: "invoiced" as const };
+      }
+      await recordTimeChange(tx, {
+        ...change,
+        timeEntryId: existing.id,
+        action: "deleted",
+        entryUserId: existing.userId,
+        before: timeChangeSnapshot(existing, existing.project.client?.id ?? null),
+        after: null,
+      });
+      await tx.timeEntry.delete({ where: { id } });
+      return { ok: true as const, entry: toRecord(existing) };
     });
-    if (!existing) return { ok: false as const, reason: "missing" as const };
-    if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
-    await recordTimeChange(tx, {
-      ...change,
-      timeEntryId: existing.id,
-      action: "deleted",
-      entryUserId: existing.userId,
-      before: timeChangeSnapshot(existing, existing.project.client?.id ?? null),
-      after: null,
-    });
-    await tx.timeEntry.delete({ where: { id } });
-    return { ok: true as const, entry: toRecord(existing) };
-  });
+  } catch (error) {
+    if (isInvoicedTimeError(error)) return { ok: false as const, reason: "invoiced" as const };
+    throw error;
+  }
 }
 
 export async function getRunningTimer(userId: string) {
@@ -537,6 +547,10 @@ export async function stopTimer(
         return { ok: false as const, code: "not-running" as const };
       }
 
+      if (await timeEntryIsLocked(tx, row.timeEntry.id)) {
+        return { ok: false as const, code: "invoiced" as const };
+      }
+
       const elapsed = now.getTime() - row.timeEntry.startedAt.getTime();
       if (elapsed < MIN_TIMER_MS) {
         return {
@@ -595,6 +609,7 @@ export async function stopTimer(
       overlap,
     };
   } catch (error) {
+    if (isInvoicedTimeError(error)) return { ok: false, code: "invoiced" };
     const running = await getRunningTimer(userId);
     if (!running) return { ok: false, code: "not-running" };
     throw error;

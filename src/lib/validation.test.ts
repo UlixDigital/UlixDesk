@@ -18,6 +18,7 @@ describe("validateClientInput", () => {
     expect(result.data).toEqual({
       name: "Acme Studio",
       address: null,
+      billingAddress: null,
       phone: null,
       emails: [],
       currency: "USD",
@@ -56,6 +57,7 @@ describe("validateClientInput", () => {
     const result = validateClientInput({
       name: "Northwind",
       address: "  100 Market St\nAustin  ",
+      billingAddress: "  4801 Lang Ave NE  ",
       phone: " (555) 010-1234 ",
       emails: ["Billing@Northwind.test", "billing@northwind.test"],
       emailDraft: " ops@northwind.test ",
@@ -67,6 +69,7 @@ describe("validateClientInput", () => {
     expect(result.data).toEqual({
       name: "Northwind",
       address: "100 Market St\nAustin",
+      billingAddress: "4801 Lang Ave NE",
       phone: "(555) 010-1234",
       emails: ["billing@northwind.test", "ops@northwind.test"],
       currency: "LKR",
@@ -133,6 +136,7 @@ describe("parseClientFormData", () => {
     expect(parseClientFormData(formData)).toEqual({
       name: "Acme",
       address: "1 Main",
+      billingAddress: "",
       phone: "5550100",
       emails: ["a@acme.test", "b@acme.test"],
       emailDraft: "c@acme.test",

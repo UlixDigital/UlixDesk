@@ -23,7 +23,7 @@ export default async function NewClientPage() {
       action={saveClientAction}
       initialState={{ errors: {}, values: { ...emptyClientFormValues, currency } }}
       title="New client"
-      description="Add a company or contact. A name is enough. Address, phone, and emails can come later."
+      description="Add a company or contact. A name is enough. Address, billing address, phone, and emails can come later."
       submitLabel="Create client"
       cancelHref="/clients"
       autoFocusName

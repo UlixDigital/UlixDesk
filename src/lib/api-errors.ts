@@ -25,6 +25,7 @@ export const apiCodes = {
   REFRESH_INVALID: "REFRESH_INVALID",
   REFRESH_REUSED: "REFRESH_REUSED",
   BUDGET_REACHED: "BUDGET_REACHED",
+  INVOICED_TIME: "INVOICED_TIME",
 } as const;
 
 export type ApiErrorCode = (typeof apiCodes)[keyof typeof apiCodes];
@@ -42,6 +43,7 @@ const timerFailureCodes: Record<TimerFailureCode, ApiErrorCode> = {
   "not-running": apiCodes.NOT_RUNNING,
   "too-short": apiCodes.TOO_SHORT,
   "budget-reached": apiCodes.BUDGET_REACHED,
+  invoiced: apiCodes.INVOICED_TIME,
 };
 
 export function timerFailureApiCode(code: TimerFailureCode) {

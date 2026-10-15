@@ -12,6 +12,7 @@ export const EMAIL_MAX_COUNT = 20;
 export type ClientFormValues = {
   name: string;
   address: string;
+  billingAddress: string;
   phone: string;
   emails: string[];
   emailDraft: string;
@@ -21,6 +22,7 @@ export type ClientFormValues = {
 export type ClientFieldErrors = {
   name?: string;
   address?: string;
+  billingAddress?: string;
   phone?: string;
   emails?: string;
   currency?: string;
@@ -35,6 +37,7 @@ export type ClientFormState = {
 export type NormalizedClient = {
   name: string;
   address: string | null;
+  billingAddress: string | null;
   phone: string | null;
   emails: string[];
   currency: string;
@@ -43,6 +46,7 @@ export type NormalizedClient = {
 export const emptyClientFormValues: ClientFormValues = {
   name: "",
   address: "",
+  billingAddress: "",
   phone: "",
   emails: [],
   emailDraft: "",
@@ -91,6 +95,7 @@ export function parseClientFormData(formData: FormData): ClientFormValues {
   return {
     name: String(formData.get("name") ?? ""),
     address: String(formData.get("address") ?? ""),
+    billingAddress: String(formData.get("billingAddress") ?? ""),
     phone: String(formData.get("phone") ?? ""),
     emails: formData.getAll("emails").map((value) => String(value)),
     emailDraft: String(formData.get("emailDraft") ?? ""),
@@ -116,6 +121,10 @@ export function validateClientInput(
   if (address.length > ADDRESS_MAX) {
     errors.address = `Address must be ${ADDRESS_MAX} characters or fewer.`;
   }
+  const billingAddress = input.billingAddress.trim();
+  if (billingAddress.length > ADDRESS_MAX) {
+    errors.billingAddress = `Billing address must be ${ADDRESS_MAX} characters or fewer.`;
+  }
 
   const phone = input.phone.trim();
   if (phone && !isValidPhone(phone)) {
@@ -139,6 +148,7 @@ export function validateClientInput(
       values: {
         name: input.name,
         address: input.address,
+        billingAddress: input.billingAddress,
         phone: input.phone,
         emails: emailResult.error
           ? input.emails.map((email) => email.trim()).filter(Boolean)
@@ -154,6 +164,7 @@ export function validateClientInput(
     data: {
       name,
       address: address || null,
+      billingAddress: billingAddress || null,
       phone: phone || null,
       emails: emailResult.emails,
       currency,

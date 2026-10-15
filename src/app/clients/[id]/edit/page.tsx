@@ -70,6 +70,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
         values: {
           name: client.name,
           address: client.address ?? "",
+          billingAddress: client.billingAddress ?? "",
           phone: client.phone ?? "",
           emails: client.emails,
           emailDraft: "",

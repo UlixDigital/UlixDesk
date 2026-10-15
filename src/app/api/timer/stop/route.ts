@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     changedAt: now,
   });
   if (!result.ok) {
-    const status = result.code === "too-short" ? 409 : 404;
+    const status = result.code === "too-short" || result.code === "invoiced" ? 409 : 404;
     return jsonApi(
       request,
       apiError(timerFailureMessage(result.code), timerFailureApiCode(result.code)),
