@@ -6,6 +6,7 @@ import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
 import type { ClientOption } from "@/lib/project-display";
+import { rateCopy } from "@/lib/rate-copy";
 import { ui } from "@/lib/ui";
 import type { ProjectFormState } from "@/lib/project-validation";
 
@@ -234,7 +235,7 @@ export function ProjectForm({
                 Billable
               </span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                Time tracked on this project can be billed. On by default.
+                {rateCopy.projectBillableHint}
               </span>
             </span>
           </label>

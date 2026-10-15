@@ -37,6 +37,11 @@ export function canManageWorkspace(role: string) {
   return role === "owner" || role === "admin";
 }
 
+/** Owners and admins can see and edit bill rates and amounts. Members cannot. */
+export function canSeeMoney(role: string) {
+  return canManageWorkspace(role);
+}
+
 export function roleLabel(role: string) {
   if (role === "owner") return authCopy.roleOwner;
   if (role === "admin") return authCopy.roleAdmin;

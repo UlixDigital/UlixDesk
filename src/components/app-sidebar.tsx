@@ -20,6 +20,7 @@ export function AppSidebar({
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const panelId = useId();
 
   useEffect(() => {
@@ -33,8 +34,19 @@ export function AppSidebar({
       setOpen(false);
       buttonRef.current?.focus();
     }
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (panelRef.current?.contains(target)) return;
+      if (buttonRef.current?.contains(target)) return;
+      setOpen(false);
+    }
     document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
+    document.addEventListener("pointerdown", onPointerDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("pointerdown", onPointerDown);
+    };
   }, [open]);
 
   return (
@@ -57,7 +69,11 @@ export function AppSidebar({
           {authCopy.menu}
         </button>
       </div>
-      <div id={panelId} className={open ? "flex flex-col md:flex-1" : "hidden md:flex md:flex-1 md:flex-col"}>
+      <div
+        id={panelId}
+        ref={panelRef}
+        className={open ? "flex flex-col md:flex-1" : "hidden md:flex md:flex-1 md:flex-col"}
+      >
         <AppNav showTeam={showTeam} onNavigate={() => setOpen(false)} />
         <div className="mt-2 border-t border-slate-200 px-3 py-4 md:mt-auto">
           <p className="px-3 text-sm font-medium text-ink">{name}</p>

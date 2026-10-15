@@ -31,6 +31,7 @@ function form(entries: Record<string, string | string[]>) {
       formData.set(key, value);
     }
   }
+  if (!formData.has("currency")) formData.set("currency", "USD");
   return formData;
 }
 

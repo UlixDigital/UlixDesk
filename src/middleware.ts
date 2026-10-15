@@ -48,7 +48,7 @@ function clearCookie(response: NextResponse) {
 }
 
 export const config = {
-  matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|icon.svg|ulix-logo.svg|.*\\.(?:svg|png|ico|webp)$).*)",
-  ],
+  // Known Next assets and the current public files only. Do not skip every
+  // .svg or .png path: a later route with that extension must stay behind login.
+  matcher: ["/((?!_next/static|_next/image|favicon\\.ico|icon\\.svg|ulix-logo\\.svg).*)"],
 };

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ApiProject, ApiTimer } from "./api";
 import { popupCopy } from "./copy";
-import { derivePopup, failureAfterRefresh, projectOptionLabel } from "./popup-state";
+import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel } from "./popup-state";
 
 const project: ApiProject = {
   id: "website",
@@ -122,5 +122,12 @@ describe("popup state", () => {
       projectNotice: popupCopy.projectGone,
     });
     expect(onlyChoice.kind).toBe("no-projects");
+  });
+
+  it("does not show the sign-in form before the stored session is known", () => {
+    expect(popupChrome({ authResolved: false, signedIn: false })).toBe("pending");
+    expect(popupChrome({ authResolved: false, signedIn: true })).toBe("pending");
+    expect(popupChrome({ authResolved: true, signedIn: true })).toBe("signed-in");
+    expect(popupChrome({ authResolved: true, signedIn: false })).toBe("sign-in");
   });
 });

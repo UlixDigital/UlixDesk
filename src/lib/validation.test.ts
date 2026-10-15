@@ -20,6 +20,7 @@ describe("validateClientInput", () => {
       address: null,
       phone: null,
       emails: [],
+      currency: "USD",
     });
   });
 
@@ -40,6 +41,17 @@ describe("validateClientInput", () => {
     expect(result.errors.name).toBe("Name is required.");
   });
 
+  it("rejects a currency that is not an ISO code UlixDesk bills in", () => {
+    const result = validateClientInput({
+      ...emptyClientFormValues,
+      name: "Acme",
+      currency: "US",
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.errors.currency).toBe("Choose a currency.");
+  });
+
   it("normalizes every editable field", () => {
     const result = validateClientInput({
       name: "Northwind",
@@ -47,6 +59,7 @@ describe("validateClientInput", () => {
       phone: " (555) 010-1234 ",
       emails: ["Billing@Northwind.test", "billing@northwind.test"],
       emailDraft: " ops@northwind.test ",
+      currency: "lkr",
     });
 
     expect(result.ok).toBe(true);
@@ -56,6 +69,7 @@ describe("validateClientInput", () => {
       address: "100 Market St\nAustin",
       phone: "(555) 010-1234",
       emails: ["billing@northwind.test", "ops@northwind.test"],
+      currency: "LKR",
     });
   });
 
@@ -114,6 +128,7 @@ describe("parseClientFormData", () => {
     formData.append("emails", "a@acme.test");
     formData.append("emails", "b@acme.test");
     formData.set("emailDraft", "c@acme.test");
+    formData.set("currency", "JPY");
 
     expect(parseClientFormData(formData)).toEqual({
       name: "Acme",
@@ -121,6 +136,7 @@ describe("parseClientFormData", () => {
       phone: "5550100",
       emails: ["a@acme.test", "b@acme.test"],
       emailDraft: "c@acme.test",
+      currency: "JPY",
     });
   });
 });

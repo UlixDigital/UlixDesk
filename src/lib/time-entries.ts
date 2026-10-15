@@ -97,9 +97,12 @@ function toTimesheetEntry(row: TimeEntryRecord): TimesheetEntry | null {
     projectArchived: row.project.archivedAt !== null,
     clientId: row.project.client?.id ?? null,
     clientName: row.project.client?.name ?? null,
+    userId: row.userId,
     startedAt: row.startedAt,
     endedAt: row.endedAt,
     billable: row.billable,
+    projectBillable: row.project.billable,
+    rate: null,
     note: row.note,
     source: row.source,
   };

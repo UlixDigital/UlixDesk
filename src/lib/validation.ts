@@ -1,3 +1,6 @@
+import { isCurrencyCode } from "@/lib/currencies";
+import { rateCopy } from "@/lib/rate-copy";
+
 const EMAIL_PATTERN =
   /^[a-z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$/i;
 
@@ -12,6 +15,7 @@ export type ClientFormValues = {
   phone: string;
   emails: string[];
   emailDraft: string;
+  currency: string;
 };
 
 export type ClientFieldErrors = {
@@ -19,6 +23,7 @@ export type ClientFieldErrors = {
   address?: string;
   phone?: string;
   emails?: string;
+  currency?: string;
   form?: string;
 };
 
@@ -32,6 +37,7 @@ export type NormalizedClient = {
   address: string | null;
   phone: string | null;
   emails: string[];
+  currency: string;
 };
 
 export const emptyClientFormValues: ClientFormValues = {
@@ -40,6 +46,7 @@ export const emptyClientFormValues: ClientFormValues = {
   phone: "",
   emails: [],
   emailDraft: "",
+  currency: "USD",
 };
 
 export function isValidEmail(email: string) {
@@ -87,6 +94,7 @@ export function parseClientFormData(formData: FormData): ClientFormValues {
     phone: String(formData.get("phone") ?? ""),
     emails: formData.getAll("emails").map((value) => String(value)),
     emailDraft: String(formData.get("emailDraft") ?? ""),
+    currency: String(formData.get("currency") ?? ""),
   };
 }
 
@@ -119,6 +127,11 @@ export function validateClientInput(
     errors.emails = emailResult.error;
   }
 
+  const currency = input.currency.trim().toUpperCase();
+  if (!isCurrencyCode(currency)) {
+    errors.currency = rateCopy.currencyRequired;
+  }
+
   if (Object.keys(errors).length > 0) {
     return {
       ok: false,
@@ -131,6 +144,7 @@ export function validateClientInput(
           ? input.emails.map((email) => email.trim()).filter(Boolean)
           : emailResult.emails,
         emailDraft: emailResult.error ? input.emailDraft : "",
+        currency: input.currency,
       },
     };
   }
@@ -142,6 +156,7 @@ export function validateClientInput(
       address: address || null,
       phone: phone || null,
       emails: emailResult.emails,
+      currency,
     },
   };
 }

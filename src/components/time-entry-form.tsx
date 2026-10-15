@@ -6,6 +6,7 @@ import { saveTimeEntryAction } from "@/app/timesheets/actions";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { StatusBadge } from "@/components/status-badge";
 import { cn } from "@/lib/cn";
+import { rateCopy } from "@/lib/rate-copy";
 import { timeCopy } from "@/lib/time-copy";
 import { formatTrackedDuration, overnightDurationNotice } from "@/lib/timesheet";
 import { ui } from "@/lib/ui";
@@ -64,6 +65,7 @@ export function TimeEntryForm({
   const [endTime, setEndTime] = useSyncedState(state.values.endTime, serverKey);
   const [billable, setBillable] = useSyncedState(state.values.billable, serverKey);
   const [note, setNote] = useSyncedState(state.values.note, serverKey);
+  const selectedProject = projects.find((project) => project.id === projectId);
   const [billableTouched, setBillableTouched] = useState(mode === "edit");
   const [seenTouch, setSeenTouch] = useState(serverKey);
   if (seenTouch !== serverKey) {
@@ -298,8 +300,13 @@ export function TimeEntryForm({
             <span>
               <span className="text-sm font-medium text-slate-800">Billable</span>
               <span className="mt-0.5 block text-xs text-slate-500">
-                Starts from the project. You can change it for this entry.
+                {rateCopy.entryBillableHint}
               </span>
+              {selectedProject && !selectedProject.billable ? (
+                <span className="mt-1 block text-xs font-medium text-slate-700">
+                  {rateCopy.entryProjectNonBillable}
+                </span>
+              ) : null}
             </span>
           </label>
         </div>

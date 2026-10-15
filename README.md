@@ -278,13 +278,21 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - A password change revokes manual access tokens as well as extension sign-ins.
 - The lockfile records the Node.js engine, so `npm install` does not rewrite it.
 
+## What shipped in Slice 8
+
+- A workspace default currency in Settings. New clients inherit it. Each client has its own currency and an optional hourly bill rate.
+- An optional project bill rate, in the client's currency, and an optional member bill rate for that client. A project rate wins, then a member rate, then the client rate. History keeps every effective date. Past time keeps the rate that applied at 00:00 in the workspace timezone on that date. The default timezone is Asia/Colombo. Timesheet days use that same timezone.
+- Billable amounts on timesheets and on the client and project tracked-time totals. Totals are grouped by currency. Owners and admins see them. Members do not, in the UI or on the server.
+- A non-billable project is not billed, even when an entry is marked billable.
+- See [docs/RATES.md](docs/RATES.md) for rounding, the error codes, and the migration defaults.
+
 ## Deferred
 
 - Chrome Web Store publishing
 - Screenshots, activity, and idle tracking
 - Approvals and reasons
 - Reporting beyond the daily and weekly timesheets
-- Pay rates, bill rates, budgets, and to-dos
+- Pay rates, budgets, and to-dos
 - Import, duplicate, and transfer
 - Invoicing, auto-invoicing, invoice notes, tax, and net terms
 - Email delivery for invites

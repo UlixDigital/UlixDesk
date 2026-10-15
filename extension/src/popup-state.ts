@@ -110,6 +110,12 @@ export function derivePopup(input: {
   };
 }
 
+/** Pending until storage is read, so a signed-in popup never paints the sign-in form first. */
+export function popupChrome(input: { authResolved: boolean; signedIn: boolean }) {
+  if (!input.authResolved) return "pending" as const;
+  return input.signedIn ? ("signed-in" as const) : ("sign-in" as const);
+}
+
 export function projectOptionLabel(project: ApiProject) {
   return project.client ? `${project.name} · ${project.client.name}` : project.name;
 }

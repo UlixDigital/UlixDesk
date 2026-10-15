@@ -3,8 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { TimeEntryForm } from "@/components/time-entry-form";
 import { DeleteTimeEntryButton } from "@/components/time-entry-delete";
-import { TimezonePending } from "@/components/timesheet-empty-state";
-import { getRequestTimeZone } from "@/lib/request-time-zone";
+import { getWorkspaceTimeZone } from "@/lib/bill-rates";
+import { entryTimeZoneNote } from "@/lib/rate-copy";
 import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy } from "@/lib/time-copy";
@@ -40,8 +40,7 @@ export default async function EditTimeEntryPage({
   if (!entry) notFound();
 
   const query = await searchParams;
-  const timeZone = await getRequestTimeZone();
-  if (!timeZone) return <TimezonePending />;
+  const timeZone = await getWorkspaceTimeZone();
 
   if (!entry.endedAt) {
     const requestedDate = (query.date ?? "").trim();
@@ -85,7 +84,7 @@ export default async function EditTimeEntryPage({
         overlaps={overlaps}
         cancelHref={timesheetsHref({ date: returnDate })}
         title="Edit time entry"
-        description="Update this entry. Times use your timezone."
+        description={`Update this entry. ${entryTimeZoneNote(timeZone)}`}
         submitLabel="Save changes"
         initialState={{
           errors: {},

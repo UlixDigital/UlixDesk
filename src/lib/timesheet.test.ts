@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { timeCopy } from "@/lib/time-copy";
+import { zonedDateTimeToUtc } from "@/lib/time-zone";
 import {
   buildDailyTimesheet,
   buildWeeklyTimesheet,
@@ -19,7 +20,10 @@ function entry(overrides: Partial<TimesheetEntry> & Pick<TimesheetEntry, "id" | 
     projectArchived: false,
     clientId: "client-1",
     clientName: "Acme",
+    userId: "user-1",
     billable: true,
+    projectBillable: true,
+    rate: null,
     note: null,
     source: "manual",
     ...overrides,
@@ -261,5 +265,142 @@ describe("timesheet totals and day boundaries", () => {
     });
     expect(completed.rows).toEqual([]);
     expect(completed.totalMs).toBe(0);
+  });
+
+  it("groups billable amounts by currency and leaves a missing rate blank", () => {
+    const rows = [
+      entry({
+        id: "usd",
+        startedAt: new Date("2026-10-09T09:00:00.000Z"),
+        endedAt: new Date("2026-10-09T10:00:00.000Z"),
+        rate: { amountMinor: 5000, currency: "USD" },
+      }),
+      entry({
+        id: "lkr",
+        projectId: "project-2",
+        projectName: "Brand",
+        startedAt: new Date("2026-10-09T11:00:00.000Z"),
+        endedAt: new Date("2026-10-09T12:00:00.000Z"),
+        rate: { amountMinor: 800000, currency: "LKR" },
+      }),
+      entry({
+        id: "missing",
+        projectId: "project-3",
+        projectName: "Internal",
+        startedAt: new Date("2026-10-09T13:00:00.000Z"),
+        endedAt: new Date("2026-10-09T14:00:00.000Z"),
+        rate: null,
+      }),
+      entry({
+        id: "off",
+        projectId: "project-4",
+        projectName: "Free",
+        startedAt: new Date("2026-10-09T15:00:00.000Z"),
+        endedAt: new Date("2026-10-09T16:00:00.000Z"),
+        projectBillable: false,
+        rate: { amountMinor: 5000, currency: "USD" },
+      }),
+    ];
+    const daily = buildDailyTimesheet({ date: "2026-10-09", timeZone: "UTC", entries: rows });
+    expect(daily.moneyTotals).toEqual([
+      { currency: "LKR", amountMinor: 800000 },
+      { currency: "USD", amountMinor: 5000 },
+    ]);
+    expect(daily.unrated).toBe(true);
+    expect(daily.rows.find((row) => row.id === "missing")?.amount).toBeNull();
+    expect(daily.rows.find((row) => row.id === "off")?.amount).toBeNull();
+    expect(daily.rows.find((row) => row.id === "off")?.billable).toBe(false);
+
+    const week = buildWeeklyTimesheet({ date: "2026-10-09", timeZone: "UTC", entries: rows });
+    const missing = week.rows.find((row) => row.projectId === "project-3");
+    const off = week.rows.find((row) => row.projectId === "project-4");
+    const usd = week.rows.find((row) => row.projectId === "project-1");
+    expect(missing?.dayNoAmount[4]).toBe(true);
+    expect(missing?.dayNonBillable[4]).toBe(false);
+    expect(missing?.dayMoney[4]).toEqual([]);
+    expect(off?.dayNoAmount[4]).toBe(true);
+    expect(off?.dayNonBillable[4]).toBe(true);
+    expect(usd?.dayNoAmount[4]).toBe(false);
+    expect(usd?.dayNonBillable[4]).toBe(false);
+    expect(usd?.dayMoney[4]).toEqual([{ currency: "USD", amountMinor: 5000 }]);
+  });
+});
+
+function at(date: string, time: string, timeZone: string) {
+  const instant = zonedDateTimeToUtc(date, time, timeZone);
+  if (!instant) throw new Error(`${date} ${time} does not exist in ${timeZone}`);
+  return instant;
+}
+
+describe("workspace-local day assignment", () => {
+  const colombo = "Asia/Colombo";
+
+  it("counts 00:00 and 03:00 Colombo on the new local day, and 23:59 on the day before", () => {
+    const eleven = entry({
+      id: "eleven",
+      startedAt: at("2026-01-31", "23:59", colombo),
+      endedAt: at("2026-02-01", "00:00", colombo),
+    });
+    const late = entry({
+      id: "late",
+      startedAt: new Date(at("2026-02-01", "00:00", colombo).getTime() - 1),
+      endedAt: at("2026-02-01", "00:00", colombo),
+    });
+    const midnight = entry({
+      id: "midnight",
+      startedAt: at("2026-02-01", "00:00", colombo),
+      endedAt: at("2026-02-01", "01:00", colombo),
+    });
+    const three = entry({
+      id: "three",
+      startedAt: at("2026-02-01", "03:00", colombo),
+      endedAt: at("2026-02-01", "04:00", colombo),
+    });
+    expect(three.startedAt.toISOString().slice(0, 10)).toBe("2026-01-31");
+
+    const previous = buildDailyTimesheet({
+      date: "2026-01-31",
+      timeZone: colombo,
+      entries: [eleven, late, midnight, three],
+    });
+    expect(previous.rows.map((row) => row.id)).toEqual(["eleven", "late"]);
+
+    const next = buildDailyTimesheet({
+      date: "2026-02-01",
+      timeZone: colombo,
+      entries: [eleven, late, midnight, three],
+    });
+    expect(next.rows.map((row) => row.id)).toEqual(["midnight", "three"]);
+
+    const week = buildWeeklyTimesheet({
+      date: "2026-02-01",
+      timeZone: colombo,
+      entries: [eleven, late, midnight, three],
+    });
+    const row = week.rows[0];
+    expect(week.dates[5]).toBe("2026-01-31");
+    expect(week.dates[6]).toBe("2026-02-01");
+    expect(row.dayMs[5]).toBeGreaterThan(0);
+    expect(row.dayMs[6]).toBe(2 * 3_600_000);
+  });
+
+  it("assigns a New York spring-forward morning to the short local day", () => {
+    const zone = "America/New_York";
+    const before = entry({
+      id: "before",
+      startedAt: at("2026-03-07", "23:30", zone),
+      endedAt: at("2026-03-07", "23:59", zone),
+    });
+    const morning = entry({
+      id: "morning",
+      startedAt: at("2026-03-08", "03:00", zone),
+      endedAt: at("2026-03-08", "04:00", zone),
+    });
+    const march7 = buildDailyTimesheet({ date: "2026-03-07", timeZone: zone, entries: [before, morning] });
+    const march8 = buildDailyTimesheet({ date: "2026-03-08", timeZone: zone, entries: [before, morning] });
+    expect(march7.rows.map((row) => row.id)).toEqual(["before"]);
+    expect(march8.rows.map((row) => row.id)).toEqual(["morning"]);
+    expect(march8.rows[0].durationMs).toBe(3_600_000);
+    expect(march8.totalMs).toBe(3_600_000);
   });
 });

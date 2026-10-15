@@ -18,6 +18,7 @@
 }
 
 @theme inline {
+  --color-slate-400: var(--slate-400);
   --color-slate-500: var(--slate-500);
 }
 
