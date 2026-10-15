@@ -29,7 +29,7 @@ export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 export type ClientFailure =
   | { ok: false; reason: "not-configured" }
   | { ok: false; reason: "invalid-url" }
-  | { ok: false; reason: "unreachable" }
+  | { ok: false; reason: "unreachable"; message?: string }
   | { ok: false; reason: "unauthorized"; message: string }
   | { ok: false; reason: "invalid-response"; message: string }
   | { ok: false; reason: "http"; status: number; message: string };

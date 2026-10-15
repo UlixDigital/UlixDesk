@@ -13,7 +13,7 @@ export const popupCopy = {
     "This token was rejected. Create a new one on the Extension access page, then update the extension options.",
   permissionTitle: "Permission needed",
   permissionBody:
-    "Chrome needs permission to talk to this server. Grant it on the options page, then try again.",
+    "Chrome needs permission to talk to this server. Choose Grant permission, then try again.",
   invalidUrlTitle: "Server URL isn't valid",
   invalidUrlBody: "Enter a server URL that starts with http:// or https:// in extension options.",
   noProjectsTitle: "No active projects",

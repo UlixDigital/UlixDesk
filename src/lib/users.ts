@@ -214,6 +214,10 @@ export async function changeOwnPassword(input: {
       where: { userId: user.id, revokedAt: null },
       data: { revokedAt: now },
     }),
+    prisma.accessToken.updateMany({
+      where: { userId: user.id, revokedAt: null },
+      data: { revokedAt: now },
+    }),
   ]);
   return { ok: true as const };
 }
@@ -240,6 +244,10 @@ export async function consumeSetupToken(token: string, password: string, now = n
     }),
     prisma.session.deleteMany({ where: { userId: row.userId } }),
     prisma.extensionSession.updateMany({
+      where: { userId: row.userId, revokedAt: null },
+      data: { revokedAt: now },
+    }),
+    prisma.accessToken.updateMany({
       where: { userId: row.userId, revokedAt: null },
       data: { revokedAt: now },
     }),

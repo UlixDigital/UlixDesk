@@ -7,7 +7,7 @@ import { hostPermissionPattern, isConfigured, normalizeServerUrl } from "./serve
 
 export const ALARM_NAME = "ulixdesk-timer-sync";
 export const ALARM_PERIOD_MINUTES = 1;
-const BADGE_COLOR = "#0f766e";
+const BADGE_COLOR = "#1151b4";
 
 async function syncBadge() {
   const ready = await ensureAccess();

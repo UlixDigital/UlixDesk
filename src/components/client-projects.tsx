@@ -15,14 +15,14 @@ export function ClientProjects({
   return (
     <section aria-label={`Projects for ${clientName}`}>
       <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-lg font-semibold text-slate-900">Projects</h2>
+        <h2 className="text-lg font-semibold text-ink">Projects</h2>
         {projects.length > 0 ? (
           <p className="text-sm text-slate-600">{projectCountLabel(projects.length)}</p>
         ) : null}
       </div>
       {projects.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-10 text-center">
-          <h3 className="text-base font-semibold text-slate-900">{empty.title}</h3>
+          <h3 className="text-base font-semibold text-ink">{empty.title}</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
             {empty.body}
           </p>
@@ -36,7 +36,7 @@ export function ClientProjects({
             >
               <Link
                 href={`/projects/${project.id}/edit`}
-                className="min-w-0 text-sm font-semibold break-words text-slate-900 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                className="min-w-0 text-sm font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {project.name}
                 <span className="sr-only">, edit project</span>

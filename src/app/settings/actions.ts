@@ -32,6 +32,7 @@ export async function changePasswordAction(
     keepSessionTokenHash: await currentSessionTokenHash(),
   });
   if (!saved.ok) return { error: saved.error, notice: null };
+  revalidatePath("/settings");
   return { error: null, notice: authCopy.passwordChanged };
 }
 

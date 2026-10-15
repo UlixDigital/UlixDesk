@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { SetPasswordForm } from "@/app/set-password/set-password-form";
+import { UlixLogo } from "@/components/ulix-logo";
 import { authCopy, setupIntro } from "@/lib/auth-copy";
 import { readSession } from "@/lib/session";
 import { lookupSetupToken } from "@/lib/users";
@@ -31,10 +32,13 @@ export default async function SetPasswordPage({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f4f6f8] px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{authCopy.setupTitle}</h1>
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="brand-rule" aria-hidden="true" />
+        <div className="px-6 py-8 sm:px-8">
+        <UlixLogo height={48} />
+        <h1 className="mt-6 text-2xl font-semibold tracking-tight text-ink">{authCopy.setupTitle}</h1>
         {params.resumed === "1" ? (
-          <p role="status" className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+          <p role="status" className="mt-4 rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-accent">
             {authCopy.signedOutForPasswordLink}
           </p>
         ) : null}
@@ -48,6 +52,7 @@ export default async function SetPasswordPage({
             {authCopy.setupInvalid}
           </p>
         )}
+        </div>
       </div>
     </div>
   );

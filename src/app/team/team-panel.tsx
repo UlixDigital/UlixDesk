@@ -49,7 +49,7 @@ export function TeamPanel({
   return (
     <div>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">{authCopy.teamTitle}</h1>
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">{authCopy.teamTitle}</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-600">{authCopy.teamIntro}</p>
       </div>
 
@@ -59,7 +59,7 @@ export function TeamPanel({
         </p>
       ) : null}
       {link ? (
-        <div role="status" className="mt-4 rounded-lg border border-teal-200 bg-teal-50 px-4 py-3 text-sm text-teal-950">
+        <div role="status" className="mt-4 rounded-lg border border-primary-200 bg-primary-50 px-4 py-3 text-sm text-accent">
           <p className="font-medium">{linkNote}</p>
           <p className="mt-2 break-all font-mono text-xs">{link}</p>
         </div>
@@ -76,7 +76,7 @@ export function TeamPanel({
         {people.map((person) => (
           <li key={person.id} className="flex flex-col gap-3 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="min-w-0">
-              <p className="font-semibold text-slate-900">{person.name}</p>
+              <p className="font-semibold text-ink">{person.name}</p>
               <p className="truncate text-sm text-slate-600">{person.email}</p>
               <p className="mt-1 text-xs text-slate-500">
                 {roleLabel(person.role)} · {person.deactivated ? authCopy.deactivatedStatus : authCopy.active}
@@ -218,7 +218,7 @@ function DeactivateButton({ id, name }: { id: string; name: string }) {
         <form action={action} className="w-[min(100%,28rem)] rounded-xl bg-white p-6 shadow-xl">
           <input type="hidden" name="userId" value={id} readOnly />
           <input type="hidden" name="active" value="0" readOnly />
-          <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+          <h2 id={titleId} className="text-lg font-semibold text-ink">
             {authCopy.deactivateTitle}
           </h2>
           <p className="mt-2 text-sm text-slate-600">{authCopy.deactivateBody}</p>

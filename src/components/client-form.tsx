@@ -68,17 +68,17 @@ export function ClientForm({
           <li>
             <Link
               href="/clients"
-              className="font-medium hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+              className="font-medium hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Clients
             </Link>
           </li>
           <li aria-hidden="true">/</li>
-          <li className="text-slate-900">{title}</li>
+          <li className="text-ink">{title}</li>
         </ol>
       </nav>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
           {title}
         </h1>
         {badge ? <StatusBadge status={badge} /> : null}
@@ -206,7 +206,7 @@ function StatusBadge({ status }: { status: "Active" | "Archived" }) {
         "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         archived
           ? "bg-amber-50 text-amber-900 ring-1 ring-amber-200"
-          : "bg-teal-50 text-teal-800 ring-1 ring-teal-100",
+          : "bg-primary-50 text-accent ring-1 ring-primary-100",
       )}
     >
       {status}
@@ -347,11 +347,11 @@ function EmailField({
             {localEmails.map((email) => (
               <li key={email}>
                 <input type="hidden" name="emails" value={email} readOnly />
-                <span className="inline-flex items-center gap-1 rounded-full bg-teal-50 py-1 pr-1 pl-2.5 text-sm text-teal-950 ring-1 ring-teal-100">
+                <span className="inline-flex items-center gap-1 rounded-full bg-primary-50 py-1 pr-1 pl-2.5 text-sm text-accent ring-1 ring-primary-100">
                   <span className="max-w-[16rem] truncate">{email}</span>
                   <button
                     type="button"
-                    className="rounded-full px-1.5 text-base leading-none text-teal-900 hover:bg-teal-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                    className="rounded-full px-1.5 text-base leading-none text-accent hover:bg-primary-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     aria-label={`Remove ${email}`}
                     onClick={() => {
                       setLocalEmails(localEmails.filter((item) => item !== email));
@@ -390,7 +390,7 @@ function EmailField({
                 addEmails(localDraft);
               }
             }}
-            className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none"
+            className="min-w-0 flex-1 rounded-md px-2 py-1.5 text-sm text-ink placeholder:text-slate-400 focus:outline-none"
           />
           <button
             type="button"

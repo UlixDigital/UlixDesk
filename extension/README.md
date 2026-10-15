@@ -43,4 +43,4 @@ To rehearse against staging instead, choose **Use staging**. That origin is `htt
 
 ## Access token fallback
 
-Extension access, on the website, can still create an access token. Open the extension options (right-click the toolbar button, then Options), paste the server URL and the token, then choose Save, Grant permission, and Test connection. That replaces a popup sign-in on this browser.
+Extension access, on the website, can still create an access token. Open the extension options (right-click the toolbar button, then Options), paste the server URL and the token, then choose Save, Grant permission, and Test connection. That replaces a popup sign-in on this browser. Changing the password revokes that token. Create a new one if you still need it.

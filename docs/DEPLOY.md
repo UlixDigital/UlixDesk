@@ -25,7 +25,7 @@ Say so in the team channel and stop using the broken page. The team can step pro
 
 Sign in as an owner or an admin. Open **Team**. Enter the person's name and email, choose Member (or Admin, or Owner if you are an owner), and press **Add team member**. UlixDesk does not email them. Copy the set-password link that appears and send it yourself. The link works once and expires in 72 hours. They open it, choose a password, and then sign in.
 
-To replace a forgotten password, press **Reset password** on that person and send the new link. The old link stops working. **Deactivate** signs them out and stops their extension sign-ins and access tokens. **Restore access** lets them sign in again. Old extension sign-ins and access tokens stay revoked, so they sign in from the extension again.
+To replace a forgotten password, press **Reset password** on that person and send the new link. The old link stops working. Using the new link revokes that person's extension sign-ins and access tokens. **Deactivate** signs them out and stops their extension sign-ins and access tokens. **Restore access** lets them sign in again. Old extension sign-ins and access tokens stay revoked, so they sign in from the extension again.
 
 ## For the team
 
@@ -230,7 +230,7 @@ The unpacked extension id is `cjlaoflbipaehclleojofopapalhiooe`. Put that in `UL
 
 The popup defaults to `https://desk.ulixdigital.com`. **Use staging** points it at `https://staging.desk.ulixdigital.com`. **Custom server** is for a local origin such as `http://127.0.0.1:3000`. No new environment variable is required. Sign-in uses the same email, password, and rate limit as the website.
 
-A timer started from the extension runs as that person. **Sign out** in the popup revokes that sign-in. Deactivating them, or changing their password, revokes every extension sign-in. Extension access lists each sign-in and can revoke one. An access token on that page remains an advanced fallback.
+A timer started from the extension runs as that person. **Sign out** in the popup revokes that sign-in. Deactivating them, or changing their password, revokes every extension sign-in and every access token. Extension access lists each sign-in and can revoke one. An access token on that page remains an advanced fallback until the password changes.
 
 ### Try the production stack on a laptop
 

@@ -59,7 +59,7 @@ export function ArchiveButton({ id, name }: { id: string; name: string }) {
         >
           <h2
             id={titleId}
-            className="text-lg font-semibold break-words text-slate-900"
+            className="text-lg font-semibold break-words text-ink"
           >
             Archive {name}?
           </h2>

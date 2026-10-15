@@ -8,7 +8,7 @@ export type PopupModel =
   | { kind: "not-connected" }
   | { kind: "permission" }
   | { kind: "invalid-url" }
-  | { kind: "unreachable" }
+  | { kind: "unreachable"; message: string | null }
   | { kind: "unauthorized" }
   | { kind: "unexpected" }
   | { kind: "no-projects" }
@@ -31,6 +31,22 @@ export type PopupModel =
       alert: string | null;
     };
 
+/** Maps a failed token refresh onto the popup error that matches its message. */
+export function failureAfterRefresh(message: string): ClientFailure {
+  if (message === popupCopy.invalidUrlBody) return { ok: false, reason: "invalid-url" };
+  if (message === popupCopy.unexpectedBody) {
+    return { ok: false, reason: "invalid-response", message };
+  }
+  return { ok: false, reason: "unreachable", message };
+}
+
+function serverMessage(failure: ClientFailure) {
+  if (failure.reason !== "unreachable") return null;
+  const message = failure.message?.trim() ?? "";
+  if (!message || message === popupCopy.unreachableBody) return null;
+  return message;
+}
+
 function failureModel(failure: ClientFailure): PopupModel {
   switch (failure.reason) {
     case "not-configured":
@@ -38,7 +54,7 @@ function failureModel(failure: ClientFailure): PopupModel {
     case "invalid-url":
       return { kind: "invalid-url" };
     case "unreachable":
-      return { kind: "unreachable" };
+      return { kind: "unreachable", message: serverMessage(failure) };
     case "unauthorized":
       return { kind: "unauthorized" };
     default:

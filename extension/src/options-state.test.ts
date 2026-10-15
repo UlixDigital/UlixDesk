@@ -68,6 +68,14 @@ describe("options status", () => {
         serverUrl,
         token,
         permission: true,
+        result: { ok: false, reason: "unreachable", message: "Database is restarting" },
+      }),
+    ).toEqual({ tone: "error", message: "Database is restarting" });
+    expect(
+      describeTestConnection({
+        serverUrl,
+        token,
+        permission: true,
         result: { ok: false, reason: "http", status: 500, message: "Down" },
       }),
     ).toEqual({ tone: "error", message: `${optionsCopy.serverError} Down` });

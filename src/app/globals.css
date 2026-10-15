@@ -1,12 +1,38 @@
 @import "tailwindcss";
+@import "../styles/tokens.css";
+
+@theme {
+  --color-ink: #1d1d1d;
+  --color-accent: #1f108c;
+  --color-primary-50: #edf6ff;
+  --color-primary-100: #dcecff;
+  --color-primary-200: #c0dcff;
+  --color-primary-300: #9ac5ff;
+  --color-primary-400: #6ea7ff;
+  --color-primary-500: #2177ff;
+  --color-primary-600: #236ade;
+  --color-primary-700: #1151b4;
+  --color-primary-800: #0e408e;
+  --color-primary-900: #0e326d;
+  --color-primary-950: #082047;
+}
+
+@theme inline {
+  --color-slate-500: var(--slate-500);
+}
 
 html {
   color-scheme: light;
 }
 
 body {
-  background: #f4f6f8;
-  color: #0f172a;
+  background: var(--page);
+  color: var(--ink);
+}
+
+.brand-rule {
+  height: 4px;
+  background: linear-gradient(90deg, #1f108c 0%, #1f2dac 32%, #2053d7 58%, #2067ed 78%, #2177ff 100%);
 }
 
 .skip-link {
@@ -34,8 +60,8 @@ body {
   border-radius: 0.5rem;
   background: white;
   padding: 0.5rem 0.75rem;
-  color: #0f172a;
-  outline: 2px solid #0f766e;
+  color: #1d1d1d;
+  outline: 2px solid #1f108c;
   outline-offset: 2px;
 }
 
@@ -45,6 +71,7 @@ dialog.confirm-dialog {
   padding: 0;
   background: transparent;
   max-width: calc(100vw - 2rem);
+  text-align: left;
 }
 
 dialog.confirm-dialog::backdrop {

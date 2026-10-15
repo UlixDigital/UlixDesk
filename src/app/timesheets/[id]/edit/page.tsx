@@ -50,7 +50,7 @@ export default async function EditTimeEntryPage({
       : todayInTimeZone(timeZone);
     return (
       <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-        <h1 className="text-xl font-semibold text-slate-900">
+        <h1 className="text-xl font-semibold text-ink">
           {timeCopy.stopTimerFirstTitle}
         </h1>
         <p className="mt-2 text-sm text-slate-600">{timeCopy.stopTimerFirstBody}</p>

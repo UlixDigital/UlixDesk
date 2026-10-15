@@ -11,7 +11,8 @@ import {
 } from "./api";
 import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
-import { derivePopup, projectOptionLabel, type PopupModel } from "./popup-state";
+import { hostAccessRequest } from "./host-permission";
+import { derivePopup, failureAfterRefresh, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
 import {
@@ -110,12 +111,23 @@ async function load() {
     return;
   }
 
-  const ready = await requestEnsureAccess();
+  const parsed = normalizeServerUrl(serverUrl);
+  const [ready, allowed] = await Promise.all([
+    requestEnsureAccess(),
+    parsed.ok
+      ? chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] })
+      : Promise.resolve(false),
+  ]);
+  // Refresh the flag even when ensureAccess fails. A stale false hides the real error
+  // behind "Permission needed" after Chrome has already granted access.
+  permission = Boolean(parsed.ok && allowed);
+
   if (!ready.ok) {
     if (ready.signedOut) {
       signedIn = false;
       token = "";
       formError = ready.message || null;
+      failure = null;
       loading = false;
       render();
       requestBadgeRefresh();
@@ -123,7 +135,7 @@ async function load() {
     }
     signedIn = true;
     token = settings.token;
-    failure = { ok: false, reason: "unreachable" };
+    failure = failureAfterRefresh(ready.message);
     projects = null;
     timer = null;
     loading = false;
@@ -137,10 +149,6 @@ async function load() {
   serverUrl = ready.settings.serverUrl || serverUrl;
   accountName = ready.settings.userName;
   accountEmail = ready.settings.userEmail;
-  const parsed = normalizeServerUrl(serverUrl);
-  permission =
-    parsed.ok &&
-    (await chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] }));
 
   if (!permission || !parsed.ok) {
     projects = null;
@@ -167,7 +175,7 @@ async function load() {
         token = "";
         formError = again.message || null;
       } else {
-        failure = { ok: false, reason: "unreachable" };
+        failure = failureAfterRefresh(again.message);
       }
       projects = null;
       timer = null;
@@ -259,11 +267,13 @@ function view() {
 
 function header() {
   const row = el("div", "brand");
-  const mark = el("span", "mark", "U");
-  const text = el("div", "brand-text");
-  text.append(el("span", "brand-name", "UlixDesk"));
-  text.append(el("span", "brand-meta", "Timer"));
-  row.append(mark, text);
+  const logo = document.createElement("img");
+  logo.className = "logo";
+  logo.src = "ulix-logo.svg";
+  logo.alt = "Ulix";
+  logo.width = 103;
+  logo.height = 44;
+  row.append(logo);
   return row;
 }
 
@@ -392,27 +402,14 @@ function onSignInClick() {
   if (!parsed.ok) return;
   const pattern = hostPermissionPattern(parsed.origin);
   const passwordValue = password;
-  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+  chrome.permissions.request(hostAccessRequest(pattern), (granted) => {
     void chrome.runtime.lastError;
     if (!granted) {
       formError = popupCopy.permissionBody;
       render();
       return;
     }
-    chrome.permissions.getAll((current) => {
-      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
-      const finish = () => {
-        void completeSignIn(described.serverUrl, described.email, passwordValue);
-      };
-      if (extras.length === 0) {
-        finish();
-        return;
-      }
-      chrome.permissions.remove({ origins: extras }, () => {
-        void chrome.runtime.lastError;
-        finish();
-      });
-    });
+    void completeSignIn(described.serverUrl, described.email, passwordValue);
   });
 }
 
@@ -474,27 +471,14 @@ function grantPermission() {
   const parsed = normalizeServerUrl(serverUrl);
   if (!parsed.ok) return;
   const pattern = hostPermissionPattern(parsed.origin);
-  chrome.permissions.request({ origins: [pattern] }, (granted) => {
+  chrome.permissions.request(hostAccessRequest(pattern), (granted) => {
     void chrome.runtime.lastError;
     if (!granted) {
       alertMessage = popupCopy.permissionBody;
       render();
       return;
     }
-    chrome.permissions.getAll((current) => {
-      const extras = (current.origins ?? []).filter((origin) => origin !== pattern);
-      const finish = () => {
-        void load();
-      };
-      if (extras.length === 0) {
-        finish();
-        return;
-      }
-      chrome.permissions.remove({ origins: extras }, () => {
-        void chrome.runtime.lastError;
-        finish();
-      });
-    });
+    void load();
   });
 }
 
@@ -514,11 +498,15 @@ function bodyFor(model: PopupModel) {
       );
       break;
     case "invalid-url":
-      panel.append(statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody));
+      panel.append(
+        statusBlock(popupCopy.invalidUrlTitle, popupCopy.invalidUrlBody),
+        optionsLink(),
+      );
       break;
     case "unreachable":
       panel.append(
         statusBlock(popupCopy.unreachableTitle, popupCopy.unreachableBody),
+        ...(model.message ? [noteLine(model.message, "alert")] : []),
         button(popupCopy.tryAgain, "primary", () => void load()),
       );
       break;
@@ -733,6 +721,18 @@ function button(
   node.disabled = disabled;
   node.addEventListener("click", onClick);
   return node;
+}
+
+function optionsLink() {
+  const link = document.createElement("a");
+  link.className = "text-button";
+  link.href = chrome.runtime.getURL("options.html");
+  link.textContent = popupCopy.openOptions;
+  link.addEventListener("click", (event) => {
+    event.preventDefault();
+    chrome.runtime.openOptionsPage();
+  });
+  return link;
 }
 
 function textButton(label: string, onClick: () => void) {

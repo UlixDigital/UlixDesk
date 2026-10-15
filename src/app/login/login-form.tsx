@@ -15,7 +15,7 @@ export function LoginForm({ next, notice }: { next: string; notice: string | nul
     <form action={action} className="mt-6 space-y-4" noValidate>
       <input type="hidden" name="next" value={next} readOnly />
       {notice ? (
-        <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+        <p role="status" className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-accent">
           {notice}
         </p>
       ) : null}

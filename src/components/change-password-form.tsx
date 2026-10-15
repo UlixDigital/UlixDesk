@@ -39,7 +39,7 @@ export function ChangePasswordForm() {
       }}
       className="mt-8 space-y-4 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
     >
-      <h2 className="text-lg font-semibold text-slate-900">{authCopy.changePasswordTitle}</h2>
+      <h2 className="text-lg font-semibold text-ink">{authCopy.changePasswordTitle}</h2>
       <p className="text-sm text-slate-600">{authCopy.changePasswordIntro}</p>
       {error ? (
         <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
@@ -47,7 +47,7 @@ export function ChangePasswordForm() {
         </p>
       ) : null}
       {!error && state.notice ? (
-        <p role="status" className="rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+        <p role="status" className="rounded-lg border border-primary-200 bg-primary-50 px-3 py-2 text-sm text-accent">
           {state.notice}
         </p>
       ) : null}

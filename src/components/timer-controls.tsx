@@ -90,7 +90,7 @@ export function TimerControls({
             title={timer.projectName}
             detail={timer.clientName}
           />
-          <p className="font-mono text-lg font-semibold tracking-tight text-slate-900 tabular-nums">
+          <p className="font-mono text-lg font-semibold tracking-tight text-ink tabular-nums">
             <span className="sr-only">Elapsed time </span>
             {formatElapsed(elapsed)}
           </p>
@@ -139,11 +139,11 @@ function TimerIdentity({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-teal-50 text-teal-800">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary-50 text-accent">
         <ClockIcon className="h-4 w-4" />
       </span>
       <span className="min-w-0">
-        <span className="block truncate text-sm font-semibold text-slate-900">
+        <span className="block truncate text-sm font-semibold text-ink">
           {title}
         </span>
         {detail ? (

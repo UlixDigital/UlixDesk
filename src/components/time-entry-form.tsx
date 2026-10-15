@@ -123,16 +123,16 @@ export function TimeEntryForm({
           <li>
             <Link
               href={cancelHref}
-              className="font-medium hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+              className="font-medium hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Timesheets
             </Link>
           </li>
           <li aria-hidden="true">/</li>
-          <li className="text-slate-900">{title}</li>
+          <li className="text-ink">{title}</li>
         </ol>
       </nav>
-      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-slate-900">
+      <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink">
         {title}
       </h1>
       <p className="mt-2 text-sm text-slate-600">{description}</p>
@@ -261,7 +261,7 @@ export function TimeEntryForm({
         <div className="rounded-lg bg-slate-50 px-4 py-3">
           <p className="text-xs font-medium text-slate-500">Duration</p>
           <div className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <p className="text-lg font-semibold text-slate-900" aria-live="polite">
+            <p className="text-lg font-semibold text-ink" aria-live="polite">
               {durationLabel}
             </p>
             {overnight.warning ? (
@@ -288,7 +288,7 @@ export function TimeEntryForm({
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-700 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-teal-700"
+                className="pointer-events-none absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-primary-700 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
               />
               <span
                 aria-hidden="true"

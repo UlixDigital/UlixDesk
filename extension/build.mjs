@@ -1,7 +1,7 @@
 import { execSync } from "node:child_process";
 import { cpSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { deflateRawSync, deflateSync } from "node:zlib";
+import { deflateRawSync } from "node:zlib";
 import * as esbuild from "esbuild";
 import { writeDosDateTime } from "./dos-date.mjs";
 
@@ -40,7 +40,14 @@ await esbuild.build({
   legalComments: "none",
 });
 
-for (const file of ["popup.html", "options.html", "extension.css"]) {
+await esbuild.build({
+  entryPoints: ["extension/src/extension.css"],
+  bundle: true,
+  outfile: path.join(dist, "extension.css"),
+  legalComments: "none",
+});
+
+for (const file of ["popup.html", "options.html", "ulix-logo.svg"]) {
   cpSync(path.join(root, "extension", "src", file), path.join(dist, file));
 }
 cpSync(path.join(root, "extension", "manifest.json"), path.join(dist, "manifest.json"));
@@ -48,102 +55,15 @@ cpSync(path.join(root, "extension", "manifest.json"), path.join(dist, "manifest.
 const iconDir = path.join(dist, "icons");
 mkdirSync(iconDir, { recursive: true });
 for (const size of [16, 32, 48, 128]) {
-  writeFileSync(path.join(iconDir, `icon${size}.png`), png(size, size, drawIcon(size)));
+  cpSync(
+    path.join(root, "extension", "icons", `icon${size}.png`),
+    path.join(iconDir, `icon${size}.png`),
+  );
 }
 
 writeFileSync(zipPath, zipDirectory(dist));
 console.log(`Unpacked extension: ${dist}`);
 console.log(`Extension zip: ${zipPath}`);
-
-function drawIcon(size) {
-  const pixels = Buffer.alloc(size * size * 4, 0);
-  const teal = [15, 118, 110, 255];
-  const white = [255, 255, 255, 255];
-  const radius = size * 0.22;
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      if (inRoundRect(x + 0.5, y + 0.5, size, radius)) setPixel(pixels, size, x, y, teal);
-    }
-  }
-  const center = (size - 1) / 2;
-  const outer = size * 0.28;
-  const inner = outer - Math.max(1, size * 0.06);
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      const distance = Math.hypot(x - center, y - center);
-      if (distance <= outer && distance >= inner) setPixel(pixels, size, x, y, white);
-    }
-  }
-  stroke(pixels, size, center, center, center, center - outer * 0.72, white);
-  stroke(pixels, size, center, center, center + outer * 0.55, center + outer * 0.15, white);
-  return pixels;
-}
-
-function inRoundRect(x, y, size, radius) {
-  const left = radius;
-  const right = size - radius;
-  const top = radius;
-  const bottom = size - radius;
-  if (x >= left && x <= right) return y >= 0 && y <= size;
-  if (y >= top && y <= bottom) return x >= 0 && x <= size;
-  const cx = x < left ? left : right;
-  const cy = y < top ? top : bottom;
-  return (x - cx) ** 2 + (y - cy) ** 2 <= radius ** 2;
-}
-
-function setPixel(pixels, size, x, y, color) {
-  if (x < 0 || y < 0 || x >= size || y >= size) return;
-  const offset = (y * size + x) * 4;
-  pixels[offset] = color[0];
-  pixels[offset + 1] = color[1];
-  pixels[offset + 2] = color[2];
-  pixels[offset + 3] = color[3];
-}
-
-function stroke(pixels, size, x0, y0, x1, y1, color) {
-  const steps = Math.max(size, Math.ceil(Math.hypot(x1 - x0, y1 - y0) * 2));
-  const thickness = Math.max(1, size / 16);
-  for (let step = 0; step <= steps; step += 1) {
-    const t = step / steps;
-    const x = x0 + (x1 - x0) * t;
-    const y = y0 + (y1 - y0) * t;
-    for (let oy = -thickness; oy <= thickness; oy += 1) {
-      for (let ox = -thickness; ox <= thickness; ox += 1) {
-        if (ox * ox + oy * oy <= thickness * thickness) {
-          setPixel(pixels, size, Math.round(x + ox), Math.round(y + oy), color);
-        }
-      }
-    }
-  }
-}
-
-function png(width, height, rgba) {
-  const raw = Buffer.alloc((width * 4 + 1) * height);
-  for (let y = 0; y < height; y += 1) {
-    rgba.copy(raw, y * (width * 4 + 1) + 1, y * width * 4, (y + 1) * width * 4);
-  }
-  const ihdr = Buffer.alloc(13);
-  ihdr.writeUInt32BE(width, 0);
-  ihdr.writeUInt32BE(height, 4);
-  ihdr[8] = 8;
-  ihdr[9] = 6;
-  const signature = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
-  return Buffer.concat([
-    signature,
-    chunk("IHDR", ihdr),
-    chunk("IDAT", deflateSync(raw)),
-    chunk("IEND", Buffer.alloc(0)),
-  ]);
-}
-
-function chunk(type, data) {
-  const length = Buffer.alloc(4);
-  length.writeUInt32BE(data.length, 0);
-  const typeBuffer = Buffer.from(type);
-  const crc = Buffer.alloc(4);
-  crc.writeUInt32BE(crc32(Buffer.concat([typeBuffer, data])), 0);
-  return Buffer.concat([length, typeBuffer, data, crc]);
-}
 
 function zipDirectory(directory, builtAt = new Date()) {
   const files = [];

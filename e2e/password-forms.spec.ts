@@ -58,13 +58,17 @@ test("sign-in, set-password, and change-password submit without JavaScript", asy
   await page.locator("#new-password").fill("changed-password-10");
   await page.locator("#confirm-password").fill("changed-password-10");
   await page.getByRole("button", { name: "Change password" }).click();
-  await expect(page.getByText("Password changed.")).toBeVisible();
+  await expect(
+    page.getByText("Password changed. Extension sign-ins and access tokens were revoked."),
+  ).toBeVisible();
 
   await page.locator("#current-password").fill("changed-password-10");
   await page.locator("#new-password").fill(e2ePassword);
   await page.locator("#confirm-password").fill(e2ePassword);
   await page.getByRole("button", { name: "Change password" }).click();
-  await expect(page.getByText("Password changed.")).toBeVisible();
+  await expect(
+    page.getByText("Password changed. Extension sign-ins and access tokens were revoked."),
+  ).toBeVisible();
 
   await context.close();
 });

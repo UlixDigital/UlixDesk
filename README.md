@@ -245,7 +245,7 @@ The access token lasts 15 minutes and is sent as `Authorization: Bearer` on the 
 
 `POST /api/extension/session/revoke` with `{ "refreshToken" }` signs that browser out. `GET /api/extension/session` with the access token returns `{ "user": { "name", "email" } }`.
 
-Changing the password revokes every extension sign-in and signs out the person's other web browsers. The browser that changed the password stays signed in. Deactivating the account does the same, and also revokes access tokens. Setting a password from a set-password link revokes extension sign-ins too.
+Changing the password revokes every extension sign-in and every manual access token, and signs out the person's other web browsers. The browser that changed the password stays signed in. Deactivating the account does the same. Setting a password from a set-password link revokes extension sign-ins and access tokens too.
 
 ## What shipped in Slice 4
 
@@ -267,8 +267,16 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 
 - The extension popup signs in with an email and password. The server defaults to production, with Use staging and a custom server for a local or staging origin. Chrome's optional host permission is requested from the Sign in click.
 - Each sign-in is a hashed access token (15 minutes) plus a rotating refresh token (30 days). Sign out, a password change, and deactivation revoke it. Extension access lists the device, when it was created, and when it was last used, and can revoke one.
-- Access tokens stay on that page as an advanced fallback.
+- Access tokens stay on that page as an advanced fallback. Changing the password revokes them, the same as extension sign-ins.
 - Stopping a timer before one second returns `TOO_SHORT`. Expired and idle web sessions are removed with `deleteMany`. A wrong current password is rate-limited, and a password change signs out the other web sessions.
+
+## What shipped in Slice 7
+
+- Ulix logo in the sidebar, on sign-in and set-password, and in the extension popup. The favicon and the extension icons use the mark.
+- Primary buttons use a darkened blue so white text stays at least 4.5:1. Deep indigo is the hover, active, and focus colour.
+- After Chrome grants host access, a failed token refresh shows that error and Try again, instead of staying on Permission needed.
+- A password change revokes manual access tokens as well as extension sign-ins.
+- The lockfile records the Node.js engine, so `npm install` does not rewrite it.
 
 ## Deferred
 
