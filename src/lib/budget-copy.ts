@@ -46,7 +46,7 @@ export const budgetCopy = {
   memberEmpty: "Hours budgets for projects you track time on show here.",
   reportTitle: "Budgets",
   reportBody:
-    "Budget, used, remaining, and percent for projects and clients. Archived work is left out unless you include it.",
+    "Budget, used, remaining, and percent. Archived work is left out unless you include it.",
   reportMemberBody: "Hours budgets for projects you track time on. Amounts are not shown.",
   reportIntro:
     "Each budget uses its own period in the workspace timezone. Total budgets count from the start date, or from the first entry when there is no start date. Weekly budgets are Monday through Sunday. Monthly budgets are the calendar month.",

@@ -38,9 +38,13 @@ export type PdfReportInput = {
 
 type Doc = InstanceType<typeof PDFDocument>;
 
-/** Pull the painted strings out of an uncompressed PDF. */
+/**
+ * Pull the painted strings out of an uncompressed PDF.
+ * The trailer file id is random hex, so it is left out. A `$` in that id
+ * is not a money amount.
+ */
 export function pdfPlainText(buffer: Buffer) {
-  const raw = buffer.toString("latin1");
+  const raw = (buffer.toString("latin1").split(/\ntrailer\b/)[0] ?? "");
   const parts: string[] = [];
   for (const match of raw.matchAll(/<([0-9A-Fa-f \n\r]+)>/g)) {
     const hex = match[1].replaceAll(/\s/g, "");

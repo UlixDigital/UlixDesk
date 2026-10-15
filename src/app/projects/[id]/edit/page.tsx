@@ -154,7 +154,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
               </div>
             ) : null}
             <BudgetForm
-              key={progress?.record.id ?? "new-project-budget"}
+              key={project.id}
               scope="project"
               projectId={project.id}
               currency={billingClient?.currency ?? workspaceCurrency}

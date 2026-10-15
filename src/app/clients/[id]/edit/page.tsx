@@ -103,7 +103,7 @@ export default async function EditClientPage({ params }: EditPageProps) {
               </div>
             ) : null}
             <BudgetForm
-              key={progress?.record.id ?? "new-client-budget"}
+              key={client.id}
               scope="client"
               clientId={client.id}
               currency={client.currency}

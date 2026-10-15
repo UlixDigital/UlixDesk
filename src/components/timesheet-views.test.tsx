@@ -87,6 +87,7 @@ describe("weekly timesheet amounts", () => {
     expect(scroller?.className).toContain("overflow-x-auto");
     expect(scroller?.className).toContain("w-0");
     expect(scroller?.parentElement?.className).toContain("overflow-hidden");
+    expect(scroller?.parentElement?.className).toContain("[contain:inline-size]");
     expect(table.querySelector("th")?.className).toContain("md:sticky");
     const cols = [...table.querySelectorAll("col")];
     expect(cols).toHaveLength(9);

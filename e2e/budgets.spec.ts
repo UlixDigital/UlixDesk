@@ -5,6 +5,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page } from "@playwright/test";
 import { saveBudget } from "../src/lib/budgets";
+import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry } from "../src/lib/time-entries";
 import { todayInTimeZone, zonedDayStart } from "../src/lib/time-zone";
 import { signIn } from "./auth";
@@ -92,7 +93,7 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await waitForHydration(page);
     await page.locator("#timer-project").selectOption(website.id);
     await page.getByRole("button", { name: "Start", exact: true }).click();
-    await expect(page.getByRole("alert")).toContainText("reached its budget");
+    await expect(page.getByRole("alert").filter({ hasText: "reached its budget" })).toBeVisible();
     await shot(page, "budget-timer-blocked");
 
     expect(
@@ -129,10 +130,10 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
     await signIn(memberContext, prisma, member.email);
     const memberPage = await memberContext.newPage();
     await memberPage.goto("/reports/budgets");
-    await expect(memberPage.getByText("Budget Website")).toBeVisible();
-    await expect(memberPage.getByText("Acme Budget")).toHaveCount(0);
-    const memberHtml = await memberPage.content();
-    expect(memberHtml).not.toMatch(/USD|\$|€|£/);
+    await expect(memberPage.getByRole("rowheader", { name: "Budget Website" })).toBeVisible();
+    await expect(memberPage.getByRole("rowheader", { name: "Acme Budget" })).toHaveCount(0);
+    const memberText = await memberPage.locator("main").innerText();
+    expect(memberText).not.toMatch(/USD|\$|€|£/);
     const memberCsv = await memberPage.request.get("/reports/budgets/export");
     expect(memberCsv.ok()).toBeTruthy();
     const csv = await memberCsv.text();
@@ -150,6 +151,12 @@ test("an owner sets a budget, sees the warning, and cannot start past a hard sto
   } finally {
     await ownerContext.close();
     await memberContext.close();
+    await deleteTimeChangesForTests(prisma);
+    await prisma.timeEntry.deleteMany({ where: { project: { clientId: acme.id } } });
+    await prisma.project.deleteMany({ where: { clientId: acme.id } });
+    await prisma.client.delete({ where: { id: acme.id } });
+    await prisma.session.deleteMany({ where: { userId: member.id } });
+    await prisma.user.delete({ where: { id: member.id } });
     await prisma.$disconnect();
   }
 });
@@ -208,7 +215,13 @@ async function rasterContinued(pdf: Buffer, name: string) {
     const text = execFileSync("pdftotext", ["-f", String(pageNumber), "-l", String(pageNumber), "-layout", pdfPath, "-"], {
       encoding: "utf8",
     });
-    if (/\w{3},\s+\w{3}\s+\d{1,2},\s+\d{4}[\s\S]{0,80}\(continued\)/.test(text)) {
+    // The date cell is "Thu, Oct 15, 2026 (continued)" and wraps, so the
+    // marker sits on the next line. The client heading's "(continued)" does not.
+    if (
+      /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}[^\n]{0,180}\n\s*\(continued\)/.test(
+        text,
+      )
+    ) {
       chosen = pageNumber;
       break;
     }
