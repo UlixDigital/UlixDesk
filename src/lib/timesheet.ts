@@ -81,14 +81,20 @@ export type WeeklyRow = {
   totalMoney: MoneyTotal[];
 };
 
-export type TimesheetNotice = "overlap" | "running" | "budget" | "budget-overlap";
+export type TimesheetNotice = "overlap" | "running" | "budget" | "budget-overlap" | "invoiced";
 
 export function parseTimesheetView(value: string | undefined): TimesheetView {
   return value === "week" ? "week" : "day";
 }
 
 export function parseNotice(value: string | undefined): TimesheetNotice | null {
-  if (value === "overlap" || value === "running" || value === "budget" || value === "budget-overlap") {
+  if (
+    value === "overlap" ||
+    value === "running" ||
+    value === "budget" ||
+    value === "budget-overlap" ||
+    value === "invoiced"
+  ) {
     return value;
   }
   return null;

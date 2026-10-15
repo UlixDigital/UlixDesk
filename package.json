@@ -18,6 +18,7 @@
     "db:up": "docker compose up -d postgres",
     "db:migrate": "prisma migrate deploy",
     "user:bootstrap": "node scripts/bootstrap-owner.mjs",
+    "invoice:seed-bank": "node scripts/seed-invoice-bank.mjs",
     "import:sqlite": "node scripts/import-sqlite.mjs"
   },
   "dependencies": {

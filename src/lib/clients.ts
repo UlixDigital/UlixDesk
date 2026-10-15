@@ -8,6 +8,7 @@ export type ClientRecord = {
   id: string;
   name: string;
   address: string | null;
+  billingAddress: string | null;
   phone: string | null;
   emails: string[];
   currency: string;
@@ -19,6 +20,7 @@ export type ClientRecord = {
 type ClientWrite = {
   name: string;
   address: string | null;
+  billingAddress?: string | null;
   phone: string | null;
   emails: string[];
   currency?: string;
@@ -35,6 +37,7 @@ function toClientRecord(row: ClientWithEmails): ClientRecord {
     id: row.id,
     name: row.name,
     address: row.address,
+    billingAddress: row.billingAddress,
     phone: row.phone,
     emails: [...row.emails]
       .sort((a, b) => a.position - b.position)
@@ -104,6 +107,7 @@ export async function createClient(data: ClientWrite) {
     data: {
       name: data.name,
       address: data.address,
+      billingAddress: data.billingAddress ?? null,
       phone: data.phone,
       currency,
       emails: {
@@ -128,6 +132,8 @@ export async function updateClient(id: string, data: ClientWrite) {
       data: {
         name: data.name,
         address: data.address,
+        billingAddress:
+          data.billingAddress !== undefined ? data.billingAddress : existing.billingAddress,
         phone: data.phone,
         currency,
         emails: {

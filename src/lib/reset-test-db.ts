@@ -18,6 +18,11 @@ export async function deleteTimeChangesForTests(db: {
 export async function resetTestDatabase() {
   clearRequestTestState();
   await deleteTimeChangesForTests(prisma);
+  await prisma.invoicePayment.deleteMany();
+  await prisma.invoiceTime.deleteMany();
+  await prisma.invoiceLine.deleteMany();
+  await prisma.invoice.deleteMany();
+  await prisma.invoiceNumber.deleteMany();
   await prisma.savedReport.deleteMany();
   await prisma.budget.deleteMany();
   await prisma.billRate.deleteMany();

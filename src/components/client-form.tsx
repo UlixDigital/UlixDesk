@@ -44,16 +44,18 @@ export function ClientForm({
   const [name, setName] = useSyncedState(state.values.name, serverKey);
   const [phone, setPhone] = useSyncedState(state.values.phone, serverKey);
   const [address, setAddress] = useSyncedState(state.values.address, serverKey);
+  const [billingAddress, setBillingAddress] = useSyncedState(state.values.billingAddress, serverKey);
   const [currency, setCurrency] = useSyncedState(state.values.currency, serverKey);
 
   useEffect(() => {
-    const order = ["name", "currency", "emails", "phone", "address"] as const;
+    const order = ["name", "currency", "emails", "phone", "address", "billingAddress"] as const;
     const fieldIds = {
       name: "client-name",
       currency: "client-currency",
       emails: "client-email",
       phone: "client-phone",
       address: "client-address",
+      billingAddress: "client-billing-address",
     };
     for (const field of order) {
       if (state.errors[field]) {
@@ -199,6 +201,32 @@ export function ClientForm({
               ui.input,
               "min-h-28 resize-y",
               state.errors.address && ui.inputError,
+            )}
+          />
+        </Field>
+        <Field
+          id="client-billing-address"
+          label="Billing address"
+          error={state.errors.billingAddress}
+          hint="Printed in the To block on invoices. If this is blank, the address above is used."
+        >
+          <textarea
+            id="client-billing-address"
+            name="billingAddress"
+            rows={4}
+            autoComplete="billing street-address"
+            maxLength={1000}
+            value={billingAddress}
+            onChange={(event) => setBillingAddress(event.target.value)}
+            aria-invalid={state.errors.billingAddress ? true : undefined}
+            aria-describedby={describedBy(
+              "client-billing-address-hint",
+              state.errors.billingAddress ? "client-billing-address-error" : undefined,
+            )}
+            className={cn(
+              ui.input,
+              "min-h-28 resize-y",
+              state.errors.billingAddress && ui.inputError,
             )}
           />
         </Field>

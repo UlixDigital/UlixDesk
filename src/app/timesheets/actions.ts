@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { gateMutation } from "@/lib/auth";
 import { BudgetReachedError } from "@/lib/budgets";
+import { isInvoicedTimeError } from "@/lib/invoice-lock";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
 import {
@@ -95,6 +96,9 @@ export async function saveTimeEntryAction(
     if (error instanceof BudgetReachedError) {
       return { errors: { form: timeCopy.budgetReached }, values };
     }
+    if (isInvoicedTimeError(error)) {
+      return { errors: { form: timeCopy.invoicedTime }, values };
+    }
     console.error("Failed to save time entry", error);
     return { errors: { form: timeCopy.saveFailed }, values };
   }
@@ -131,6 +135,9 @@ export async function deleteTimeEntryAction(formData: FormData) {
   if (!deleted.ok) {
     if (deleted.reason === "running") {
       redirect(timesheetsHref({ date: date || undefined, notice: "running" }));
+    }
+    if (deleted.reason === "invoiced") {
+      redirect(timesheetsHref({ date: date || undefined, notice: "invoiced" }));
     }
     return;
   }

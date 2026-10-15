@@ -29,6 +29,8 @@ model User {
   billRatesCreated  BillRate[] @relation("BillRateAuthor")
   savedReports      SavedReport[]
   budgetsCreated    Budget[]
+  invoicesCreated   Invoice[]        @relation("InvoiceAuthor")
+  invoicePayments   InvoicePayment[]
 
   @@index([role])
   @@index([deactivatedAt])
@@ -74,12 +76,15 @@ model Client {
   phone      String?
   emails     ClientEmail[]
   /// ISO 4217 code. New clients copy the workspace default. Existing rows start as USD.
-  currency   String        @default("USD")
-  archivedAt DateTime?
-  createdAt  DateTime      @default(now())
-  updatedAt  DateTime      @updatedAt
-  projects   Project[]
-  billRates  BillRate[]
+  currency       String        @default("USD")
+  /// Printed in the To block. When blank, invoices use `address`.
+  billingAddress String?
+  archivedAt     DateTime?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  projects       Project[]
+  billRates      BillRate[]
+  invoices       Invoice[]
   budget     Budget?
 
   @@index([archivedAt])
@@ -120,11 +125,22 @@ model Project {
 
 /// One workspace row. New clients inherit `defaultCurrency`.
 /// `timeZone` is an IANA name. Timesheet days and rate effective dates use 00:00 in that zone.
+/// Invoice bank details default to placeholders. Real account numbers are not stored in git.
 model WorkspaceSettings {
-  id              String   @id @default("workspace")
-  defaultCurrency String   @default("USD")
-  timeZone        String   @default("Asia/Colombo")
-  updatedAt       DateTime @updatedAt
+  id                  String   @id @default("workspace")
+  defaultCurrency     String   @default("USD")
+  timeZone            String   @default("Asia/Colombo")
+  companyName         String   @default("Ulix Digital")
+  companyAddress      String   @default("30 North Gould Street, Sheridan, WY 82801")
+  invoicePrefix       String   @default("LE")
+  nextInvoiceNumber   Int      @default(1176)
+  invoiceNetTermsDays Int      @default(7)
+  invoiceNotes        String   @default("* All payments are non refundable\n* Use these details to send both Domestic wires and ACH transfers to Ulix Digital")
+  invoiceBankDetails  String   @default("Beneficiary Name: Ulix Digital\nAddress: 30 North Gould Street, Sheridan, WY 82801\n\nAccount Number: [not set]\nABA Routing Number: [not set]\nType of Account: Checking\nBank Name: [not set]")
+  invoiceTaxEnabled   Boolean  @default(false)
+  invoiceTaxLabel     String   @default("Tax")
+  invoiceTaxRateBps   Int      @default(0)
+  updatedAt           DateTime @updatedAt
 }
 
 /// Hourly bill rate history. Money is integer minor units, never a float.
@@ -168,6 +184,7 @@ model TimeEntry {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   runningTimer RunningTimer?
+  invoiceTime  InvoiceTime?
 
   @@index([projectId])
   @@index([userId, startedAt])
@@ -311,4 +328,106 @@ model ExtensionSession {
 
   @@index([userId])
   @@index([createdAt])
+}
+
+/// A number taken from the invoice counter. Rows stay after the invoice is deleted,
+/// so a number is never issued twice. A rolled-back allocation does not insert a row.
+model InvoiceNumber {
+  number      String   @id
+  allocatedAt DateTime @default(now())
+}
+
+/// A client invoice. `number` is allocated from WorkspaceSettings and never reused.
+/// `status` is draft, open, paid, partially_paid, or void.
+/// Money is integer minor units in `currency` (the client's currency at creation).
+model Invoice {
+  id                  String    @id @default(cuid())
+  number              String    @unique
+  clientId            String
+  client              Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  status              String
+  currency            String
+  issueDate           DateTime  @db.Date
+  dueDate             DateTime  @db.Date
+  poNumber            String?
+  periodStart         DateTime  @db.Date
+  periodEnd           DateTime  @db.Date
+  /// period, project, member, or day.
+  grouping            String
+  notes               String
+  bankDetails         String
+  /// none, amount, or percent. Percent is basis points (10% = 1000).
+  discountKind        String    @default("none")
+  discountBps         Int       @default(0)
+  discountAmountMinor Int       @default(0)
+  taxEnabled          Boolean   @default(false)
+  taxLabel            String    @default("Tax")
+  taxRateBps          Int       @default(0)
+  subtotalMinor       Int
+  discountMinor       Int
+  taxMinor            Int
+  totalMinor          Int
+  paidMinor           Int       @default(0)
+  createdById         String
+  createdBy           User      @relation("InvoiceAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  issuedAt            DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lines               InvoiceLine[]
+  payments            InvoicePayment[]
+  timeLinks           InvoiceTime[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([issueDate])
+}
+
+/// One invoice row. `quantitySeconds` is the billed duration, shown as H:MM:SS.
+/// `amountMinor` is billAmountMinor(unitPriceMinor, quantitySeconds * 1000).
+model InvoiceLine {
+  id              String   @id @default(cuid())
+  invoiceId       String
+  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  position        Int
+  /// time or custom.
+  kind            String
+  title           String
+  detail          String   @default("")
+  quantitySeconds Int
+  unitPriceMinor  Int
+  amountMinor     Int
+  timeLinks       InvoiceTime[]
+
+  @@index([invoiceId])
+}
+
+/// Links a time entry to one invoice. The primary key blocks billing the same time twice.
+/// Drafts do not lock the entry. Issued statuses do, via time_entry_invoice_lock.
+model InvoiceTime {
+  timeEntryId   String
+  timeEntry     TimeEntry   @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
+  invoiceId     String
+  invoice       Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoiceLineId String
+  line          InvoiceLine @relation(fields: [invoiceLineId], references: [id], onDelete: Cascade)
+
+  @@id([timeEntryId])
+  @@index([invoiceId])
+  @@index([invoiceLineId])
+}
+
+/// A payment recorded against an invoice. Recording payments is a later slice.
+model InvoicePayment {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  amountMinor  Int
+  paidOn       DateTime @db.Date
+  method       String?
+  note         String?
+  recordedById String
+  recordedBy   User     @relation(fields: [recordedById], references: [id], onDelete: Restrict)
+  createdAt    DateTime @default(now())
+
+  @@index([invoiceId])
 }

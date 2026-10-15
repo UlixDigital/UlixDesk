@@ -88,6 +88,19 @@ export function ClockIcon(props: IconProps) {
   );
 }
 
+export function DocumentIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M7.5 3.75h6.2L18.25 8.3V20.25H7.5A1.75 1.75 0 0 1 5.75 18.5V5.5A1.75 1.75 0 0 1 7.5 3.75Z"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 3.9V8.4h4.5M8.75 12.25h6.5M8.75 15.75h6.5" />
+    </svg>
+  );
+}
+
 export function ChartIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
