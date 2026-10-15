@@ -56,14 +56,14 @@ export function AccessTokenSettings({
 
   return (
     <div className="mx-auto max-w-3xl">
-      <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+      <h1 className="text-2xl font-semibold tracking-tight text-ink">
         {tokenCopy.pageTitle}
       </h1>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">{tokenCopy.pageIntro}</p>
 
       <ExtensionSignIns sessions={sessions} timeZone={timeZone} />
 
-      <h2 className="mt-10 text-lg font-semibold text-slate-900">
+      <h2 className="mt-10 text-lg font-semibold text-ink">
         {extensionSessionCopy.advancedTitle}
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">{extensionSessionCopy.advancedIntro}</p>
@@ -78,7 +78,7 @@ export function AccessTokenSettings({
         noValidate
         onSubmit={(event) => submitWithoutFormReset(event, formAction)}
       >
-        <h2 className="text-lg font-semibold text-slate-900">{tokenCopy.newToken}</h2>
+        <h2 className="text-lg font-semibold text-ink">{tokenCopy.newToken}</h2>
         {hasErrors && state.errors.form ? (
           <div
             role="alert"
@@ -132,16 +132,16 @@ export function AccessTokenSettings({
       <section className="mt-8" aria-labelledby="access-token-list-heading">
         <h2
           id="access-token-list-heading"
-          className="text-lg font-semibold text-slate-900"
+          className="text-lg font-semibold text-ink"
         >
           {tokenCopy.listTitle}
         </h2>
         {tokens.length === 0 ? (
           <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-teal-50 text-teal-800">
+            <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-primary-50 text-accent">
               <KeyIcon className="h-6 w-6" />
             </span>
-            <h3 className="mt-4 text-lg font-semibold text-slate-900">
+            <h3 className="mt-4 text-lg font-semibold text-ink">
               {tokenCopy.emptyTitle}
             </h3>
             <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">
@@ -183,7 +183,7 @@ export function AccessTokenSettings({
                     <th
                       scope="row"
                       title={token.name}
-                      className="max-w-0 truncate px-4 py-3 font-medium text-slate-900"
+                      className="max-w-0 truncate px-4 py-3 font-medium text-ink"
                     >
                       {token.name}
                     </th>
@@ -234,10 +234,10 @@ function TokenReveal({ token, name }: { token: string; name: string }) {
   return (
     <div
       role="status"
-      className="mt-6 rounded-xl border border-teal-200 bg-teal-50 p-4 sm:p-6"
+      className="mt-6 rounded-xl border border-primary-200 bg-primary-50 p-4 sm:p-6"
     >
-      <h2 className="text-lg font-semibold text-teal-950">{tokenCopy.revealTitle}</h2>
-      <p className="mt-2 text-sm text-teal-900">
+      <h2 className="text-lg font-semibold text-accent">{tokenCopy.revealTitle}</h2>
+      <p className="mt-2 text-sm text-accent">
         {tokenCopy.revealBody}
         {name ? <span className="sr-only"> Token name: {name}.</span> : null}
       </p>
@@ -258,7 +258,7 @@ function TokenReveal({ token, name }: { token: string; name: string }) {
         </button>
       </div>
       {copyFailed ? (
-        <p className="mt-2 text-sm text-teal-900">{tokenCopy.copyFailed}</p>
+        <p className="mt-2 text-sm text-accent">{tokenCopy.copyFailed}</p>
       ) : null}
     </div>
   );
@@ -271,7 +271,7 @@ function Status({ revoked }: { revoked: boolean }) {
         "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold",
         revoked
           ? "bg-slate-100 text-slate-700 ring-1 ring-slate-200"
-          : "bg-teal-50 text-teal-800 ring-1 ring-teal-100",
+          : "bg-primary-50 text-accent ring-1 ring-primary-100",
       )}
     >
       {revoked ? tokenCopy.revoked : tokenCopy.active}
@@ -307,7 +307,7 @@ function RevokeButton({ id, name }: { id: string; name: string }) {
           className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 shadow-xl"
           onClick={(event) => event.stopPropagation()}
         >
-          <h2 id={titleId} className="text-lg font-semibold break-words text-slate-900">
+          <h2 id={titleId} className="text-lg font-semibold break-words text-ink">
             {tokenCopy.revokeTitle}
           </h2>
           <p id={descriptionId} className="mt-2 text-sm text-slate-600">

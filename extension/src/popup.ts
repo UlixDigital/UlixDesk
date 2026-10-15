@@ -11,7 +11,7 @@ import {
 } from "./api";
 import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
-import { derivePopup, projectOptionLabel, type PopupModel } from "./popup-state";
+import { derivePopup, failureAfterRefresh, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
 import {
@@ -110,12 +110,23 @@ async function load() {
     return;
   }
 
-  const ready = await requestEnsureAccess();
+  const parsed = normalizeServerUrl(serverUrl);
+  const [ready, allowed] = await Promise.all([
+    requestEnsureAccess(),
+    parsed.ok
+      ? chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] })
+      : Promise.resolve(false),
+  ]);
+  // Refresh the flag even when ensureAccess fails. A stale false hides the real error
+  // behind "Permission needed" after Chrome has already granted access.
+  permission = Boolean(parsed.ok && allowed);
+
   if (!ready.ok) {
     if (ready.signedOut) {
       signedIn = false;
       token = "";
       formError = ready.message || null;
+      failure = null;
       loading = false;
       render();
       requestBadgeRefresh();
@@ -123,7 +134,7 @@ async function load() {
     }
     signedIn = true;
     token = settings.token;
-    failure = { ok: false, reason: "unreachable" };
+    failure = failureAfterRefresh(ready.message);
     projects = null;
     timer = null;
     loading = false;
@@ -137,10 +148,6 @@ async function load() {
   serverUrl = ready.settings.serverUrl || serverUrl;
   accountName = ready.settings.userName;
   accountEmail = ready.settings.userEmail;
-  const parsed = normalizeServerUrl(serverUrl);
-  permission =
-    parsed.ok &&
-    (await chrome.permissions.contains({ origins: [hostPermissionPattern(parsed.origin)] }));
 
   if (!permission || !parsed.ok) {
     projects = null;
@@ -167,7 +174,7 @@ async function load() {
         token = "";
         formError = again.message || null;
       } else {
-        failure = { ok: false, reason: "unreachable" };
+        failure = failureAfterRefresh(again.message);
       }
       projects = null;
       timer = null;
@@ -259,11 +266,13 @@ function view() {
 
 function header() {
   const row = el("div", "brand");
-  const mark = el("span", "mark", "U");
-  const text = el("div", "brand-text");
-  text.append(el("span", "brand-name", "UlixDesk"));
-  text.append(el("span", "brand-meta", "Timer"));
-  row.append(mark, text);
+  const logo = document.createElement("img");
+  logo.className = "logo";
+  logo.src = "ulix-logo.svg";
+  logo.alt = "Ulix";
+  logo.width = 103;
+  logo.height = 44;
+  row.append(logo);
   return row;
 }
 

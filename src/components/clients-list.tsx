@@ -24,7 +24,7 @@ export function ClientsList({
             <div className="min-w-0">
               <Link
                 href={`/clients/${client.id}/edit`}
-                className="text-base font-semibold break-words text-slate-900 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
                 {client.name}
                 <span className="sr-only">, edit client</span>

@@ -140,7 +140,7 @@ export default async function TimesheetsPage({
     <div>
       <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+          <h1 className="text-2xl font-semibold tracking-tight text-ink">
             Timesheets
           </h1>
           <p className="mt-1 text-sm text-slate-600">
@@ -283,10 +283,10 @@ function ViewTab({
       href={href}
       aria-current={current ? "page" : undefined}
       className={cn(
-        "inline-flex items-center border-b-2 px-1 pb-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-teal-700",
+        "inline-flex items-center border-b-2 px-1 pb-3 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-accent",
         current
-          ? "border-teal-700 text-teal-800"
-          : "border-transparent text-slate-600 hover:border-slate-300 hover:text-slate-900",
+          ? "border-accent text-accent"
+          : "border-transparent text-slate-600 hover:border-slate-300 hover:text-ink",
       )}
     >
       {label}

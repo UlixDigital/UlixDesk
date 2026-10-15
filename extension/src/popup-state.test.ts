@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { ApiProject, ApiTimer } from "./api";
 import { popupCopy } from "./copy";
-import { derivePopup, projectOptionLabel } from "./popup-state";
+import { derivePopup, failureAfterRefresh, projectOptionLabel } from "./popup-state";
 
 const project: ApiProject = {
   id: "website",
@@ -42,6 +42,20 @@ describe("popup state", () => {
     expect(derivePopup({ ...base, serverUrl: "", token: "" }).kind).toBe("not-connected");
     expect(derivePopup({ ...base, serverUrl: "notaurl" }).kind).toBe("invalid-url");
     expect(derivePopup({ ...base, permission: false }).kind).toBe("permission");
+    const refreshFailure = { ok: false as const, reason: "unreachable" as const };
+    expect(
+      derivePopup({ ...base, permission: false, projects: null, timer: null, failure: refreshFailure }).kind,
+    ).toBe("permission");
+    expect(
+      derivePopup({ ...base, permission: true, projects: null, timer: null, failure: refreshFailure }).kind,
+    ).toBe("unreachable");
+    expect(failureAfterRefresh(popupCopy.unexpectedBody)).toEqual({
+      ok: false,
+      reason: "invalid-response",
+      message: popupCopy.unexpectedBody,
+    });
+    expect(failureAfterRefresh(popupCopy.invalidUrlBody).reason).toBe("invalid-url");
+    expect(failureAfterRefresh(popupCopy.unreachableBody).reason).toBe("unreachable");
     expect(derivePopup({ ...base, failure: { ok: false, reason: "unreachable" } }).kind).toBe(
       "unreachable",
     );

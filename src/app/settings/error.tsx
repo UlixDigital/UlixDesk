@@ -10,7 +10,7 @@ export default function SettingsError({
 }) {
   return (
     <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-      <h1 className="text-lg font-semibold text-slate-900">
+      <h1 className="text-lg font-semibold text-ink">
         We could not load extension access
       </h1>
       <p className="mt-2 text-sm text-slate-600">

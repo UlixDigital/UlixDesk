@@ -1,5 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
-import { findUsableAccessToken } from "@/lib/access-tokens";
+import { createAccessToken, findUsableAccessToken } from "@/lib/access-tokens";
 import { authCopy } from "@/lib/auth-copy";
 import { prisma } from "@/lib/db";
 import {
@@ -16,7 +16,7 @@ import { resetTestDatabase } from "@/lib/reset-test-db";
 import { createSession } from "@/lib/session";
 import { setTestSessionToken } from "@/lib/test-hooks";
 import { createTestUser, signInAs } from "@/lib/test-actor";
-import { changeOwnPassword, setUserActive } from "@/lib/users";
+import { changeOwnPassword, consumeSetupToken, resetTeamPassword, setUserActive } from "@/lib/users";
 
 let userId = "";
 
@@ -88,6 +88,7 @@ describe("extension sessions", () => {
       userId: signedIn.user.id,
       label: "Chrome on Linux",
     });
+    const manual = await createAccessToken("Work laptop", signedIn.user.id);
     const { currentSessionTokenHash } = await import("@/lib/session");
     const keep = await currentSessionTokenHash();
 
@@ -103,9 +104,30 @@ describe("extension sessions", () => {
     expect(sessions).toHaveLength(1);
     expect(sessions[0]?.tokenHash).toBe(keep);
     expect(await findUsableExtensionAccess(extension.accessToken)).toBeNull();
+    expect(await findUsableAccessToken(manual.token)).toBeNull();
     expect(
       (await prisma.extensionSession.findUniqueOrThrow({ where: { id: extension.record.id } })).revokedAt,
     ).not.toBeNull();
+    expect(
+      (await prisma.accessToken.findUniqueOrThrow({ where: { id: manual.record.id } })).revokedAt,
+    ).not.toBeNull();
+  });
+
+  it("revokes extension sign-ins and manual access tokens when a set-password link is used", async () => {
+    const owner = await createTestUser("owner", "setup-owner@ulix.test");
+    const member = await createTestUser("member", "setup-member@ulix.test");
+    const extension = await createExtensionSession({ userId: member.id, label: "Chrome on Linux" });
+    const manual = await createAccessToken("Work laptop", member.id);
+    const reset = await resetTeamPassword({
+      actor: { id: owner.id, role: "owner" },
+      userId: member.id,
+    });
+    expect(reset.ok).toBe(true);
+    if (!reset.ok) return;
+    const saved = await consumeSetupToken(reset.token, "new-password-10");
+    expect(saved).toEqual({ ok: true });
+    expect(await findUsableExtensionAccess(extension.accessToken)).toBeNull();
+    expect(await findUsableAccessToken(manual.token)).toBeNull();
   });
 
   it("rate-limits wrong current-password attempts", async () => {

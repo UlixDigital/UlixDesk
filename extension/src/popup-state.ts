@@ -31,6 +31,15 @@ export type PopupModel =
       alert: string | null;
     };
 
+/** Maps a failed token refresh onto the popup error that matches its message. */
+export function failureAfterRefresh(message: string): ClientFailure {
+  if (message === popupCopy.invalidUrlBody) return { ok: false, reason: "invalid-url" };
+  if (message === popupCopy.unexpectedBody) {
+    return { ok: false, reason: "invalid-response", message };
+  }
+  return { ok: false, reason: "unreachable" };
+}
+
 function failureModel(failure: ClientFailure): PopupModel {
   switch (failure.reason) {
     case "not-configured":

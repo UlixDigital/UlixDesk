@@ -55,10 +55,11 @@ export const authCopy = {
   lastOwner: "UlixDesk needs at least one active owner.",
   cannotManageOwner: "Only an owner can change another owner.",
   changePasswordTitle: "Change password",
-  changePasswordIntro: "Choose a new password for your own account.",
+  changePasswordIntro:
+    "Choose a new password for your own account. This signs out other browsers and revokes extension sign-ins and access tokens.",
   currentPassword: "Current password",
   newPassword: "New password",
-  passwordChanged: "Password changed.",
+  passwordChanged: "Password changed. Extension sign-ins and access tokens were revoked.",
   currentPasswordWrong: "That password is incorrect.",
   changePassword: "Change password",
   changingPassword: "Saving…",

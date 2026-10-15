@@ -25,6 +25,19 @@ describe("extension manifest and storage", () => {
     expect(JSON.stringify(manifest)).not.toContain("<all_urls>");
     expect(manifest.background.service_worker).toBe("background.js");
     expect(manifest.action.default_popup).toBe("popup.html");
+    expect(manifest.action.default_icon).toEqual({ "16": "icons/icon16.png", "32": "icons/icon32.png" });
+    expect(manifest.icons).toEqual({
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png",
+    });
+    for (const size of [16, 32, 48, 128]) {
+      const file = path.join(extensionRoot, "icons", `icon${size}.png`);
+      const bytes = readFileSync(file);
+      expect(bytes.readUInt32BE(16)).toBe(size);
+      expect(bytes.readUInt32BE(20)).toBe(size);
+    }
     expect(chromeExtensionId(manifest.key)).toBe("cjlaoflbipaehclleojofopapalhiooe");
   });
 

@@ -30,10 +30,10 @@ export function AppNav({ showTeam = false }: { showTeam?: boolean }) {
             href={item.href}
             aria-current={current ? "page" : undefined}
             className={cn(
-              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-400",
+              "flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent",
               current
-                ? "bg-white/10 text-white"
-                : "text-white/75 hover:bg-white/10 hover:text-white",
+                ? "bg-primary-50 text-accent"
+                : "text-slate-600 hover:bg-primary-50 hover:text-accent",
             )}
           >
             <Icon className="h-4 w-4" />

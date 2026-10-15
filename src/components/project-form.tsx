@@ -82,17 +82,17 @@ export function ProjectForm({
           <li>
             <Link
               href="/projects"
-              className="font-medium hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+              className="font-medium hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               Projects
             </Link>
           </li>
           <li aria-hidden="true">/</li>
-          <li className="text-slate-900">{title}</li>
+          <li className="text-ink">{title}</li>
         </ol>
       </nav>
       <div className="mt-4 flex flex-wrap items-center gap-3">
-        <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 className="text-2xl font-semibold tracking-tight text-ink">
           {title}
         </h1>
         {badge ? <StatusBadge status={badge} /> : null}
@@ -222,7 +222,7 @@ export function ProjectForm({
               />
               <span
                 aria-hidden="true"
-                className="pointer-events-none absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-teal-700 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-teal-700"
+                className="pointer-events-none absolute inset-0 rounded-full bg-slate-300 transition-colors peer-checked:bg-primary-700 peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent"
               />
               <span
                 aria-hidden="true"

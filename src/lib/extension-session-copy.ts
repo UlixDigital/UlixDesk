@@ -13,7 +13,7 @@ export const extensionSessionCopy = {
   revokeConfirm: "Revoke sign-in",
   advancedTitle: "Advanced: access tokens",
   advancedIntro:
-    "Create an access token only if you need to paste one into the extension options. UlixDesk stores only a hash. The token itself is shown once.",
+    "Create an access token only if you need to paste one into the extension options. UlixDesk stores only a hash. The token itself is shown once. Changing your password revokes these tokens.",
 } as const;
 
 export function revokeSessionBody(label: string) {

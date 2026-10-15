@@ -42,7 +42,7 @@ export function DeleteTimeEntryButton({
           className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 shadow-xl"
           onClick={(event) => event.stopPropagation()}
         >
-          <h2 id={titleId} className="text-lg font-semibold text-slate-900">
+          <h2 id={titleId} className="text-lg font-semibold text-ink">
             {timeCopy.deleteTitle}
           </h2>
           <p id={descriptionId} className="mt-2 text-sm text-slate-600">

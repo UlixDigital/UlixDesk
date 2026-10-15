@@ -21,10 +21,10 @@ export function RunningEntryRow({
   const elapsed = now - new Date(entry.startedAt).getTime();
 
   return (
-    <li className="grid gap-3 bg-teal-50/40 px-4 py-4 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:px-5">
+    <li className="grid gap-3 bg-primary-50/40 px-4 py-4 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:px-5">
       <div>
-        <p className="text-sm font-semibold text-slate-900">{entry.startLabel}</p>
-        <p className="mt-1 font-mono text-sm font-semibold text-slate-900 tabular-nums">
+        <p className="text-sm font-semibold text-ink">{entry.startLabel}</p>
+        <p className="mt-1 font-mono text-sm font-semibold text-ink tabular-nums">
           <span className="sr-only">Elapsed </span>
           {formatElapsed(elapsed)}
         </p>
@@ -33,12 +33,12 @@ export function RunningEntryRow({
         <div className="flex flex-wrap items-center gap-2">
           <Link
             href={`/projects/${entry.projectId}/edit`}
-            className="text-sm font-semibold break-words text-slate-900 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+            className="text-sm font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
           >
             {entry.projectName}
           </Link>
           {entry.projectArchived ? <StatusBadge status="Archived" /> : null}
-          <span className="inline-flex items-center rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-900">
+          <span className="inline-flex items-center rounded-full bg-primary-100 px-2 py-0.5 text-xs font-semibold text-accent">
             {timeCopy.runningBadge}
           </span>
         </div>

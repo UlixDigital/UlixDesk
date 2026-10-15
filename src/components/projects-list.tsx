@@ -37,7 +37,7 @@ export function ProjectsList({
               <div className="min-w-0">
                 <Link
                   href={`/projects/${project.id}/edit`}
-                  className="text-base font-semibold break-words text-slate-900 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                  className="text-base font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   {project.name}
                   <span className="sr-only">, edit project</span>
@@ -56,7 +56,7 @@ export function ProjectsList({
                   <span className="mt-1 inline-flex flex-wrap items-center gap-2 sm:mt-0">
                     <Link
                       href={`/clients/${project.client.id}/edit`}
-                      className="text-sm font-medium break-words text-slate-800 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                      className="text-sm font-medium break-words text-slate-800 hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                     >
                       {project.client.name}
                     </Link>

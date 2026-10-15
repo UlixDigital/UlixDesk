@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { LoginForm } from "@/app/login/login-form";
+import { UlixLogo } from "@/components/ulix-logo";
 import { authCopy } from "@/lib/auth-copy";
 import { safeNextPath } from "@/lib/access-decision";
 import { readSession } from "@/lib/session";
@@ -38,21 +39,16 @@ export default async function LoginPage({
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[#f4f6f8] px-4 py-12">
-      <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white px-6 py-8 shadow-sm sm:px-8">
-        <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-teal-700 text-base font-semibold text-white">
-            U
-          </span>
-          <div>
-            <p className="text-sm font-semibold text-slate-900">UlixDesk</p>
-            <p className="text-xs text-slate-500">Ulix Digital</p>
-          </div>
-        </div>
-        <h1 className="mt-6 text-2xl font-semibold tracking-tight text-slate-900">
+      <div className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="brand-rule" aria-hidden="true" />
+        <div className="px-6 py-8 sm:px-8">
+        <UlixLogo height={48} />
+        <h1 className="mt-6 text-2xl font-semibold tracking-tight text-ink">
           {authCopy.signInTitle}
         </h1>
         <p className="mt-1 text-sm text-slate-600">{authCopy.signInIntro}</p>
         <LoginForm next={next} notice={notice} />
+        </div>
       </div>
     </div>
   );

@@ -1,13 +1,14 @@
 :root {
   color-scheme: light;
   --bg: #f4f6f8;
-  --ink: #0f172a;
+  --ink: #1d1d1d;
   --muted: #475569;
   --faint: #64748b;
   --line: #e2e8f0;
-  --teal: #0f766e;
-  --teal-dark: #115e59;
-  --teal-soft: #f0fdfa;
+  --primary: #1151b4;
+  --primary-hover: #1f108c;
+  --accent: #1f108c;
+  --focus: #1f108c;
   --amber: #92400e;
   --amber-bg: #fffbeb;
   --rose: #be123c;
@@ -61,16 +62,10 @@ body {
   margin-bottom: 16px;
 }
 
-.mark {
-  display: flex;
-  width: 36px;
-  height: 36px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  background: var(--teal);
-  color: white;
-  font-weight: 700;
+.logo {
+  display: block;
+  height: 44px;
+  width: auto;
 }
 
 .brand-text {
@@ -152,7 +147,7 @@ input:focus,
 select:focus,
 textarea:focus,
 button:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 
@@ -182,12 +177,12 @@ button:focus-visible {
 }
 
 .primary {
-  background: var(--teal);
+  background: var(--primary);
   color: white;
 }
 
 .primary:hover:not(:disabled) {
-  background: var(--teal-dark);
+  background: var(--primary-hover);
 }
 
 .secondary {
@@ -220,7 +215,7 @@ button:focus-visible {
 }
 
 .status.success {
-  color: var(--teal-dark);
+  color: var(--accent);
 }
 
 .status.error,
@@ -267,7 +262,7 @@ button:focus-visible {
   border: 0;
   background: none;
   padding: 0;
-  color: var(--teal-dark);
+  color: var(--accent);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -275,7 +270,7 @@ button:focus-visible {
 }
 
 .text-button:focus-visible {
-  outline: 2px solid var(--teal);
+  outline: 2px solid var(--focus);
   outline-offset: 2px;
 }
 

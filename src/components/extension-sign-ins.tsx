@@ -25,13 +25,13 @@ export function ExtensionSignIns({
 }) {
   return (
     <section className="mt-8" aria-labelledby="extension-sign-in-heading">
-      <h2 id="extension-sign-in-heading" className="text-lg font-semibold text-slate-900">
+      <h2 id="extension-sign-in-heading" className="text-lg font-semibold text-ink">
         {extensionSessionCopy.sessionsTitle}
       </h2>
       <p className="mt-2 max-w-2xl text-sm text-slate-600">{extensionSessionCopy.sessionsIntro}</p>
       {sessions.length === 0 ? (
         <div className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-6 py-12 text-center">
-          <h3 className="text-lg font-semibold text-slate-900">{extensionSessionCopy.emptyTitle}</h3>
+          <h3 className="text-lg font-semibold text-ink">{extensionSessionCopy.emptyTitle}</h3>
           <p className="mx-auto mt-2 max-w-md text-sm text-slate-600">{extensionSessionCopy.emptyBody}</p>
         </div>
       ) : (
@@ -65,7 +65,7 @@ export function ExtensionSignIns({
                   <th
                     scope="row"
                     title={session.label}
-                    className="max-w-0 truncate px-4 py-3 font-medium text-slate-900"
+                    className="max-w-0 truncate px-4 py-3 font-medium text-ink"
                   >
                     {session.label}
                     {session.revokedAt ? (
@@ -125,7 +125,7 @@ function RevokeButton({ id, label }: { id: string; label: string }) {
           className="w-[min(28rem,calc(100vw-2rem))] rounded-xl bg-white p-6 shadow-xl"
           onClick={(event) => event.stopPropagation()}
         >
-          <h2 id={titleId} className="text-lg font-semibold break-words text-slate-900">
+          <h2 id={titleId} className="text-lg font-semibold break-words text-ink">
             {extensionSessionCopy.revokeTitle}
           </h2>
           <p id={descriptionId} className="mt-2 text-sm text-slate-600">

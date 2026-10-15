@@ -45,7 +45,7 @@ export function DailyTimesheet({
           {rows.map((row) => (
             <li key={row.id} className="grid gap-3 px-4 py-4 sm:grid-cols-[9rem_minmax(0,1fr)_auto] sm:items-center sm:px-5">
               <div>
-                <p className="text-sm font-semibold text-slate-900">
+                <p className="text-sm font-semibold text-ink">
                   {row.startLabel} – {row.endLabel}
                 </p>
                 <p className="mt-1 text-sm text-slate-600">
@@ -56,7 +56,7 @@ export function DailyTimesheet({
                 <div className="flex flex-wrap items-center gap-2">
                   <Link
                     href={`/projects/${row.projectId}/edit`}
-                    className="text-sm font-semibold break-words text-slate-900 hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                    className="text-sm font-semibold break-words text-ink hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                   >
                     {row.projectName}
                   </Link>
@@ -140,7 +140,7 @@ export function WeeklyTimesheet({
                   scope="col"
                   className={cn(
                     "px-3 py-3 text-right font-medium",
-                    date === today && "bg-teal-50 text-teal-800",
+                    date === today && "bg-primary-50 text-accent",
                   )}
                 >
                   <span className="block">{label.weekday}</span>
@@ -156,10 +156,10 @@ export function WeeklyTimesheet({
         <tbody>
           {rows.map((row) => (
             <tr key={row.projectId} className="border-b border-slate-100">
-              <th scope="row" className="px-4 py-3 text-left font-semibold text-slate-900">
+              <th scope="row" className="px-4 py-3 text-left font-semibold text-ink">
                 <Link
                   href={`/projects/${row.projectId}/edit`}
-                  className="hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                  className="hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                 >
                   {row.projectName}
                 </Link>
@@ -173,7 +173,7 @@ export function WeeklyTimesheet({
                   key={dates[index]}
                   className={cn(
                     "px-3 py-3 text-right tabular-nums text-slate-700",
-                    dates[index] === today && "bg-teal-50/70",
+                    dates[index] === today && "bg-primary-50/70",
                   )}
                 >
                   {value > 0 ? (
@@ -186,7 +186,7 @@ export function WeeklyTimesheet({
                           clientId,
                           user,
                         })}
-                        className="hover:text-teal-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+                        className="hover:text-accent focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       >
                         {formatTrackedDuration(value)}
                       </Link>
@@ -206,7 +206,7 @@ export function WeeklyTimesheet({
                   )}
                 </td>
               ))}
-              <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
+              <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">
                 {formatTrackedDuration(row.totalMs)}
               </td>
             </tr>
@@ -214,21 +214,21 @@ export function WeeklyTimesheet({
         </tbody>
         <tfoot>
           <tr className="border-t border-slate-200">
-            <th scope="row" className="px-4 py-3 text-left font-semibold text-slate-900">
+            <th scope="row" className="px-4 py-3 text-left font-semibold text-ink">
               Total
             </th>
             {columnTotals.map((value, index) => (
               <td
                 key={dates[index]}
                 className={cn(
-                  "px-3 py-3 text-right font-semibold tabular-nums text-slate-900",
-                  dates[index] === today && "bg-teal-50/70",
+                  "px-3 py-3 text-right font-semibold tabular-nums text-ink",
+                  dates[index] === today && "bg-primary-50/70",
                 )}
               >
                 {formatTrackedDuration(value)}
               </td>
             ))}
-            <td className="px-4 py-3 text-right font-semibold tabular-nums text-slate-900">
+            <td className="px-4 py-3 text-right font-semibold tabular-nums text-ink">
               {formatTrackedDuration(totalMs)}
             </td>
           </tr>
@@ -263,7 +263,7 @@ export function TimesheetNav({
       : date === today;
   return (
     <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <h2 className="text-lg font-semibold text-slate-900">{heading}</h2>
+      <h2 className="text-lg font-semibold text-ink">{heading}</h2>
       <div className="flex flex-wrap gap-2">
         <Link
           href={timesheetsHref({ view, date: previous, projectId, clientId, user })}
