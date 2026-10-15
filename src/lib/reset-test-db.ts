@@ -1,5 +1,7 @@
 import { prisma } from "@/lib/db";
+import { resetPublicInvoiceRateLimits } from "@/lib/rate-limit";
 import { clearRequestTestState } from "@/lib/test-hooks";
+import { setInvoiceMailTransportForTests } from "@/lib/invoice-mail";
 
 /**
  * Test-only. DELETE and TRUNCATE on TimeChange are rejected, including for the
@@ -17,7 +19,11 @@ export async function deleteTimeChangesForTests(db: {
 /** Deletes workspace rows in foreign-key order. Shared by every integration test. */
 export async function resetTestDatabase() {
   clearRequestTestState();
+  resetPublicInvoiceRateLimits();
+  setInvoiceMailTransportForTests(null);
   await deleteTimeChangesForTests(prisma);
+  await prisma.invoiceEmail.deleteMany();
+  await prisma.invoiceStatusEvent.deleteMany();
   await prisma.invoicePayment.deleteMany();
   await prisma.invoiceTime.deleteMany();
   await prisma.invoiceLine.deleteMany();

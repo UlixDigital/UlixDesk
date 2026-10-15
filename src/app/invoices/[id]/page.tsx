@@ -1,18 +1,32 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { InvoiceClientLink } from "@/components/invoice-client-link";
 import { InvoiceDeleteForm } from "@/components/invoice-delete-form";
 import { InvoiceDraftForm } from "@/components/invoice-draft-form";
+import { InvoiceHistory } from "@/components/invoice-history";
+import { InvoiceSendDialog } from "@/components/invoice-send-dialog";
+import { InvoiceStatusActions } from "@/components/invoice-status-actions";
+import { publicOrigin } from "@/lib/auth";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
+import { clientLinkUrl, readClientLink } from "@/lib/invoice-link";
 import { unratedLineLabel } from "@/lib/invoice-lines";
+import { invoiceMailConfigured, invoiceMessageDefaults } from "@/lib/invoice-mail";
 import { amountDueMinor, formatDurationHms, formatInvoiceDate, formatPercentBps } from "@/lib/invoice-money";
+import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { getInvoice, invoiceDateKey, unratedForInvoice } from "@/lib/invoices";
 import { formatMoney, formatMoneyNumber } from "@/lib/money";
 import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { ui } from "@/lib/ui";
 
-type PageProps = { params: Promise<{ id: string }> };
+type PageProps = { params: Promise<{ id: string }>; searchParams: Promise<{ notice?: string }> };
+
+const notices: Record<string, string> = {
+  voided: invoiceCopy.voided,
+  reopened: invoiceCopy.reopened,
+  sent: invoiceCopy.sent,
+};
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const user = await getCurrentUser();
@@ -21,13 +35,27 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return { title: invoice ? `Invoice ${invoice.number}` : "Invoice" };
 }
 
-export default async function InvoiceDetailPage({ params }: PageProps) {
+export default async function InvoiceDetailPage({ params, searchParams }: PageProps) {
   const user = await getCurrentUser();
   if (!user || !canManageWorkspace(user.role)) return null;
   const invoice = await getInvoice(user.role, (await params).id);
   if (!invoice) notFound();
+  const noticeKey = (await searchParams).notice ?? "";
+  const pageNotice = notices[noticeKey] ?? null;
   const issueDate = invoiceDateKey(invoice.issueDate);
   const dueDate = invoiceDateKey(invoice.dueDate);
+  const settings = await getInvoiceSettings();
+  const link = await readClientLink(user.role, invoice.id);
+  const origin = await publicOrigin();
+  const linkPath = link?.active ? link.path : null;
+  const clientUrl = linkPath ? clientLinkUrl(origin, linkPath) : null;
+  const defaults = invoiceMessageDefaults({
+    number: invoice.number,
+    companyName: settings.companyName,
+    amountDue: formatMoney(amountDueMinor(invoice.totalMinor, invoice.paidMinor), invoice.currency),
+    dueDate: formatInvoiceDate(dueDate),
+    clientUrl,
+  });
   const unrated = invoice.status === "draft" ? await unratedForInvoice(invoice) : [];
   const discountValue =
     invoice.discountKind === "percent"
@@ -57,6 +85,36 @@ export default async function InvoiceDetailPage({ params }: PageProps) {
         <a href={`/invoices/${invoice.id}/pdf`} className={ui.secondaryButton}>
           {invoiceCopy.download}
         </a>
+      </div>
+
+      {pageNotice ? (
+        <p role="status" className="mt-6 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
+          {pageNotice}
+        </p>
+      ) : null}
+
+      <div className="mt-6 space-y-4">
+        <InvoiceClientLink
+          invoiceId={invoice.id}
+          url={clientUrl}
+          unreadable={Boolean(link?.active && !linkPath)}
+          draft={invoice.status === "draft"}
+        />
+        <InvoiceSendDialog
+          key={`${clientUrl ?? "none"}-${defaults.subject}`}
+          invoiceId={invoice.id}
+          draft={invoice.status === "draft"}
+          mailConfigured={invoiceMailConfigured()}
+          clientUrl={clientUrl}
+          defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
+          defaultCc=""
+          defaultSubject={defaults.subject}
+          defaultBody={defaults.body}
+        />
+        {invoice.status === "open" || invoice.status === "void" ? (
+          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
+        ) : null}
+        <InvoiceHistory events={invoice.statusEvents} emails={invoice.emailsSent} timeZone={settings.timeZone} />
       </div>
 
       {!invoice.bankDetails.trim() ? (

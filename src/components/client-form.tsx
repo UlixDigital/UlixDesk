@@ -391,7 +391,7 @@ function EmailField({
     <div>
       <div className="mb-1.5 flex items-baseline justify-between gap-3">
         <label htmlFor="client-email" className="text-sm font-medium text-slate-800">
-          Emails
+          Billing emails
         </label>
         <span className="text-xs text-slate-500">Optional</span>
       </div>
@@ -402,7 +402,7 @@ function EmailField({
         )}
       >
         {localEmails.length > 0 ? (
-          <ul aria-label="Email addresses" className="flex flex-wrap gap-2 px-3 pt-3">
+          <ul aria-label="Billing emails" className="flex flex-wrap gap-2 px-3 pt-3">
             {localEmails.map((email) => (
               <li key={email}>
                 <input type="hidden" name="emails" value={email} readOnly />
@@ -462,7 +462,7 @@ function EmailField({
         </div>
       </div>
       <p id={hintId} className="mt-1.5 text-xs text-slate-500">
-        Press Enter or choose Add email. You can add more than one.
+        These prefill the To field when you email an invoice. Press Enter or choose Add email. You can add more than one.
       </p>
       {message ? (
         <p id="client-email-error" className="mt-1.5 text-sm text-rose-700">

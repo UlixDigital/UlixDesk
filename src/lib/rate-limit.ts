@@ -73,3 +73,38 @@ export function resetLoginRateLimits() {
   pairBuckets.clear();
   passwordBuckets.clear();
 }
+
+/** Public invoice page and PDF. One bucket per client address. */
+export const PUBLIC_INVOICE_WINDOW_MS = 60_000;
+const PUBLIC_INVOICE_DEFAULT_MAX = 60;
+
+const publicInvoiceBuckets = new Map<string, Bucket>();
+let publicInvoiceMax = PUBLIC_INVOICE_DEFAULT_MAX;
+
+/**
+ * Counts a public invoice read. The 61st read in a minute is refused.
+ * Tests can lower the cap with setPublicInvoiceRateLimitForTests.
+ */
+export function takePublicInvoiceSlot(ip: string, now = Date.now()) {
+  const existing = publicInvoiceBuckets.get(ip);
+  if (!existing || now >= existing.resetAt) {
+    publicInvoiceBuckets.set(ip, { failures: 1, resetAt: now + PUBLIC_INVOICE_WINDOW_MS });
+    if (publicInvoiceBuckets.size > 5000) publicInvoiceBuckets.clear();
+    return { limited: false as const };
+  }
+  if (existing.failures >= publicInvoiceMax) {
+    return { limited: true as const, retryAfterMs: existing.resetAt - now };
+  }
+  existing.failures += 1;
+  return { limited: false as const };
+}
+
+export function setPublicInvoiceRateLimitForTests(max: number) {
+  if (process.env.VITEST !== "true") return;
+  publicInvoiceMax = max;
+}
+
+export function resetPublicInvoiceRateLimits() {
+  publicInvoiceBuckets.clear();
+  publicInvoiceMax = PUBLIC_INVOICE_DEFAULT_MAX;
+}

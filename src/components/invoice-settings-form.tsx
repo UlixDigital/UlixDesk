@@ -91,6 +91,7 @@ export function InvoiceSettingsForm({
         {invoiceCopy.defaultNotes}
         <textarea id="invoice-notes" name="invoiceNotes" defaultValue={invoiceNotes} rows={4} className={`${ui.input} mt-1.5`} />
       </label>
+      <p className="text-xs text-slate-500">{invoiceCopy.hashLinesKept}</p>
       <label className="block text-sm font-medium text-slate-800" htmlFor="invoice-bank-details">
         {invoiceCopy.defaultBank}
         <textarea

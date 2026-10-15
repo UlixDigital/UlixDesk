@@ -163,6 +163,10 @@ npm run dev
 
 Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
 
+### Invoice email
+
+Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works. Google Workspace uses `smtp.gmail.com`, port `587`, STARTTLS, and an app password in `INVOICE_SMTP_PASS`. The rules for void, reopen, and the client link are in [INVOICES.md](INVOICES.md).
+
 After that first sign-in, on staging and on production:
 
 1. Open **Extension access** and use **Change password**. The current password is the bootstrap password. Choose a new one.
