@@ -4,7 +4,7 @@ Slice 8 bills clients for tracked time. It does not track staff pay, payroll, ta
 
 ## Who can see money
 
-Owners and admins can see and edit rates and billable amounts. Members cannot. The server drops rates before it builds a timesheet for a member, returns no money summary for a member, and `moneyExportFields` returns an empty object for a member. The extension project and timer APIs do not include rates or amounts. There is no CSV export in this slice. When one is added, it has to use `moneyExportFields` or `attachRates`.
+Owners and admins can see and edit rates and billable amounts. Members cannot. The server drops rates before it builds a timesheet for a member, returns no money summary for a member, and `moneyExportFields` returns an empty object for a member. The clients list payload omits `currency` for every role, so a member's page does not include which currency a client uses. The extension project and timer APIs do not include rates or amounts. There is no CSV export in this slice. When one is added, it has to use `moneyExportFields` or `attachRates`.
 
 ## Currency
 

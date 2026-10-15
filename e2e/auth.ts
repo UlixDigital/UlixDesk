@@ -5,8 +5,8 @@ import { SESSION_COOKIE, signSessionCookie } from "../src/lib/session-cookie";
 import { e2eEmail, e2eOrigin, e2eSessionSecret } from "./env";
 
 /** Puts a server-side session cookie on the browser context for the bootstrap owner. */
-export async function signIn(context: BrowserContext, prisma: PrismaClient) {
-  const user = await prisma.user.findUniqueOrThrow({ where: { email: e2eEmail } });
+export async function signIn(context: BrowserContext, prisma: PrismaClient, email = e2eEmail) {
+  const user = await prisma.user.findUniqueOrThrow({ where: { email } });
   const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
   const now = new Date();

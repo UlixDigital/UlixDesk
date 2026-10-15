@@ -1,15 +1,23 @@
 import Link from "next/link";
 import { ArchiveButton, RestoreButton } from "@/components/client-row-actions";
 import { clientSummary } from "@/lib/client-display";
-import type { ClientRecord } from "@/lib/clients";
 import { ui } from "@/lib/ui";
+
+/** Fields the clients list renders. Currency stays off this object so the page payload has no money. */
+export type ClientListItem = {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  emails: string[];
+};
 
 export function ClientsList({
   clients,
   archived,
   canManage = true,
 }: {
-  clients: ClientRecord[];
+  clients: ClientListItem[];
   archived: boolean;
   canManage?: boolean;
 }) {

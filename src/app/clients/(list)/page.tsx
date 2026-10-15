@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ClientSearch } from "@/components/client-search";
-import { ClientsList } from "@/components/clients-list";
+import { ClientsList, type ClientListItem } from "@/components/clients-list";
 import { EmptyState } from "@/components/empty-state";
 import { PlusIcon } from "@/components/icons";
 import {
@@ -90,7 +90,17 @@ export default async function ClientsPage({
       {empty ? (
         <EmptyState kind={empty} query={query} status={status} />
       ) : (
-        <ClientsList clients={clients} archived={status === "archived"} canManage={canManage} />
+        <ClientsList
+          clients={clients.map((client): ClientListItem => ({
+            id: client.id,
+            name: client.name,
+            address: client.address,
+            phone: client.phone,
+            emails: client.emails,
+          }))}
+          archived={status === "archived"}
+          canManage={canManage}
+        />
       )}
     </div>
   );
