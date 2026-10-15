@@ -169,13 +169,13 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
   await page.locator("#payment-method").selectOption("bank_transfer");
   await page.locator("#payment-note").fill("First wire");
   await page.locator("#record-payment button[type=submit]").click();
-  await expect(page.getByText(invoiceCopy.paymentRecorded)).toBeVisible();
+  await expect(page.getByText(invoiceCopy.paymentRecorded, { exact: true })).toBeVisible();
   await expect(page.locator("#invoice-status")).toHaveText("Open");
   await expect(page.locator("#invoice-paid")).toHaveText("USD 40.00");
   await expect(page.locator("#invoice-due")).toHaveText("USD 60.00");
   await expect(page.locator("#invoice-overdue")).toBeVisible();
-  await expect(page.getByText("First wire")).toBeVisible();
-  await expect(page.getByText(owner.name)).toBeVisible();
+  await expect(page.locator("#invoice-payments")).toContainText("First wire");
+  await expect(page.locator("#invoice-payments")).toContainText(owner.name);
   await shot(page, shots, "partial-paid-invoice");
 
   const pdfResponse = await page.request.get(`/invoices/${invoice.id}/pdf`);
@@ -195,7 +195,7 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
 
   await page.locator("#payment-amount").fill("70.00");
   await page.locator("#record-payment button[type=submit]").click();
-  await expect(page.getByRole("alert")).toHaveText(invoiceCopy.paymentOverpay);
+  await expect(page.locator("#record-payment").getByRole("alert")).toHaveText(invoiceCopy.paymentOverpay);
   await expect(page.locator("#invoice-due")).toHaveText("USD 60.00");
   await shot(page, shots, "refused-overpay");
 
@@ -231,7 +231,7 @@ test("an owner records a partial payment, is refused an overpayment, and opens t
 
   await page.goto(`/reports/invoice-aging?preset=custom&from=${from}&to=${to}`);
   await expect(page.getByRole("heading", { name: invoiceReportCopy.agingTitle })).toBeVisible();
-  await expect(page.getByText("Euro Atelier")).toBeVisible();
+  await expect(page.locator("#invoice-aging-report tbody")).toContainText("Euro Atelier");
   await expect(page.locator("#invoice-aging-report tbody")).not.toContainText("Northwind Studio");
   await expect(page.getByRole("columnheader", { name: "1-30" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "90+" })).toBeVisible();
