@@ -101,17 +101,19 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
           keyMessage={keyMessage}
           draft={invoice.status === "draft"}
         />
-        <InvoiceSendDialog
-          key={`${clientUrl ?? "none"}-${defaults.subject}`}
-          invoiceId={invoice.id}
-          draft={invoice.status === "draft"}
-          mailConfigured={invoiceMailConfigured()}
-          clientUrl={clientUrl}
-          defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
-          defaultCc=""
-          defaultSubject={defaults.subject}
-          defaultBody={defaults.body}
-        />
+        {invoice.status === "void" ? null : (
+          <InvoiceSendDialog
+            key={`${clientUrl ?? "none"}-${defaults.subject}`}
+            invoiceId={invoice.id}
+            draft={invoice.status === "draft"}
+            mailConfigured={invoiceMailConfigured()}
+            clientUrl={clientUrl}
+            defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
+            defaultCc=""
+            defaultSubject={defaults.subject}
+            defaultBody={defaults.body}
+          />
+        )}
         {invoice.status === "open" || invoice.status === "void" ? (
           <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
         ) : null}

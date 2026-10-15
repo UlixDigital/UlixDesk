@@ -2,6 +2,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import { isSliceConflict } from "@/lib/invoice-lock";
+import { secondsFromMs } from "@/lib/invoice-money";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 const REASON_MAX = 500;
@@ -32,8 +33,9 @@ export function parseTransitionReason(raw: string) {
  * - open → draft keeps the windows reserved (they stay active) and releases the
  *   edit lock because drafts are not an issued status.
  * - void → draft sets active back to true. That re-checks InvoiceTime_no_overlap.
- *   It is refused when a slice was billed elsewhere, the entry was edited so the
- *   slice no longer fits, or the billed entry was deleted.
+ *   It is refused when a billed entry was deleted, the entry now belongs to
+ *   another client, a slice was billed elsewhere, or the entry was edited so
+ *   the slice no longer fits.
  */
 export async function voidInvoice(input: { actor: Actor; id: string; reason: string }) {
   if (!canManageWorkspace(input.actor.role)) return denied();
@@ -78,9 +80,23 @@ export async function reopenInvoice(input: { actor: Actor; id: string; reason: s
         where: { id: input.id },
         include: {
           payments: { select: { id: true } },
-          lines: { select: { kind: true } },
+          lines: {
+            select: {
+              kind: true,
+              quantitySeconds: true,
+              timeLinks: { select: { sliceStart: true, sliceEnd: true } },
+            },
+          },
           timeLinks: {
-            include: { timeEntry: { select: { startedAt: true, endedAt: true } } },
+            include: {
+              timeEntry: {
+                select: {
+                  startedAt: true,
+                  endedAt: true,
+                  project: { select: { clientId: true } },
+                },
+              },
+            },
           },
         },
       });
@@ -141,18 +157,30 @@ async function overlappingActiveSlice(tx: Prisma.TransactionClient, invoiceId: s
   return rows.length > 0;
 }
 
+type VoidLine = {
+  kind: string;
+  quantitySeconds: number;
+  timeLinks: Array<{ sliceStart: Date; sliceEnd: Date }>;
+};
+
+type VoidLink = {
+  sliceStart: Date;
+  sliceEnd: Date;
+  timeEntry: {
+    startedAt: Date;
+    endedAt: Date | null;
+    project: { clientId: string | null };
+  };
+};
+
 async function restoreVoidSlices(
   tx: Prisma.TransactionClient,
-  invoice: {
-    id: string;
-    lines: Array<{ kind: string }>;
-    timeLinks: Array<{ sliceStart: Date; sliceEnd: Date; timeEntry: { startedAt: Date; endedAt: Date | null } }>;
-  },
+  invoice: { id: string; clientId: string; lines: VoidLine[]; timeLinks: VoidLink[] },
 ) {
-  const timeLines = invoice.lines.filter((line) => line.kind === "time");
-  if (timeLines.length > 0 && invoice.timeLinks.length === 0) return fail(invoiceCopy.reopenMissingTime);
+  if (voidTimeWasRemoved(invoice.lines)) return fail(invoiceCopy.reopenMissingTime);
   for (const link of invoice.timeLinks) {
     const entry = link.timeEntry;
+    if (entry.project.clientId !== invoice.clientId) return fail(invoiceCopy.reopenMoved);
     if (!entry.endedAt || link.sliceStart < entry.startedAt || link.sliceEnd > entry.endedAt) {
       return fail(invoiceCopy.reopenEdited);
     }
@@ -162,4 +190,18 @@ async function restoreVoidSlices(
     await tx.invoiceTime.updateMany({ where: { invoiceId: invoice.id }, data: { active: true } });
   }
   return { ok: true as const };
+}
+
+/**
+ * Deleting a time entry cascades its InvoiceTime rows away. The line quantity
+ * stays. A time line with no windows left, or windows that no longer add up
+ * to that quantity, means some billed time is gone.
+ */
+function voidTimeWasRemoved(lines: VoidLine[]) {
+  return lines.some((line) => {
+    if (line.kind !== "time") return false;
+    if (line.timeLinks.length === 0) return true;
+    const ms = line.timeLinks.reduce((sum, link) => sum + (link.sliceEnd.getTime() - link.sliceStart.getTime()), 0);
+    return secondsFromMs(ms) !== line.quantitySeconds;
+  });
 }

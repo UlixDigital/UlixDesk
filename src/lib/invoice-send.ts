@@ -1,7 +1,7 @@
 import { publicOrigin } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { invoiceCopy } from "@/lib/invoice-copy";
-import { clientLinkUrl, ensureClientLink } from "@/lib/invoice-link";
+import { clientLinkKeyMessage, clientLinkUrl, ensureClientLink, readClientLink } from "@/lib/invoice-link";
 import {
   deliverInvoiceMail,
   formatInvoiceFrom,
@@ -13,6 +13,7 @@ import {
 } from "@/lib/invoice-mail";
 import { renderStoredInvoicePdf } from "@/lib/invoice-render";
 import { getInvoiceSettings } from "@/lib/invoice-settings";
+import { invoiceLinkKeyStatus } from "@/lib/invoice-view-token";
 import { getInvoice, issueSavedDraft } from "@/lib/invoices";
 import { canManageWorkspace } from "@/lib/users-validation";
 
@@ -26,11 +27,14 @@ function fail(error: string) {
   return { ok: false as const, error };
 }
 
-const SENDABLE = new Set(["draft", "open", "paid", "partially_paid", "void"]);
+const SENDABLE = new Set(["draft", "open", "paid", "partially_paid"]);
 
 /**
- * Sending a draft issues it first. The caller must pass confirmIssue, and
- * confirmTime when the tracked time has changed since the draft was saved.
+ * Sending a draft issues it first, and only when the client link can be
+ * sealed. A missing or invalid INVOICE_LINK_KEY refuses the send and leaves
+ * the draft as a draft. Mark as issued on its own does not need the key.
+ * The caller must pass confirmIssue, and confirmTime when the tracked time
+ * has changed since the draft was saved. A void invoice cannot be emailed.
  * A failed delivery is recorded and does not roll the issue back.
  */
 export async function sendInvoice(input: {
@@ -56,8 +60,16 @@ export async function sendInvoice(input: {
 
   const existing = await getInvoice(input.actor.role, input.id);
   if (!existing) return fail(invoiceCopy.notFound);
+  if (existing.status === "void") return fail(invoiceCopy.sendVoid);
   if (!SENDABLE.has(existing.status)) return fail(invoiceCopy.sendStatus);
   if (existing.status === "draft") {
+    const keyStatus = invoiceLinkKeyStatus();
+    if (keyStatus === "missing") return fail(invoiceCopy.linkKeyMissing);
+    if (keyStatus === "invalid") return fail(invoiceCopy.linkKeyInvalid);
+    const currentLink = await readClientLink(input.actor.role, input.id);
+    if (currentLink?.active && !currentLink.path) {
+      return fail(clientLinkKeyMessage(currentLink.keyStatus === "ok" ? "mismatch" : currentLink.keyStatus));
+    }
     if (!input.confirmIssue) return fail(invoiceCopy.sendConfirmIssue);
     const issued = await issueSavedDraft({
       actor: input.actor,

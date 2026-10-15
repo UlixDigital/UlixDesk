@@ -145,6 +145,8 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await page.getByRole("button", { name: "Void invoice" }).click();
     await expect(page.getByText("Invoice voided.")).toBeVisible();
     await expect(page.getByText("This invoice is void.")).toBeVisible();
+    await expect(page.getByText("It cannot be emailed.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toHaveCount(0);
     await expect(page.locator("#invoice-status-history")).toContainText("Sent to the wrong client");
     await shot(page, shots, "invoice-status-void");
 
@@ -152,6 +154,7 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     await page.getByRole("button", { name: "Reopen as draft" }).click();
     await expect(page.getByText("Invoice reopened as a draft.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Save draft" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Send", exact: true })).toBeVisible();
     await expect(page.locator("#invoice-status-history")).toContainText("Ready to send again");
     await shot(page, shots, "invoice-status-reopened");
 
@@ -289,6 +292,80 @@ test("an entry across a period boundary is billed on two invoices that match the
     await expect(page.locator("tfoot")).toContainText("30m");
     await expect(page.locator("tfoot")).toContainText("USD 12.50");
     await shot(page, shots, "invoice-boundary-report");
+  } finally {
+    await ownerContext.close();
+    await prisma.$disconnect();
+  }
+});
+
+test("reopen refuses a void invoice after a billed time entry was deleted", async ({ browser }, testInfo) => {
+  test.setTimeout(180_000);
+  const prisma = new PrismaClient();
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
+  const member = await prisma.user.create({
+    data: {
+      email: "reopen-delete@ulix.test",
+      name: "Reopen Delete",
+      role: "member",
+      passwordHash: "unused",
+    },
+  });
+  await prisma.workspaceSettings.upsert({
+    where: { id: "workspace" },
+    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+    create: { id: "workspace", timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+  });
+  const client = await prisma.client.create({
+    data: { name: "Reopen Client", currency: "USD" },
+  });
+  const project = await prisma.project.create({
+    data: { name: "Reopen site", clientId: client.id, billable: true },
+  });
+  await prisma.billRate.create({
+    data: {
+      scope: "client",
+      clientId: client.id,
+      amountMinor: 2500,
+      currency: "USD",
+      effectiveFrom: new Date("2020-01-01T00:00:00.000Z"),
+      createdById: owner.id,
+    },
+  });
+  const startedAt = new Date(zonedDayStart("2026-10-06", "Asia/Colombo").getTime() + 9 * 60 * 60 * 1000);
+  const created = await createManualEntry(
+    {
+      projectId: project.id,
+      startedAt,
+      endedAt: new Date(startedAt.getTime() + 60 * 60 * 1000),
+      billable: true,
+      note: null,
+    },
+    new Date("2026-10-15T12:00:00.000Z"),
+    member.id,
+  );
+
+  const shots = artifactDir(testInfo);
+  const ownerContext = await browser.newContext();
+  try {
+    await signIn(ownerContext, prisma, owner.email);
+    const page = await ownerContext.newPage();
+    await createDraft(page, client.id, "2026-10-05", "2026-10-11");
+    await page.getByRole("button", { name: "Mark as issued" }).click();
+    await expect(page.getByText("This invoice is issued.")).toBeVisible();
+    await page.locator("#invoice-void-reason").fill("Hold the invoice");
+    await page.getByRole("button", { name: "Void invoice" }).click();
+    await expect(page.getByText("Invoice voided.")).toBeVisible();
+
+    await prisma.timeEntry.delete({ where: { id: created.entry.id } });
+    await page.locator("#invoice-reopen-reason").fill("Put the time back");
+    await page.getByRole("button", { name: "Reopen as draft" }).click();
+    await expect(page.locator("#invoice-status-actions").getByRole("alert")).toContainText(
+      "The billed time no longer exists, so this invoice cannot be reopened.",
+    );
+    await expect(page.getByText("This invoice is void.")).toBeVisible();
+    await expect(page.locator("#invoice-reopen-reason")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Save draft" })).toHaveCount(0);
+    await shot(page, shots, "invoice-reopen-deleted");
   } finally {
     await ownerContext.close();
     await prisma.$disconnect();
