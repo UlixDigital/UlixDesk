@@ -28,3 +28,17 @@ export function isInvoicedTimeError(error: unknown) {
   if (error instanceof InvoicedTimeError) return true;
   return error instanceof Error && error.message.includes("INVOICED_TIME");
 }
+
+/** True when Postgres rejected an overlapping billed window. */
+export function isSliceConflict(error: unknown) {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code?: string }).code === "P2002"
+  ) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("23P01") || message.includes("InvoiceTime_no_overlap");
+}

@@ -6,8 +6,14 @@ export function isPublicPath(pathname: string) {
     pathname === "/set-password" ||
     pathname.startsWith("/set-password/") ||
     pathname === "/api/health" ||
-    pathname.startsWith("/api/health/")
+    pathname.startsWith("/api/health/") ||
+    isClientInvoicePath(pathname)
   );
+}
+
+/** The unguessable client invoice link. No session cookie. */
+export function isClientInvoicePath(pathname: string) {
+  return pathname.startsWith("/v/");
 }
 
 export function safeNextPath(pathname: string) {

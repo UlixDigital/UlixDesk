@@ -39,7 +39,7 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
   });
   await prisma.workspaceSettings.upsert({
     where: { id: "workspace" },
-    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD", nextInvoiceNumber: 1176 },
     create: { id: "workspace", timeZone: "Asia/Colombo", defaultCurrency: "USD" },
   });
   const client = await prisma.client.create({
@@ -123,9 +123,9 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
     expect(pdf.headers()["content-disposition"]).toContain("Invoice-LE");
 
     await page.goto("/invoices");
-    await expect(page.getByRole("link", { name: /^LE\d+/ })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "WSI Web Enhancers" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "Open" })).toBeVisible();
+    const row = page.getByRole("row", { name: /WSI Web Enhancers/ });
+    await expect(row.getByRole("link", { name: /^LE\d+/ })).toBeVisible();
+    await expect(row.getByRole("cell", { name: "Open" })).toBeVisible();
     await shot(page, shots, "invoice-list");
 
     await page.goto(`/timesheets/${entries[0]}/edit`);

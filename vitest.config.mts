@@ -17,6 +17,7 @@ export default defineConfig({
     env: {
       DATABASE_URL: "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk_test",
       ULIXDESK_SESSION_SECRET: "test-session-secret-at-least-32-characters",
+      INVOICE_LINK_KEY: "ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=",
       ULIXDESK_EXTENSION_IDS: "abcdefghijklmnopabcdefghijklmnop",
     },
     include: ["src/**/*.test.ts", "src/**/*.test.tsx", "extension/**/*.test.ts"],

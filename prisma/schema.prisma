@@ -31,6 +31,8 @@ model User {
   budgetsCreated    Budget[]
   invoicesCreated   Invoice[]        @relation("InvoiceAuthor")
   invoicePayments   InvoicePayment[]
+  invoiceStatusEvents InvoiceStatusEvent[]
+  invoiceEmailsSent InvoiceEmail[]
 
   @@index([role])
   @@index([deactivatedAt])
@@ -91,7 +93,8 @@ model Client {
   @@index([name])
 }
 
-/// One email address for a client, in the order shown on the form.
+/// Billing email for a client, in the order shown on the form.
+/// These addresses prefill the To field when an invoice is emailed.
 model ClientEmail {
   id       String @id @default(cuid())
   email    String
@@ -371,11 +374,20 @@ model Invoice {
   createdById         String
   createdBy           User      @relation("InvoiceAuthor", fields: [createdById], references: [id], onDelete: Restrict)
   issuedAt            DateTime?
+  voidedAt            DateTime?
+  /// SHA-256 of the client view token. The plaintext is not stored.
+  /// A sealed copy (AES-256-GCM under INVOICE_LINK_KEY) lets owners and admins
+  /// copy the same link again. Both are cleared when the link is revoked.
+  viewTokenHash       String?   @unique
+  viewTokenCipher     String?
+  viewTokenNonce      String?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
   lines               InvoiceLine[]
   payments            InvoicePayment[]
   timeLinks           InvoiceTime[]
+  statusEvents        InvoiceStatusEvent[]
+  emailsSent          InvoiceEmail[]
 
   @@index([clientId])
   @@index([status])
@@ -417,6 +429,9 @@ model InvoiceTime {
   sliceStart    DateTime
   /// Exclusive end of the billed window.
   sliceEnd      DateTime
+  /// Voided invoices set this false so the overlap constraint releases the window.
+  /// Reopening sets it true again, and InvoiceTime_no_overlap rejects a clash.
+  active        Boolean   @default(true)
 
   @@index([timeEntryId])
   @@index([invoiceId])
@@ -437,4 +452,36 @@ model InvoicePayment {
   createdAt    DateTime @default(now())
 
   @@index([invoiceId])
+}
+
+/// One status change. Issue, void, and reopen each write a row.
+model InvoiceStatusEvent {
+  id         String   @id @default(cuid())
+  invoiceId  String
+  invoice    Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  actorId    String
+  actor      User     @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  fromStatus String
+  toStatus   String
+  reason     String
+  createdAt  DateTime @default(now())
+
+  @@index([invoiceId, createdAt])
+}
+
+/// One attempt to email an invoice. Failures are kept as well as successes.
+model InvoiceEmail {
+  id           String   @id @default(cuid())
+  invoiceId    String
+  invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  sentById     String
+  sentBy       User     @relation(fields: [sentById], references: [id], onDelete: Restrict)
+  toAddresses  String[]
+  ccAddresses  String[]
+  subject      String
+  success      Boolean
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([invoiceId, createdAt])
 }

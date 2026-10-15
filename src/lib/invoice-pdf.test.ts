@@ -2,7 +2,14 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import { describe, expect, it } from "vitest";
 import { parseInvoiceBankFile } from "../../scripts/invoice-bank-file.mjs";
-import { INVOICE_NOTES_WIDTH, pdfTextPositions, referenceInvoicePdfInput, renderInvoicePdf } from "@/lib/invoice-pdf";
+import {
+  INVOICE_NOTES_LINE_GAP,
+  INVOICE_NOTES_WIDTH,
+  INVOICE_TOTAL_ROW,
+  pdfTextPositions,
+  referenceInvoicePdfInput,
+  renderInvoicePdf,
+} from "@/lib/invoice-pdf";
 
 const placeholderBank = [
   "Beneficiary Name: Ulix Digital",
@@ -96,6 +103,30 @@ describe("invoice pdf layout", () => {
       const sample = await renderInvoicePdf(referenceInvoicePdfInput(bank), { compress: false });
       writeFileSync(`${artifactDir}/invoice-sample.pdf`, sample);
     }
+  });
+
+  it("keeps notes and totals about 2.5pt looser than a tight line", async () => {
+    const trace: Array<{ text: string; x: number; y: number }> = [];
+    await renderInvoicePdf(referenceInvoicePdfInput(placeholderBank), { compress: false, trace });
+    const first = trace.find((item) => item.text.startsWith("* All payments"));
+    const second = trace.find((item) => item.text.startsWith("* Use these details"));
+    const subtotal = trace.find((item) => item.text === "Subtotal");
+    const total = trace.find((item) => item.text === "Total");
+    expect(first && second && subtotal && total).toBeTruthy();
+    const noteStep = (second?.y ?? 0) - (first?.y ?? 0);
+    const measure = new PDFDocument({ size: "LETTER", margin: 0 });
+    measure.registerFont("DejaVu", "assets/fonts/DejaVuSans.ttf");
+    measure.font("DejaVu").fontSize(8.3);
+    const sample = "* All payments are non refundable";
+    const tight = measure.heightOfString(sample, { width: INVOICE_NOTES_WIDTH, lineGap: 0 });
+    const loose = measure.heightOfString(sample, { width: INVOICE_NOTES_WIDTH, lineGap: INVOICE_NOTES_LINE_GAP });
+    measure.end();
+    expect(loose - tight).toBeGreaterThanOrEqual(2);
+    expect(loose - tight).toBeLessThanOrEqual(3);
+    expect(noteStep).toBeCloseTo(loose, 1);
+    expect((total?.y ?? 0) - (subtotal?.y ?? 0)).toBeCloseTo(INVOICE_TOTAL_ROW, 1);
+    expect(INVOICE_TOTAL_ROW - 16).toBeGreaterThanOrEqual(2);
+    expect(INVOICE_TOTAL_ROW - 16).toBeLessThanOrEqual(3);
   });
 
   it("gives the notes column enough room for Ulix Digital", () => {

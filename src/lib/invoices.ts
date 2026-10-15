@@ -10,6 +10,7 @@ import {
   type DraftWrite,
   type InvoiceStatus,
 } from "@/lib/invoice-form";
+import { isSliceConflict } from "@/lib/invoice-lock";
 import {
   buildInvoiceLines,
   describeTimeLineChanges,
@@ -104,9 +105,26 @@ export async function allocateInvoiceNumber(tx: Tx) {
 }
 
 const invoiceInclude = {
-  client: { select: { id: true, name: true, address: true, billingAddress: true, currency: true } },
+  client: {
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      billingAddress: true,
+      currency: true,
+      emails: { orderBy: { position: "asc" as const }, select: { email: true } },
+    },
+  },
   lines: { orderBy: { position: "asc" as const }, include: { timeLinks: { select: { timeEntryId: true } } } },
   payments: { select: { id: true, amountMinor: true, paidOn: true, method: true, note: true } },
+  statusEvents: {
+    orderBy: { createdAt: "asc" as const },
+    include: { actor: { select: { name: true } } },
+  },
+  emailsSent: {
+    orderBy: { createdAt: "desc" as const },
+    include: { sentBy: { select: { name: true } } },
+  },
 } as const;
 
 export type InvoiceDetail = Prisma.InvoiceGetPayload<{ include: typeof invoiceInclude }>;
@@ -262,10 +280,13 @@ export async function saveDraft(input: {
   issue: boolean;
   /** Issue even when the re-derived time lines differ from the draft. */
   confirm?: boolean;
+  /** Recorded on the draft → open audit row. */
+  issueReason?: string;
 }) {
   if (!canManageWorkspace(input.actor.role)) return denied();
   try {
     return await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${input.id} FOR UPDATE`;
       const invoice = await tx.invoice.findUnique({
         where: { id: input.id },
         include: { lines: { include: { timeLinks: true } } },
@@ -372,6 +393,18 @@ export async function saveDraft(input: {
         },
       });
       if (preservedIds.length > 0) await renumberLines(tx, invoice.id);
+      if (input.issue) {
+        const reason = (input.issueReason ?? "Marked as issued").trim().slice(0, 500);
+        await tx.invoiceStatusEvent.create({
+          data: {
+            invoiceId: invoice.id,
+            actorId: input.actor.id,
+            fromStatus: "draft",
+            toStatus: "open",
+            reason: reason || "Marked as issued",
+          },
+        });
+      }
       return { ok: true as const, issued: input.issue };
     });
   } catch (error) {
@@ -496,6 +529,76 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
     }
     throw error;
   }
+}
+
+export function storedDraft(invoice: {
+  issueDate: Date;
+  dueDate: Date;
+  poNumber: string | null;
+  notes: string;
+  bankDetails: string;
+  discountKind: string;
+  discountAmountMinor: number;
+  discountBps: number;
+  taxEnabled: boolean;
+  taxLabel: string;
+  taxRateBps: number;
+  lines: Array<{
+    id: string;
+    title: string;
+    detail: string;
+    quantitySeconds: number;
+    unitPriceMinor: number;
+    amountMinor: number;
+  }>;
+}): DraftWrite {
+  const discountKind =
+    invoice.discountKind === "amount" || invoice.discountKind === "percent" ? invoice.discountKind : "none";
+  return {
+    issueDate: invoiceDateKey(invoice.issueDate),
+    dueDate: invoiceDateKey(invoice.dueDate),
+    poNumber: invoice.poNumber,
+    notes: invoice.notes,
+    bankDetails: invoice.bankDetails,
+    discountKind,
+    discountAmountMinor: invoice.discountAmountMinor,
+    discountBps: invoice.discountBps,
+    taxEnabled: invoice.taxEnabled,
+    taxLabel: invoice.taxLabel,
+    taxRateBps: invoice.taxRateBps,
+    lines: invoice.lines.map((line) => ({
+      id: line.id,
+      title: line.title,
+      detail: line.detail,
+      quantitySeconds: line.quantitySeconds,
+      unitPriceMinor: line.unitPriceMinor,
+      amountMinor: line.amountMinor,
+    })),
+  };
+}
+
+/** Issues the saved draft. A draft that is already open is left as it is. */
+export async function issueSavedDraft(input: {
+  actor: InvoiceActor;
+  id: string;
+  confirm?: boolean;
+  reason?: string;
+}) {
+  if (!canManageWorkspace(input.actor.role)) return denied();
+  const invoice = await prisma.invoice.findUnique({
+    where: { id: input.id },
+    include: { lines: true },
+  });
+  if (!invoice) return fail(invoiceCopy.notFound);
+  if (invoice.status !== "draft") return { ok: true as const, issued: false as const, status: invoice.status };
+  return saveDraft({
+    actor: input.actor,
+    id: input.id,
+    draft: storedDraft(invoice),
+    issue: true,
+    confirm: input.confirm,
+    issueReason: input.reason,
+  });
 }
 
 export async function deleteDraft(input: { actor: InvoiceActor; id: string }) {
@@ -717,6 +820,7 @@ async function takenSlices(tx: Tx | typeof prisma, entryIds: string[], exceptInv
   const rows = await tx.invoiceTime.findMany({
     where: {
       timeEntryId: { in: entryIds },
+      active: true,
       ...(exceptInvoiceId ? { invoiceId: { not: exceptInvoiceId } } : {}),
     },
     select: { timeEntryId: true, sliceStart: true, sliceEnd: true },
@@ -897,15 +1001,3 @@ function groupingOf(value: string): InvoiceGrouping {
   return "period";
 }
 
-function isSliceConflict(error: unknown) {
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    (error as { code?: string }).code === "P2002"
-  ) {
-    return true;
-  }
-  const message = error instanceof Error ? error.message : "";
-  return message.includes("23P01") || message.includes("InvoiceTime_no_overlap");
-}

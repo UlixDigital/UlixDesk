@@ -19,6 +19,12 @@ const PRICE_RIGHT = 504;
 const AMOUNT_RIGHT = 575;
 const DATE_X = 407;
 const TOTAL_GAP = 8;
+/** Baseline step for the totals block. 2.5pt looser than the previous 16pt step. */
+export const INVOICE_TOTAL_ROW = 18.5;
+/** Extra space between note lines, in points. */
+export const INVOICE_NOTES_LINE_GAP = 2.5;
+/** Space from the Notes label down to the first note line. */
+export const INVOICE_NOTES_BODY_GAP = 16.5;
 const TITLE_SIZE = 14;
 const NAME_SIZE = 10.6;
 const SMALL_SIZE = 7.2;
@@ -273,7 +279,7 @@ function drawNotes(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInp
   traceText(trace, "Notes", LEFT + PAD, y);
   const body = [input.notes, input.bankDetails].filter(Boolean).join("\n\n");
   if (!body) return;
-  drawWrapped(doc, trace, body, LEFT + PAD, y + 14, width, BODY_SIZE, FONT, INK);
+  drawWrapped(doc, trace, body, LEFT + PAD, y + INVOICE_NOTES_BODY_GAP, width, BODY_SIZE, FONT, INK, INVOICE_NOTES_LINE_GAP);
 }
 
 function totalMetrics(doc: Doc, totals: InvoicePdfTotal[]) {
@@ -304,7 +310,7 @@ function drawTotals(doc: Doc, trace: PdfTrace[] | undefined, totals: InvoicePdfT
     const labelX = labelRight - metric.labelWidth;
     if (metric.total.emphasize) {
       doc.save();
-      doc.rect(labelX - 6, cursor - 3, AMOUNT_RIGHT - labelX + 10, 16).fill(SHADE);
+      doc.rect(labelX - 6, cursor - 3, AMOUNT_RIGHT - labelX + 10, INVOICE_TOTAL_ROW).fill(SHADE);
       doc.restore();
     }
     doc.font(FONT_BOLD).fontSize(SMALL_SIZE).fillColor(INK);
@@ -313,7 +319,7 @@ function drawTotals(doc: Doc, trace: PdfTrace[] | undefined, totals: InvoicePdfT
     doc.font(metric.valueFont).fontSize(SMALL_SIZE).fillColor(INK);
     doc.text(metric.total.value, valueX, cursor, { lineBreak: false });
     traceText(trace, metric.total.value, valueX, cursor);
-    cursor += 16;
+    cursor += INVOICE_TOTAL_ROW;
   }
 }
 
@@ -343,11 +349,19 @@ function drawWrapped(
   size: number,
   font: string,
   color: string,
+  lineGap = 0,
 ) {
   doc.font(font).fontSize(size).fillColor(color);
-  doc.text(value, x, y, { width });
-  traceText(trace, value.split("\n")[0] ?? value, x, y);
-  return y + doc.heightOfString(value, { width });
+  const options = { width, lineGap };
+  doc.text(value, x, y, options);
+  let cursor = y;
+  const paragraphs = value.split("\n");
+  for (const paragraph of paragraphs) {
+    if (paragraph) traceText(trace, paragraph, x, cursor);
+    const sample = paragraph || " ";
+    cursor += doc.heightOfString(sample, { width, lineGap });
+  }
+  return y + doc.heightOfString(value, options);
 }
 
 function rule(doc: Doc, y: number) {
