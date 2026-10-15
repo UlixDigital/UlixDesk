@@ -9,9 +9,9 @@ const braces = require("braces") as {
 };
 
 describe("braces override", () => {
-  it("uses the depth-guarded 3.0.4 build", () => {
+  it("keeps the upstream 3.0.3 version and the local depth guard", () => {
     const pkg = require("braces/package.json") as { version: string };
-    expect(pkg.version).toBe("3.0.4");
+    expect(pkg.version).toBe("3.0.3");
   });
 
   it("still expands ordinary patterns used by the lint globber", () => {

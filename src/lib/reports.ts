@@ -321,8 +321,13 @@ export function buildReport(input: {
   const csvColumns = summaryCsvColumns(columns);
   const csv = {
     columns: csvColumns,
-    rows: aggs.map((row, index) => summaryCsvLine(row, rows[index]?.cells ?? {}, csvColumns)),
-    totals: rows.length === 0 ? null : summaryCsvLine(totalsSource, totals ?? {}, csvColumns, true),
+    rows: aggs.map((row, index) =>
+      summaryCsvLine(row, rows[index]?.cells ?? {}, csvColumns, false, input.showMoney),
+    ),
+    totals:
+      rows.length === 0
+        ? null
+        : summaryCsvLine(totalsSource, totals ?? {}, csvColumns, true, input.showMoney),
   };
   return {
     columns,
@@ -356,6 +361,7 @@ function summaryCsvLine(
   cells: Record<string, string>,
   columns: ReportColumn[],
   totals = false,
+  showMoney = true,
 ) {
   return columns.map((column) => {
     if (column.id === "hours") return decimalHours(row.durationMs);
@@ -363,7 +369,7 @@ function summaryCsvLine(
     if (column.id.startsWith("amount:")) {
       return amountNumber(row.amounts, column.id.slice("amount:".length));
     }
-    if (column.id === "status") return totals ? "" : rowStatus(row);
+    if (column.id === "status") return totals ? "" : rowStatus(row, showMoney);
     return cells[column.id] ?? "";
   });
 }
@@ -373,8 +379,11 @@ function amountNumber(amounts: MoneyTotal[], currency: string) {
   return match ? formatMoneyNumber(match.amountMinor, match.currency) : "";
 }
 
-function rowStatus(row: { durationMs: number; billableMs: number; unrated: boolean }) {
-  if (row.unrated) return reportCopy.statusNoRate;
+function rowStatus(
+  row: { durationMs: number; billableMs: number; unrated: boolean },
+  showMoney: boolean,
+) {
+  if (showMoney && row.unrated) return reportCopy.statusNoRate;
   if (row.durationMs > 0 && row.billableMs === 0) return reportCopy.statusNonBillable;
   if (row.billableMs > 0) return reportCopy.statusBillable;
   return "";

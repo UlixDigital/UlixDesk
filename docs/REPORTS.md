@@ -60,7 +60,7 @@ Hours and amounts are numbers. The screen formatting stays on the screen.
 | Amount (USD) | `Amount (USD)` | `400.00` |
 | Amount (JPY) | `Amount (JPY)` | `1500` |
 
-The currency is in the header, not in the cell. There are no thousands separators. Summary reports drop the `No amount` column and add `Status`: `Billable`, `Non-billable`, or `No rate`. A row with any unrated time is `No rate`. The total row leaves Status blank. Work sessions keep their Billable column.
+The currency is in the header, not in the cell. There are no thousands separators. Summary reports drop the `No amount` column and add `Status`. For someone who can see money, a row with any unrated billable time is `No rate`; otherwise it is `Billable` or `Non-billable`. A member CSV has no money, so Status is `Billable` or `Non-billable` from the billable flag alone, never `No rate`. The total row leaves Status blank. Work sessions keep their Billable column.
 
 Notes are written exactly as typed, including leading and trailing spaces. An empty note is an empty cell. The screen shows an em dash only when the note is an empty string. Cells that start with `=`, `+`, `-`, `@`, tab, or carriage return are prefixed with a single quote so a spreadsheet does not treat them as formulas.
 
@@ -74,13 +74,13 @@ The file is drawn on the server with pdfkit (pure JavaScript, standard Helvetica
 
 **Time & Activity** is US Letter landscape. Every page has the Ulix logo, a thin rule, and the date range at the top right. The first page title is "Time & Activity Report", then the organization name "Ulix Digital", then a grand total of Time, Billed Amount, and Billable Time. There is no organization field on the workspace, so the name is the product name. Each client is a section, sorted A to Z. Inside it, one bold group row per date and member, then one detail row per project. UlixDesk has no to-do. The To-dos column is the project name, and a blank project name is "(No to-do)" in italics. To-do ID is always blank. Notes are "Manually added" or "Edited", plus the entry note. Durations are `H:MM:SS`. Money uses the rate's currency (`$723.22`, `¥1,500`). A member PDF drops the billed columns. The footer is "Generated with", the Ulix logo, the app URL, and `Page X of Y`. A group row is not left at the bottom of a page without its first detail row. A table that continues repeats the column header.
 
-Daily, weekly, and work session PDFs still match the screen: the Ulix logo and gradient, the filter summary, the workspace timezone, and a total row per currency. The footer is `Page N of M`.
+Daily, weekly, and work session PDFs still match the screen: the Ulix logo and gradient, the filter summary, the workspace timezone, and a total row per currency. Amount headers include the currency (`Amount (USD)`). A table with seven or more columns is US Letter landscape, and amount columns are wide enough for the header and the total on one line. Fewer columns stay A4 portrait. The footer is `Page N of M`, drawn inside the bottom margin so it does not add a blank page.
 
 Time edits are blocks (who, when, action, source, and the fields), with the same header and page numbers. The export stops at 5,000 changes and returns `TIME_CHANGE_TOO_LARGE`.
 
 ## Saved reports
 
-**Save report** stores the report type, the current filters, the grouping, and the columns under a name. The name is required, at most 80 characters, and unique for that person (case-sensitive). Whitespace is collapsed.
+**Save report** stores the report type, the current filters, the grouping, and the columns under a name. The name is required and at most 80 characters. Whitespace is collapsed, and zero-width or other invisible characters are removed. A name that is only those characters is rejected. The name is unique for that person regardless of case (`October` and `october` are the same name). The database enforces that with an index on `lower(name)`.
 
 | Visibility | Who can save it | Who can open it |
 | --- | --- | --- |
@@ -91,7 +91,7 @@ A member who asks to share gets `SAVED_REPORT_SHARE`. Members can only save a re
 
 The hub lists saved reports. **Open** restores the filters, grouping, and columns. Columns are always in the saved URL, including an empty list, so the browser's remembered columns do not replace them. **Rename** and **Delete** are available to the creator. An owner or admin can also rename or delete a shared report. A private report can only be changed by its creator.
 
-Stored params are a plain object of strings. They are read back through the same date, enum, and column parsers as the report URL. A number, an array, or an unknown report type fails closed with `SAVED_REPORT_PARAMS` or `SAVED_REPORT_TYPE`. Unknown keys are dropped. An id that is not a single token is dropped.
+Stored params are a plain object of strings. They are read back through the same date, enum, and column parsers as the report URL. A number, an array, or an unknown report type fails closed with `SAVED_REPORT_PARAMS` or `SAVED_REPORT_TYPE`. Unknown keys are dropped. An id that is not a single token is dropped. A column id that the report does not have is dropped.
 
 ## Error codes
 

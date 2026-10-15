@@ -83,6 +83,15 @@ describe("saved report records", () => {
       today,
     });
     expect(duplicate).toMatchObject({ ok: false, code: "SAVED_REPORT_DUPLICATE" });
+    const differentCase = await createSavedReport({
+      actor: owner,
+      name: "october ACTIVITY",
+      reportType: "daily",
+      visibility: "private",
+      params: {},
+      today,
+    });
+    expect(differentCase).toMatchObject({ ok: false, code: "SAVED_REPORT_DUPLICATE" });
 
     expect(await deleteSavedReport({ actor: member, id: shared.id })).toMatchObject({
       ok: false,

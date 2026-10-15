@@ -64,6 +64,7 @@ describe("report pdf", () => {
     expect(text).toContain("USD 50.00");
     expect(text).toContain(reportCopy.total);
     expect(text).toContain("Page 1 of 1");
+    expect(pdfPageCount(pdf)).toBe(1);
 
     const member = buildReport({
       kind: "time-activity",
@@ -147,5 +148,41 @@ describe("report pdf", () => {
     expect(text).toContain("Notes: old -> new ->");
     expect(text).not.toMatch(/USD|JPY|Amount/);
     expect(text).toContain("Page 1 of");
+    expect(pdfPageCount(plain)).toBe(1);
+  });
+
+  it("lays a 7-column table out in landscape with the currency in the header", async () => {
+    const pdf = await renderReportPdf({
+      title: "Daily totals",
+      filters: ["Timezone: Asia/Colombo"],
+      compress: false,
+      table: {
+        columns: [
+          { label: "Date", align: "left" },
+          { label: "Project", align: "left" },
+          { label: "Member", align: "left" },
+          { label: "Hours", align: "left" },
+          { label: "Billable hours", align: "left" },
+          { label: "Amount (USD)", align: "right" },
+          { label: "Amount (JPY)", align: "right" },
+        ],
+        rows: [
+          ["Wed, Oct 14, 2026", "Website refresh", "Jordan Blake-Alexander", "5h", "4h", "USD 400.00", "JPY 1,500"],
+        ],
+        totals: ["Total", "", "", "5h", "4h", "USD 400.00", "JPY 1,500"],
+      },
+    });
+    expect(pdf.toString("latin1")).toMatch(/\/MediaBox\s*\[\s*0\s+0\s+792(?:\.0+)?\s+612(?:\.0+)?\s*\]/);
+    const text = pdfPlainText(pdf);
+    expect(text).toContain("Amount (USD)");
+    expect(text).toContain("Amount (JPY)");
+    expect(text).toContain("USD 400.00");
+    expect(text).toContain("JPY 1,500");
+    expect(pdfPageCount(pdf)).toBe(1);
   });
 });
+
+function pdfPageCount(buffer: Buffer) {
+  const match = buffer.toString("latin1").match(/\/Type\s*\/Pages\b[\s\S]{0,200}?\/Count\s+(\d+)/);
+  return match ? Number(match[1]) : 0;
+}

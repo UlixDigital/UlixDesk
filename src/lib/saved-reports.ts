@@ -5,6 +5,7 @@ import {
   defaultColumns,
   defaultGroupBy,
   parseReportSearchParams,
+  resolveColumns,
   reportTitle,
   type GroupBy,
   type ReportKind,
@@ -79,10 +80,13 @@ export function canReadSavedReport(
   return report.visibility === "shared";
 }
 
+/** Format and invisible characters. A name made only of these is empty. */
+const INVISIBLE_NAME = /[\u00AD\u034F\u061C\u115F\u1160\u17B4\u17B5\u180B-\u180E\u200B-\u200F\u202A-\u202E\u2060-\u206F\u3164\uFE00-\uFE0F\uFEFF\uFFA0]/g;
+
 export function parseSavedReportName(raw: string):
   | { ok: true; name: string }
   | { ok: false; code: "SAVED_REPORT_NAME" | "SAVED_REPORT_NAME_LONG"; error: string } {
-  const name = raw.replace(/\s+/g, " ").trim();
+  const name = raw.replace(INVISIBLE_NAME, "").replace(/\s+/g, " ").trim();
   if (!name) {
     return { ok: false, code: savedReportCodes.SAVED_REPORT_NAME, error: reportCopy.nameRequired };
   }
@@ -166,8 +170,14 @@ function canonicalizeReport(kind: ReportKind, input: Record<string, string>, tod
   if (project) params.project = project;
   if (parsed.query.billable !== "all") params.billable = parsed.query.billable;
   if (parsed.query.groupBy !== defaultGroupBy(kind)) params.group = parsed.query.groupBy;
-  params.columns = (parsed.query.columns ?? []).join(",");
+  params.columns = storedColumns(kind, parsed.query.columns);
   return params;
+}
+
+/** Unknown column ids are dropped. An absent list is stored empty so defaults are not frozen in. */
+function storedColumns(kind: ReportKind, columns: string[] | null) {
+  if (!columns) return "";
+  return resolveColumns(kind, columns, true, true).join(",");
 }
 
 function canonicalizeTimeEdits(input: Record<string, string>, today: string) {
@@ -273,7 +283,7 @@ export async function createSavedReport(input: {
   if (!parsed.ok) return parsed;
   const params = scopeStoredParams(input.actor, parsed.reportType, parsed.params);
   const existing = await prisma.savedReport.findFirst({
-    where: { createdById: input.actor.id, name: input.name },
+    where: nameWhere(input.actor.id, input.name),
     select: { id: true },
   });
   if (existing) {
@@ -306,6 +316,13 @@ export async function createSavedReport(input: {
   }
 }
 
+function nameWhere(createdById: string, name: string) {
+  return {
+    createdById,
+    name: { equals: name, mode: "insensitive" as const },
+  };
+}
+
 function isDuplicateName(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
@@ -323,7 +340,7 @@ export async function renameSavedReport(input: {
     return { ok: false as const, code: savedReportCodes.SAVED_REPORT_FORBIDDEN, error: reportCopy.savedForbidden };
   }
   const duplicate = await prisma.savedReport.findFirst({
-    where: { createdById: existing.createdById, name: input.name, NOT: { id: existing.id } },
+    where: { ...nameWhere(existing.createdById, input.name), NOT: { id: existing.id } },
     select: { id: true },
   });
   if (duplicate) {

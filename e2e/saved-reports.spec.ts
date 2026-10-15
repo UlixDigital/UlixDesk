@@ -9,11 +9,6 @@ async function shot(page: Page, testInfo: TestInfo, name: string) {
   const dir = process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
   await mkdir(dir, { recursive: true });
   await page.screenshot({ path: `${dir}/${name}.png`, fullPage: true });
-  await mkdir("/opt/cursor/artifacts/screenshots", { recursive: true });
-  await page.screenshot({
-    path: `/opt/cursor/artifacts/screenshots/${name}.png`,
-    fullPage: true,
-  });
 }
 
 test("saved reports follow the role rules", async ({ browser }, testInfo) => {

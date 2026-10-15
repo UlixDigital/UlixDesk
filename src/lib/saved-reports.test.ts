@@ -25,7 +25,7 @@ describe("saved report params", () => {
         project: "",
         billable: "billable",
         group: "client",
-        columns: "hours,amount",
+        columns: "hours,not-a-column,amount",
         evil: "1",
       },
       today,
@@ -95,6 +95,11 @@ describe("saved report params", () => {
       name: "October activity",
     });
     expect(parseSavedReportName("   ").ok).toBe(false);
+    expect(parseSavedReportName("\u200B\uFEFF").ok).toBe(false);
+    expect(parseSavedReportName("October\u200B activity")).toEqual({
+      ok: true,
+      name: "October activity",
+    });
     expect(parseSavedReportName("a".repeat(81)).ok).toBe(false);
   });
 

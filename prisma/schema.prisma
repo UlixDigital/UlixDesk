@@ -230,6 +230,8 @@ model SavedReport {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
+  /// Exact uniqueness for Prisma. Case-insensitive uniqueness is
+  /// SavedReport_createdById_lower_name_key (lower(name)).
   @@unique([createdById, name])
   @@index([visibility])
 }

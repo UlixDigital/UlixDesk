@@ -56,8 +56,10 @@ export function pdfPlainText(buffer: Buffer) {
 
 export function renderReportPdf(input: PdfReportInput): Promise<Buffer> {
   return new Promise((resolve, reject) => {
+    const wide = (input.table?.columns.length ?? 0) >= 7;
     const doc = new PDFDocument({
-      size: "A4",
+      size: wide ? "LETTER" : "A4",
+      layout: wide ? "landscape" : "portrait",
       margin: MARGIN,
       bufferPages: true,
       compress: input.compress !== false,
@@ -140,17 +142,53 @@ function newPage(doc: Doc, title: string) {
   drawContinuedHeader(doc, title);
 }
 
-function columnWidths(columns: PdfColumn[], total: number) {
-  const weights = columns.map((column) => (column.align === "right" ? 1 : 1.7));
-  const sum = weights.reduce((totalWeight, weight) => totalWeight + weight, 0);
-  return weights.map((weight) => (weight / sum) * total);
+/** Amount columns keep the width of their header and widest value so a total stays on one line. */
+function columnWidths(
+  doc: Doc,
+  columns: PdfColumn[],
+  rows: string[][],
+  totals: string[] | null,
+  total: number,
+) {
+  const sample = rows.slice(0, 40);
+  const preferred = columns.map((column, index) => {
+    doc.font("Helvetica-Bold").fontSize(8);
+    let width = doc.widthOfString(column.label);
+    const values = sample.map((row) => row[index] ?? "");
+    if (totals) values.push(totals[index] ?? "");
+    for (const value of values) {
+      doc.font(column.align === "right" ? "Helvetica-Bold" : "Helvetica").fontSize(8);
+      width = Math.max(width, doc.widthOfString(value));
+    }
+    return Math.ceil(width) + 10;
+  });
+  const sum = preferred.reduce((acc, width) => acc + width, 0);
+  if (sum <= total) {
+    const flex = columns
+      .map((column, index) => (column.align === "left" ? index : -1))
+      .filter((index) => index >= 0);
+    const targets = flex.length > 0 ? flex : columns.map((_, index) => index);
+    const extra = (total - sum) / targets.length;
+    return preferred.map((width, index) => (targets.includes(index) ? width + extra : width));
+  }
+  const rightSum = preferred.reduce(
+    (acc, width, index) => acc + (columns[index]?.align === "right" ? width : 0),
+    0,
+  );
+  const leftSum = sum - rightSum;
+  if (rightSum >= total || leftSum <= 0) {
+    const scale = total / sum;
+    return preferred.map((width) => width * scale);
+  }
+  const scale = (total - rightSum) / leftSum;
+  return preferred.map((width, index) => (columns[index]?.align === "right" ? width : width * scale));
 }
 
 function drawTable(doc: Doc, title: string, table: PdfTable) {
-  const widths = columnWidths(table.columns, contentWidth(doc));
+  const widths = columnWidths(doc, table.columns, table.rows, table.totals, contentWidth(doc));
   let y = drawTableHeader(doc, table.columns, widths, doc.y);
   for (const row of table.rows) {
-    const height = measureRow(doc, row, widths, false);
+    const height = measureRow(doc, table.columns, row, widths, false);
     if (y + height > contentBottom(doc)) {
       newPage(doc, title);
       y = drawTableHeader(doc, table.columns, widths, doc.y);
@@ -161,7 +199,7 @@ function drawTable(doc: Doc, title: string, table: PdfTable) {
     doc.y = y;
     return;
   }
-  const height = measureRow(doc, table.totals, widths, true);
+  const height = measureRow(doc, table.columns, table.totals, widths, true);
   if (y + height > contentBottom(doc)) {
     newPage(doc, title);
     y = drawTableHeader(doc, table.columns, widths, doc.y);
@@ -188,10 +226,11 @@ function drawTableHeader(doc: Doc, columns: PdfColumn[], widths: number[], y: nu
   return y + height;
 }
 
-function measureRow(doc: Doc, cells: string[], widths: number[], total: boolean) {
+function measureRow(doc: Doc, columns: PdfColumn[], cells: string[], widths: number[], total: boolean) {
   doc.font(total ? "Helvetica-Bold" : "Helvetica").fontSize(8);
   let height = 16;
   cells.forEach((cell, index) => {
+    if (columns[index]?.align === "right") return;
     const textHeight = doc.heightOfString(cell || " ", {
       width: Math.max((widths[index] ?? 40) - 6, 8),
     });
@@ -220,10 +259,12 @@ function drawRow(
   doc.font(total ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(INK);
   let x = MARGIN;
   cells.forEach((cell, index) => {
+    const align = columns[index]?.align ?? "left";
     doc.text(cell, x + 3, y + 4, {
       width: Math.max((widths[index] ?? 40) - 6, 8),
-      align: columns[index]?.align ?? "left",
+      align,
       height: Math.max(height - 6, 8),
+      lineBreak: align === "right" ? false : undefined,
     });
     x += widths[index] ?? 0;
   });
@@ -341,11 +382,15 @@ function stampPageNumbers(doc: Doc) {
   const range = doc.bufferedPageRange();
   for (let index = 0; index < range.count; index += 1) {
     doc.switchToPage(range.start + index);
+    // The number sits in the bottom margin. Leaving the margin in place makes
+    // pdfkit open a page that contains only the number.
+    doc.page.margins.bottom = 0;
     doc.font("Helvetica").fontSize(8).fillColor(MUTED);
-    doc.text(`Page ${index + 1} of ${range.count}`, MARGIN, doc.page.height - MARGIN + 8, {
+    doc.text(`Page ${index + 1} of ${range.count}`, MARGIN, doc.page.height - 24, {
       width: contentWidth(doc),
       align: "right",
       lineBreak: false,
+      height: 12,
     });
   }
 }

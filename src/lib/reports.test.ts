@@ -115,6 +115,31 @@ describe("report totals", () => {
     });
     expect(member.columns.map((column) => column.id).join(" ")).not.toContain("amount");
     expect(reportToCsv(member)).not.toMatch(/USD|JPY|Amount/);
+
+    const memberCsv = reportToCsv(
+      buildReport({
+        kind: "time-activity",
+        entries: [
+          entry({ id: "rated-hidden", rate: null }),
+          entry({
+            id: "off",
+            projectId: "internal",
+            projectName: "Internal",
+            billable: false,
+            rate: null,
+          }),
+        ],
+        ...range,
+        groupBy: "project",
+        columns: ["hours", "billableHours", "amount"],
+        showMoney: false,
+        manager: false,
+      }),
+    );
+    expect(memberCsv).toContain(reportCopy.statusBillable);
+    expect(memberCsv).toContain(reportCopy.statusNonBillable);
+    expect(memberCsv).not.toContain(reportCopy.statusNoRate);
+    expect(memberCsv).not.toMatch(/USD|JPY|Amount/);
     const csv = reportToCsv(owner);
     expect(csv).toContain("Hours (decimal)");
     expect(csv).toContain("Billable hours (decimal)");

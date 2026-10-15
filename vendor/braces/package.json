@@ -1,7 +1,7 @@
 {
   "name": "braces",
-  "description": "Local depth-guarded build of braces 3.0.3 (MIT, Jon Schlinkert). Version 3.0.4 adds a nesting cap for GHSA-vfj7-8cjw-p6xm. Upstream has not published a release past 3.0.3.",
-  "version": "3.0.4",
+  "description": "braces 3.0.3 (MIT, Jon Schlinkert) plus a local nesting-depth cap. See README.md. This is not a newer upstream release.",
+  "version": "3.0.3",
   "homepage": "https://github.com/micromatch/braces",
   "author": "Jon Schlinkert (https://github.com/jonschlinkert)",
   "repository": "micromatch/braces",
