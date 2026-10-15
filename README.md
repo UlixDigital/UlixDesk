@@ -26,7 +26,7 @@ npm run dev
 
 `npm run db:up` starts Postgres from `docker-compose.yml` and publishes it on `127.0.0.1:5432` only. The first start also creates `ulixdesk_test` and `ulixdesk_e2e`, so unit tests and Playwright do not use the dev database.
 
-`npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). Copy `.env.example` to `.env` (`.env` is not committed). The local bootstrap owner is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, change that password under Extension access, then remove `ULIXDESK_BOOTSTRAP_PASSWORD` from `.env` if this database will keep being used. Clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, extension tokens and the password form at `/settings`, and the team page at `/team` for owners and admins.
+`npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). Copy `.env.example` to `.env` (`.env` is not committed). The local bootstrap owner is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, change that password under Extension access, then remove `ULIXDESK_BOOTSTRAP_PASSWORD` from `.env` if this database will keep being used. Clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, manual time edits at `/reports/manual-time-edits`, extension tokens and the password form at `/settings`, and the team page at `/team` for owners and admins.
 
 A new database starts empty. To copy a Phase 1 SQLite file after the owner exists, see [docs/DEPLOY.md](docs/DEPLOY.md). `npm run import:sqlite -- --from <path> --dry-run` prints counts and writes nothing.
 
@@ -286,12 +286,18 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - A non-billable project is not billed, even when an entry is marked billable.
 - See [docs/RATES.md](docs/RATES.md) for rounding, the error codes, and the migration defaults.
 
+## What shipped in Slice 9
+
+- An append-only log of every time entry add, edit, and delete, plus timer start and stop, from the web app, the Chrome extension, and the access-token API. The log row is written in the same transaction as the change. Deleting an entry keeps the log. The log stores no amounts.
+- Manual time edits at `/reports/manual-time-edits`. Owners and admins see everyone. Members see only their own entries. Filters cover the date range in the workspace timezone, member, client, project, and action. An edit by someone else is marked, for example “Edited by Jane for Sam”.
+- Entries that already existed before the log have no history. The report says so. See [docs/TIME_CHANGES.md](docs/TIME_CHANGES.md).
+
 ## Deferred
 
 - Chrome Web Store publishing
 - Screenshots, activity, and idle tracking
 - Approvals and reasons
-- Reporting beyond the daily and weekly timesheets
+- Reporting beyond timesheets and manual time edits (time and activity, saved reports, CSV, and PDF)
 - Pay rates, budgets, and to-dos
 - Import, duplicate, and transfer
 - Invoicing, auto-invoicing, invoice notes, tax, and net terms

@@ -234,23 +234,12 @@ export function WeeklyTimesheet({
                       >
                         {formatTrackedDuration(value)}
                       </Link>
-                      {showMoney
-                        ? formatMoneyTotals(row.dayMoney[index] ?? []).map((line) => (
-                            <span key={line} className="mt-1 block text-[11px] leading-snug font-normal text-slate-600">
-                              {line}
-                            </span>
-                          ))
-                        : null}
-                      {showMoney && row.dayNoAmount[index] ? (
-                        <span className="mt-1 block text-[11px] leading-snug font-normal">
-                          <MoneyAmount amount={null} />
-                        </span>
-                      ) : null}
-                      {row.dayNonBillable[index] ? (
-                        <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-600">
-                          {rateCopy.nonBillable}
-                        </span>
-                      ) : null}
+                      {showMoney ? <MoneyLines totals={row.dayMoney[index] ?? []} /> : null}
+                      <AmountMarks
+                        showMoney={showMoney}
+                        noAmount={row.dayNoAmount[index]}
+                        nonBillable={row.dayNonBillable[index]}
+                      />
                       {row.continuesFromPrevious[index] ? (
                         <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-500">
                           {timeCopy.continuesPrevious}
@@ -268,8 +257,13 @@ export function WeeklyTimesheet({
                 </td>
               ))}
               <td className="border-b border-slate-100 px-4 py-3 text-right font-semibold tabular-nums text-ink">
-                {formatTrackedDuration(row.totalMs)}
+                <div>{formatTrackedDuration(row.totalMs)}</div>
                 {showMoney ? <MoneyLines totals={row.totalMoney} /> : null}
+                <AmountMarks
+                  showMoney={showMoney}
+                  noAmount={row.dayNoAmount.some(Boolean)}
+                  nonBillable={row.dayNonBillable.some(Boolean)}
+                />
               </td>
             </tr>
           ))}
@@ -300,6 +294,11 @@ export function WeeklyTimesheet({
             <td className="border-t border-slate-200 px-4 py-3 text-right font-semibold tabular-nums text-ink">
               <div>{formatTrackedDuration(totalMs)}</div>
               {showMoney ? <MoneyLines totals={moneyTotals} /> : null}
+              <AmountMarks
+                showMoney={showMoney}
+                noAmount={rows.some((row) => row.dayNoAmount.some(Boolean))}
+                nonBillable={rows.some((row) => row.dayNonBillable.some(Boolean))}
+              />
             </td>
           </tr>
         </tfoot>
@@ -341,9 +340,41 @@ function MoneyLines({ totals }: { totals: MoneyTotal[] }) {
   const lines = formatMoneyTotals(totals);
   if (lines.length === 0) return null;
   return (
-    <span className="mt-1 block text-[11px] leading-snug font-normal text-slate-600">
-      {lines.join(" · ")}
-    </span>
+    <>
+      {lines.map((line) => (
+        <span
+          key={line}
+          className="mt-1 block whitespace-nowrap text-[11px] leading-snug font-normal text-slate-600"
+        >
+          {line}
+        </span>
+      ))}
+    </>
+  );
+}
+
+function AmountMarks({
+  showMoney,
+  noAmount,
+  nonBillable,
+}: {
+  showMoney: boolean;
+  noAmount: boolean;
+  nonBillable: boolean;
+}) {
+  return (
+    <>
+      {showMoney && noAmount ? (
+        <span className="mt-1 block text-[11px] leading-snug font-normal">
+          <MoneyAmount amount={null} />
+        </span>
+      ) : null}
+      {nonBillable ? (
+        <span className="mt-1 block whitespace-nowrap text-[11px] leading-snug font-normal text-slate-600">
+          {rateCopy.nonBillable}
+        </span>
+      ) : null}
+    </>
   );
 }
 

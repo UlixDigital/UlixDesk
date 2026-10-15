@@ -44,6 +44,7 @@ describe("bill rate field errors", () => {
     expect(amount.getAttribute("aria-invalid")).toBe("true");
     expect(amount.getAttribute("aria-describedby")).toContain(error.id);
     expect(amount.className).toContain(ui.inputError);
+    expect(amount.className).not.toContain("border-slate-300");
     expect(error.textContent).toBe(rateCopy.amountInvalid);
     expect(document.getElementById("client-rate-date")?.getAttribute("aria-invalid")).toBeNull();
 

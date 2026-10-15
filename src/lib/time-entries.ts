@@ -1,5 +1,11 @@
 import { prisma } from "@/lib/db";
 import {
+  changeContext,
+  recordTimeChange,
+  timeChangeSnapshot,
+  type ChangeContext,
+} from "@/lib/time-changes";
+import {
   MAX_ENTRY_MS,
   MIN_TIMER_MS,
   NOTE_MAX,
@@ -269,24 +275,41 @@ export async function hasOverlap(input: {
   });
 }
 
-export async function createManualEntry(input: ManualEntryInput, now: Date, userId: string) {
+export async function createManualEntry(
+  input: ManualEntryInput,
+  now: Date,
+  userId: string,
+  change?: Partial<ChangeContext>,
+) {
   const overlap = await hasOverlap({
     startedAt: input.startedAt,
     endedAt: input.endedAt,
     now,
     userId,
   });
-  const created = await prisma.timeEntry.create({
-    data: {
-      projectId: input.projectId,
-      userId,
-      startedAt: input.startedAt,
-      endedAt: input.endedAt,
-      billable: input.billable,
-      note: input.note,
-      source: "manual",
-    },
-    include: entryInclude,
+  const context = changeContext(userId, now, change);
+  const created = await prisma.$transaction(async (tx) => {
+    const row = await tx.timeEntry.create({
+      data: {
+        projectId: input.projectId,
+        userId,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        billable: input.billable,
+        note: input.note,
+        source: "manual",
+      },
+      include: entryInclude,
+    });
+    await recordTimeChange(tx, {
+      ...context,
+      timeEntryId: row.id,
+      action: "added",
+      entryUserId: row.userId,
+      before: null,
+      after: timeChangeSnapshot(row, row.project.client?.id ?? null),
+    });
+    return row;
   });
   return { entry: toRecord(created), overlap };
 }
@@ -296,11 +319,8 @@ export async function updateManualEntry(
   input: ManualEntryInput,
   now: Date,
   userId: string,
+  change?: Partial<ChangeContext>,
 ) {
-  const existing = await prisma.timeEntry.findFirst({
-    where: { id, userId },
-  });
-  if (!existing || !existing.endedAt) return null;
   const overlap = await hasOverlap({
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -308,26 +328,57 @@ export async function updateManualEntry(
     now,
     userId,
   });
-  const updated = await prisma.timeEntry.update({
-    where: { id },
-    data: {
-      projectId: input.projectId,
-      startedAt: input.startedAt,
-      endedAt: input.endedAt,
-      billable: input.billable,
-      note: input.note,
-    },
-    include: entryInclude,
+  const context = changeContext(userId, now, change);
+  const updated = await prisma.$transaction(async (tx) => {
+    const existing = await tx.timeEntry.findFirst({
+      where: { id, userId },
+      include: entryInclude,
+    });
+    if (!existing || !existing.endedAt) return null;
+    const row = await tx.timeEntry.update({
+      where: { id },
+      data: {
+        projectId: input.projectId,
+        startedAt: input.startedAt,
+        endedAt: input.endedAt,
+        billable: input.billable,
+        note: input.note,
+      },
+      include: entryInclude,
+    });
+    await recordTimeChange(tx, {
+      ...context,
+      timeEntryId: row.id,
+      action: "edited",
+      entryUserId: row.userId,
+      before: timeChangeSnapshot(existing, existing.project.client?.id ?? null),
+      after: timeChangeSnapshot(row, row.project.client?.id ?? null),
+    });
+    return row;
   });
+  if (!updated) return null;
   return { entry: toRecord(updated), overlap };
 }
 
-export async function deleteTimeEntry(id: string, userId: string | null) {
-  const existing = await getTimeEntry(id, userId);
-  if (!existing) return { ok: false as const, reason: "missing" as const };
-  if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
-  await prisma.timeEntry.delete({ where: { id } });
-  return { ok: true as const, entry: existing };
+export async function deleteTimeEntry(id: string, userId: string | null, change: ChangeContext) {
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.timeEntry.findFirst({
+      where: { id, ...(userId ? { userId } : {}) },
+      include: entryInclude,
+    });
+    if (!existing) return { ok: false as const, reason: "missing" as const };
+    if (!existing.endedAt) return { ok: false as const, reason: "running" as const };
+    await recordTimeChange(tx, {
+      ...change,
+      timeEntryId: existing.id,
+      action: "deleted",
+      entryUserId: existing.userId,
+      before: timeChangeSnapshot(existing, existing.project.client?.id ?? null),
+      after: null,
+    });
+    await tx.timeEntry.delete({ where: { id } });
+    return { ok: true as const, entry: toRecord(existing) };
+  });
 }
 
 export async function getRunningTimer(userId: string) {
@@ -348,6 +399,8 @@ export async function startTimer(input: {
   note: string;
   now: Date;
   userId: string;
+  actorId?: string;
+  source?: ChangeContext["source"];
 }): Promise<
   | { ok: true; timer: TimeEntryRecord }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
@@ -356,6 +409,10 @@ export async function startTimer(input: {
   if (!projectId) return { ok: false, code: "project-required" };
   const note = normalizeNote(input.note);
   if (note.length > NOTE_MAX) return { ok: false, code: "note-too-long" };
+  const context = changeContext(input.userId, input.now, {
+    actorId: input.actorId,
+    source: input.source,
+  });
 
   try {
     const timer = await prisma.$transaction(async (tx) => {
@@ -392,6 +449,14 @@ export async function startTimer(input: {
       await tx.runningTimer.create({
         data: { id: input.userId, timeEntryId: created.id },
       });
+      await recordTimeChange(tx, {
+        ...context,
+        timeEntryId: created.id,
+        action: "started",
+        entryUserId: created.userId,
+        before: null,
+        after: timeChangeSnapshot(created, created.project.client?.id ?? null),
+      });
       return { timer: toRecord(created) };
     });
 
@@ -408,10 +473,15 @@ export async function startTimer(input: {
   }
 }
 
-export async function stopTimer(now: Date, userId: string): Promise<
+export async function stopTimer(
+  now: Date,
+  userId: string,
+  change?: Partial<ChangeContext>,
+): Promise<
   | { ok: true; entry: TimeEntryRecord; capped: boolean; overlap: boolean }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
 > {
+  const context = changeContext(userId, now, change);
   try {
     const claimed = await prisma.$transaction(async (tx) => {
       const row = await tx.runningTimer.findUnique({
@@ -451,6 +521,14 @@ export async function stopTimer(now: Date, userId: string): Promise<
       const updated = await tx.timeEntry.findUniqueOrThrow({
         where: { id: row.timeEntry.id },
         include: entryInclude,
+      });
+      await recordTimeChange(tx, {
+        ...context,
+        timeEntryId: updated.id,
+        action: "stopped",
+        entryUserId: updated.userId,
+        before: timeChangeSnapshot(row.timeEntry, row.timeEntry.project.client?.id ?? null),
+        after: timeChangeSnapshot(updated, updated.project.client?.id ?? null),
       });
       return {
         ok: true as const,

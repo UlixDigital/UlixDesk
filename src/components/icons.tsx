@@ -87,3 +87,16 @@ export function ClockIcon(props: IconProps) {
     </svg>
   );
 }
+
+export function HistoryIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4.75 12a7.25 7.25 0 1 0 2.12-5.13M4.75 4.75v4.5h4.5"
+      />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 8.25V12l2.25 1.5" />
+    </svg>
+  );
+}

@@ -30,6 +30,7 @@ function revalidateTimeViews(clientId: string | null) {
   revalidatePath("/timesheets", "layout");
   revalidatePath("/projects", "layout");
   revalidatePath("/clients", "layout");
+  revalidatePath("/reports/manual-time-edits");
   if (clientId) revalidatePath(`/clients/${clientId}/edit`);
 }
 
@@ -63,9 +64,10 @@ export async function saveTimeEntryAction(
   }
 
   let saved: { overlap: boolean; clientId: string | null };
+  const change = { actorId: gate.user.id, source: "web" as const, changedAt: now };
   try {
     if (!existing) {
-      const created = await createManualEntry(result.data, now, gate.user.id);
+      const created = await createManualEntry(result.data, now, gate.user.id, change);
       saved = {
         overlap: created.overlap,
         clientId: created.entry.project.client?.id ?? null,
@@ -76,6 +78,7 @@ export async function saveTimeEntryAction(
         result.data,
         now,
         existing.userId ?? gate.user.id,
+        change,
       );
       if (!updated) return { errors: { form: timeCopy.entryGone }, values };
       saved = {
@@ -104,7 +107,11 @@ export async function deleteTimeEntryAction(formData: FormData) {
   const date = String(formData.get("date") ?? "");
   if (!id) return;
   const scope = canManageWorkspace(gate.user.role) ? null : gate.user.id;
-  const deleted = await deleteTimeEntry(id, scope);
+  const deleted = await deleteTimeEntry(id, scope, {
+    actorId: gate.user.id,
+    source: "web",
+    changedAt: new Date(),
+  });
   if (!deleted.ok) {
     if (deleted.reason === "running") {
       redirect(timesheetsHref({ date: date || undefined, notice: "running" }));
@@ -121,11 +128,14 @@ export async function startTimerAction(
 ): Promise<TimerActionState> {
   const gate = await gateMutation();
   if (!gate.ok) return { error: gate.error, warnings: [] };
+  const now = new Date();
   const result = await startTimer({
     projectId: String(formData.get("projectId") ?? ""),
     note: "",
-    now: new Date(),
+    now,
     userId: gate.user.id,
+    actorId: gate.user.id,
+    source: "web",
   });
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };
@@ -142,7 +152,12 @@ export async function stopTimerAction(
   void formData;
   const gate = await gateMutation();
   if (!gate.ok) return { error: gate.error, warnings: [] };
-  const result = await stopTimer(new Date(), gate.user.id);
+  const now = new Date();
+  const result = await stopTimer(now, gate.user.id, {
+    actorId: gate.user.id,
+    source: "web",
+    changedAt: now,
+  });
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };
   }

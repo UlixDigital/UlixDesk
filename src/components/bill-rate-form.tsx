@@ -2,10 +2,9 @@
 
 import { useActionState, useState } from "react";
 import type { RateFormState } from "@/app/rates/actions";
-import { cn } from "@/lib/cn";
 import { moneyPlaceholder } from "@/lib/money";
 import { effectiveFromHint, rateCodes, rateCopy } from "@/lib/rate-copy";
-import { ui } from "@/lib/ui";
+import { textInputClass, ui } from "@/lib/ui";
 
 type SaveAction = (previous: RateFormState, formData: FormData) => Promise<RateFormState>;
 
@@ -76,7 +75,7 @@ export function BillRateForm({
             onChange={(event) => setUserId(event.target.value)}
             aria-invalid={memberInvalid || undefined}
             aria-describedby={memberInvalid ? errorId : undefined}
-            className={cn(ui.input, "mt-1.5", memberInvalid && ui.inputError)}
+            className={`${textInputClass(memberInvalid)} mt-1.5`}
           >
             <option value="">{rateCopy.memberPlaceholder}</option>
             {members.map((member) => (
@@ -106,7 +105,7 @@ export function BillRateForm({
             aria-describedby={
               amountInvalid ? `${amountId}-currency ${errorId}` : `${amountId}-currency`
             }
-            className={cn(ui.input, "mt-1.5", amountInvalid && ui.inputError)}
+            className={`${textInputClass(amountInvalid)} mt-1.5`}
           />
           <p id={`${amountId}-currency`} className="mt-1.5 text-xs text-slate-500">
             {currency}
@@ -125,7 +124,7 @@ export function BillRateForm({
             onChange={(event) => setEffectiveFrom(event.target.value)}
             aria-invalid={dateInvalid || undefined}
             aria-describedby={dateInvalid ? `${dateId}-hint ${errorId}` : `${dateId}-hint`}
-            className={cn(ui.input, "mt-1.5", dateInvalid && ui.inputError)}
+            className={`${textInputClass(dateInvalid)} mt-1.5`}
           />
           <p id={`${dateId}-hint`} className="mt-1.5 text-xs text-slate-500">
             {effectiveFromHint(timeZone)}

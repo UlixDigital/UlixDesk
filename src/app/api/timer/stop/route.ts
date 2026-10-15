@@ -24,7 +24,12 @@ export async function POST(request: Request) {
     return jsonApi(request, apiError(timeCopy.invalidJsonBody, apiCodes.INVALID_JSON), 400);
   }
 
-  const result = await stopTimer(new Date(), actor.userId);
+  const now = new Date();
+  const result = await stopTimer(now, actor.userId, {
+    actorId: actor.userId,
+    source: actor.source,
+    changedAt: now,
+  });
   if (!result.ok) {
     const status = result.code === "too-short" ? 409 : 404;
     return jsonApi(
