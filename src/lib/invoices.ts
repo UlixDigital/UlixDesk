@@ -104,6 +104,8 @@ export async function allocateInvoiceNumber(tx: Tx) {
   throw new Error("Could not allocate an invoice number.");
 }
 
+const paymentOrder = [{ paidOn: "desc" as const }, { createdAt: "desc" as const }];
+
 const invoiceInclude = {
   client: {
     select: {
@@ -116,7 +118,18 @@ const invoiceInclude = {
     },
   },
   lines: { orderBy: { position: "asc" as const }, include: { timeLinks: { select: { timeEntryId: true } } } },
-  payments: { select: { id: true, amountMinor: true, paidOn: true, method: true, note: true } },
+  payments: {
+    orderBy: paymentOrder,
+    select: {
+      id: true,
+      amountMinor: true,
+      paidOn: true,
+      method: true,
+      note: true,
+      createdAt: true,
+      recordedBy: { select: { name: true } },
+    },
+  },
   statusEvents: {
     orderBy: { createdAt: "asc" as const },
     include: { actor: { select: { name: true } } },

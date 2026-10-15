@@ -17,6 +17,14 @@ import {
   timeChangeCopy,
   type ChangeActionFilter,
 } from "@/lib/time-change-copy";
+import {
+  agingParamKeys,
+  clientInvoiceParamKeys,
+  isInvoiceMoneyReport,
+  storedAgingParams,
+  storedClientInvoiceParams,
+} from "@/lib/invoice-reports";
+import { invoiceReportCopy } from "@/lib/invoice-report-copy";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 export const SAVED_REPORT_NAME_MAX = 80;
@@ -27,6 +35,8 @@ export const savedReportTypes = [
   "weekly",
   "work-sessions",
   "manual-time-edits",
+  "client-invoices",
+  "invoice-aging",
 ] as const;
 
 export type SavedReportType = (typeof savedReportTypes)[number];
@@ -55,7 +65,18 @@ export function isSavedReportType(value: string): value is SavedReportType {
 
 export function savedReportTitle(reportType: SavedReportType) {
   if (reportType === "manual-time-edits") return timeChangeCopy.pageTitle;
+  if (reportType === "client-invoices") return invoiceReportCopy.clientTitle;
+  if (reportType === "invoice-aging") return invoiceReportCopy.agingTitle;
   return reportTitle(reportType);
+}
+
+function isTimeReportType(reportType: SavedReportType): reportType is ReportKind {
+  return (
+    reportType === "time-activity" ||
+    reportType === "daily" ||
+    reportType === "weekly" ||
+    reportType === "work-sessions"
+  );
 }
 
 /**
@@ -153,7 +174,7 @@ export function parseStoredReportParams(
   if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
     return { ok: false, code: savedReportCodes.SAVED_REPORT_PARAMS };
   }
-  const keys = reportType === "manual-time-edits" ? timeEditParamKeys : reportParamKeys;
+  const keys = reportFormKeys(reportType);
   const input: Record<string, string> = {};
   for (const key of keys) {
     const value = ownString(raw, key);
@@ -164,6 +185,13 @@ export function parseStoredReportParams(
   if (reportType === "manual-time-edits") {
     return { ok: true, reportType, params: canonicalizeTimeEdits(input, today) };
   }
+  if (reportType === "client-invoices") {
+    return { ok: true, reportType, params: storedClientInvoiceParams(input, today) };
+  }
+  if (reportType === "invoice-aging") {
+    return { ok: true, reportType, params: storedAgingParams(input, today) };
+  }
+  if (!isTimeReportType(reportType)) return { ok: false, code: savedReportCodes.SAVED_REPORT_TYPE };
   return { ok: true, reportType, params: canonicalizeReport(reportType, input, today) };
 }
 
@@ -216,6 +244,7 @@ export function scopeStoredParams(
 ) {
   const next = { ...params };
   if (!canManageWorkspace(actor.role)) {
+    if (isInvoiceMoneyReport(reportType)) return {};
     delete next.member;
     if (next.group === "member") delete next.group;
     if (reportType !== "manual-time-edits") {
@@ -236,7 +265,7 @@ export function savedReportHref(
   options: { includeMember: boolean },
 ) {
   const search = new URLSearchParams();
-  const keys = reportType === "manual-time-edits" ? timeEditParamKeys : reportParamKeys;
+  const keys = reportFormKeys(reportType);
   for (const key of keys) {
     if (key === "member" && !options.includeMember) continue;
     const value = params[key];
@@ -247,7 +276,13 @@ export function savedReportHref(
     if (value) search.set(key, value);
   }
   const path =
-    reportType === "manual-time-edits" ? "/reports/manual-time-edits" : `/reports/${reportType}`;
+    reportType === "manual-time-edits"
+      ? "/reports/manual-time-edits"
+      : reportType === "client-invoices"
+        ? "/reports/client-invoices"
+        : reportType === "invoice-aging"
+          ? "/reports/invoice-aging"
+          : `/reports/${reportType}`;
   const query = search.toString();
   return query ? `${path}?${query}` : path;
 }
@@ -270,7 +305,9 @@ export async function listVisibleSavedReports(actor: { id: string; role: string 
     orderBy: [{ name: "asc" }, { id: "asc" }],
     include: { createdBy: { select: { name: true } } },
   });
-  return rows.map((row) => ({
+  return rows
+    .filter((row) => canManageWorkspace(actor.role) || !isInvoiceMoneyReport(row.reportType))
+    .map((row) => ({
     id: row.id,
     name: row.name,
     reportType: row.reportType,
@@ -289,6 +326,9 @@ export async function createSavedReport(input: {
   params: StoredParams;
   today: string;
 }) {
+  if (isInvoiceMoneyReport(input.reportType) && !canManageWorkspace(input.actor.role)) {
+    return { ok: false as const, code: savedReportCodes.SAVED_REPORT_TYPE, error: reportCopy.savedUnavailable };
+  }
   if (input.visibility === "shared" && !canManageWorkspace(input.actor.role)) {
     return { ok: false as const, code: savedReportCodes.SAVED_REPORT_SHARE, error: reportCopy.cannotShare };
   }
@@ -392,7 +432,10 @@ export function formParams(formData: FormData, keys: readonly string[]) {
 }
 
 export function reportFormKeys(reportType: SavedReportType) {
-  return reportType === "manual-time-edits" ? timeEditParamKeys : reportParamKeys;
+  if (reportType === "manual-time-edits") return timeEditParamKeys;
+  if (reportType === "client-invoices") return clientInvoiceParamKeys;
+  if (reportType === "invoice-aging") return agingParamKeys;
+  return reportParamKeys;
 }
 
 export type { ReportKind, ReportQuery, GroupBy, ChangeActionFilter };

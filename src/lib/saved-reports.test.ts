@@ -63,6 +63,25 @@ describe("saved report params", () => {
     expect(edits.params).toEqual({ from: "2000-01-01", to: "2026-10-18", action: "timer" });
   });
 
+  it("stores invoice report filters and drops drafts, voids, and amount columns for a member", () => {
+    const invoices = parseStoredReportParams(
+      "client-invoices",
+      { preset: "custom", from: "2026-01-01", to: "2026-10-15", status: "void", client: "bad id" },
+      today,
+    );
+    expect(invoices.ok).toBe(true);
+    if (!invoices.ok) return;
+    expect(invoices.params).toEqual({ preset: "custom", from: "2026-01-01", to: "2026-10-15" });
+    const aging = parseStoredReportParams("invoice-aging", { preset: "today", client: "client_1" }, today);
+    expect(aging.ok && aging.params).toEqual({ client: "client_1" });
+    expect(scopeStoredParams({ id: "mia", role: "member" }, "client-invoices", { status: "open", client: "c1" })).toEqual(
+      {},
+    );
+    expect(savedReportHref("invoice-aging", { preset: "custom", from: "2026-01-01", to: "2026-10-15" }, { includeMember: true })).toBe(
+      "/reports/invoice-aging?preset=custom&from=2026-01-01&to=2026-10-15",
+    );
+  });
+
   it("scopes a member to their own rows and blocks sharing", () => {
     const scoped = scopeStoredParams(
       { id: "mia", role: "member" },

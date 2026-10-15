@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SavedReportList, type SavedReportListItem } from "@/components/saved-report-list";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { budgetCopy } from "@/lib/budget-copy";
+import { invoiceReportCopy } from "@/lib/invoice-report-copy";
 import { reportCopy, savedReportErrorText, savedReportNotice } from "@/lib/report-copy";
 import { reportDescription, reportKinds, reportTitle } from "@/lib/report-query";
 import {
@@ -51,6 +52,20 @@ export default async function ReportsPage({
       title: budgetCopy.reportTitle,
       body: manager ? budgetCopy.reportBody : budgetCopy.reportMemberBody,
     },
+    ...(manager
+      ? [
+          {
+            href: "/reports/client-invoices",
+            title: invoiceReportCopy.clientTitle,
+            body: invoiceReportCopy.clientBody,
+          },
+          {
+            href: "/reports/invoice-aging",
+            title: invoiceReportCopy.agingTitle,
+            body: invoiceReportCopy.agingBody,
+          },
+        ]
+      : []),
   ];
   const today = todayInTimeZone(await getWorkspaceTimeZone());
   const saved = await listVisibleSavedReports(actor);

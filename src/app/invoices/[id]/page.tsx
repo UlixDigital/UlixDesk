@@ -5,9 +5,11 @@ import { InvoiceClientLink } from "@/components/invoice-client-link";
 import { InvoiceDeleteForm } from "@/components/invoice-delete-form";
 import { InvoiceDraftForm } from "@/components/invoice-draft-form";
 import { InvoiceHistory } from "@/components/invoice-history";
+import { PaymentHistory, RecordPaymentForm } from "@/components/invoice-payments";
 import { InvoiceSendDialog } from "@/components/invoice-send-dialog";
 import { InvoiceStatusActions } from "@/components/invoice-status-actions";
 import { publicOrigin } from "@/lib/auth";
+import { isOverdue } from "@/lib/invoice-balance";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
 import { clientLinkKeyMessage, clientLinkUrl, readClientLink } from "@/lib/invoice-link";
 import { unratedLineLabel } from "@/lib/invoice-lines";
@@ -17,6 +19,7 @@ import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { getInvoice, invoiceDateKey, unratedForInvoice } from "@/lib/invoices";
 import { formatMoney, formatMoneyNumber } from "@/lib/money";
 import { getCurrentUser } from "@/lib/session";
+import { todayInTimeZone } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { ui } from "@/lib/ui";
 
@@ -26,6 +29,9 @@ const notices: Record<string, string> = {
   voided: invoiceCopy.voided,
   reopened: invoiceCopy.reopened,
   sent: invoiceCopy.sent,
+  "payment-recorded": invoiceCopy.paymentRecorded,
+  "payment-corrected": invoiceCopy.paymentCorrected,
+  "payment-deleted": invoiceCopy.paymentDeleted,
 };
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -45,6 +51,11 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
   const issueDate = invoiceDateKey(invoice.issueDate);
   const dueDate = invoiceDateKey(invoice.dueDate);
   const settings = await getInvoiceSettings();
+  const today = todayInTimeZone(settings.timeZone);
+  const dueMinor = amountDueMinor(invoice.totalMinor, invoice.paidMinor);
+  const overdue = isOverdue({ dueDate, today, dueMinor });
+  const canRecord = (invoice.status === "open" || invoice.status === "partially_paid") && dueMinor > 0;
+  const showPayments = invoice.status === "open" || invoice.status === "paid" || invoice.status === "partially_paid";
   const link = await readClientLink(user.role, invoice.id);
   const origin = await publicOrigin();
   const linkPath = link?.active ? link.path : null;
@@ -78,7 +89,12 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
           <p className="mt-1 text-sm text-slate-600">
             {invoice.client.name}
             <span className="text-slate-400"> · </span>
-            {invoiceStatusLabel(invoice.status)}
+            <span id="invoice-status">{invoiceStatusLabel(invoice.status)}</span>
+            {overdue ? (
+              <span id="invoice-overdue" className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-950">
+                {invoiceCopy.overdue}
+              </span>
+            ) : null}
             <span className="text-slate-400"> · </span>
             {formatInvoiceDate(invoiceDateKey(invoice.periodStart))} – {formatInvoiceDate(invoiceDateKey(invoice.periodEnd))}
           </p>
@@ -87,6 +103,29 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
           {invoiceCopy.download}
         </a>
       </div>
+
+      {showPayments ? (
+        <dl id="invoice-balance" className="mt-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 text-sm sm:grid-cols-2">
+          <div>
+            <dt className="text-slate-500">{invoiceCopy.paid}</dt>
+            <dd id="invoice-paid" className="text-base font-semibold text-ink">
+              {formatMoney(invoice.paidMinor, invoice.currency)}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-slate-500">{invoiceCopy.amountDue}</dt>
+            <dd id="invoice-due" className="text-base font-semibold text-ink">
+              {formatMoney(dueMinor, invoice.currency)}
+            </dd>
+          </div>
+        </dl>
+      ) : null}
+
+      {overdue ? (
+        <p role="status" className="mt-4 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
+          {invoiceCopy.overdueBanner}
+        </p>
+      ) : null}
 
       {pageNotice ? (
         <p role="status" className="mt-6 rounded-lg border border-teal-200 bg-teal-50 px-3 py-2 text-sm text-teal-900">
@@ -116,6 +155,30 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
         )}
         {invoice.status === "open" || invoice.status === "void" ? (
           <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
+        ) : null}
+        {canRecord ? (
+          <RecordPaymentForm
+            invoiceId={invoice.id}
+            currency={invoice.currency}
+            today={today}
+            dueLabel={formatMoney(dueMinor, invoice.currency)}
+          />
+        ) : null}
+        {showPayments ? (
+          <PaymentHistory
+            invoiceId={invoice.id}
+            currency={invoice.currency}
+            payments={invoice.payments.map((payment) => ({
+              id: payment.id,
+              amountLabel: formatMoney(payment.amountMinor, invoice.currency),
+              amountValue: formatMoneyNumber(payment.amountMinor, invoice.currency),
+              paidOn: invoiceDateKey(payment.paidOn),
+              paidOnLabel: formatInvoiceDate(invoiceDateKey(payment.paidOn)),
+              method: payment.method,
+              note: payment.note,
+              recordedBy: payment.recordedBy.name,
+            }))}
+          />
         ) : null}
         <InvoiceHistory events={invoice.statusEvents} emails={invoice.emailsSent} timeZone={settings.timeZone} />
       </div>
@@ -237,7 +300,7 @@ function IssuedInvoice({
   return (
     <div className="mt-6 space-y-6">
       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-        {status === "void" ? invoiceCopy.voidBanner : invoiceCopy.readOnly}
+        {status === "void" ? invoiceCopy.voidBanner : status === "paid" ? invoiceCopy.paidBanner : invoiceCopy.readOnly}
       </p>
       {poNumber ? <p className="text-sm text-slate-700">PO {poNumber}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">

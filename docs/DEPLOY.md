@@ -173,7 +173,7 @@ Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
 
 ### Invoice email
 
-Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works.
+Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep **Send email** disabled. Copy link still works.
 
 #### Gmail SMTP for Anupa
 
@@ -183,7 +183,7 @@ Use these steps to send invoices from a Gmail account. Do staging first. Google 
 2. Turn on 2-Step Verification if it is off. Google will not create an app password until that is on. In Google Account, open **Security**, then **2-Step Verification**.
 3. Open **App passwords** (Google Account → Security → App passwords). If it is missing, 2-Step Verification is off, or a Workspace admin has turned app passwords off.
 4. Create an app password named `UlixDesk`. Copy the 16-character password. Google shows it once. Do not commit it.
-5. In the env file for that environment (`env/staging.env` or `env/production.env` on the server), set:
+5. In the env file for that environment (`/opt/ulixdesk/env/staging.env` or `/opt/ulixdesk/env/production.env`), set:
 
 ```bash
 INVOICE_SMTP_HOST=smtp.gmail.com
@@ -204,7 +204,7 @@ docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-s
 
 Use `app-production` for the live copy. `restart` does not reload the env file.
 
-7. Open an open invoice and choose **Send**. The button stays disabled while any of host, port, user, password, or From is blank. A void invoice has no send button.
+7. Open an open invoice and choose **Send**. In that dialog, **Send email** stays disabled while any of host, port, user, password, or From is blank. A void invoice has no **Send** button.
 
 `INVOICE_LINK_KEY` seals the client link so it can be shown again. It is 32 bytes, as base64 or as 64 hex characters. Generate a base64 key with:
 
@@ -212,7 +212,15 @@ Use `app-production` for the live copy. `restart` does not reload the env file.
 openssl rand -base64 32
 ```
 
-Use a different value on staging and production. `scripts/write-local-stack-env.mjs` writes a local stand-in into `env/staging.env` and `env/production.env` for the laptop stack, the same way it writes the other local secrets. Do not use those stand-ins on the real servers.
+Use a different value on staging and production. Put it in `/opt/ulixdesk/env/staging.env` or `/opt/ulixdesk/env/production.env`, then recreate that app container so it reads the file. From `/opt/ulixdesk`:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-staging
+```
+
+Use `app-production` for the live copy. `restart` does not reload the env file.
+
+`scripts/write-local-stack-env.mjs` writes a local stand-in into the laptop copies of those files, the same way it writes the other local secrets. Do not use those stand-ins on the real servers. The app refuses to start when `ULIXDESK_APP_HOSTS` contains `ulixdigital.com` and `INVOICE_LINK_KEY` is one of those stand-ins.
 
 Leave the key blank and creating or regenerating a link fails with a message on the invoice. Sending a draft also refuses, and does not mark the draft as issued, until the key is valid. Mark as issued still works without the key.
 

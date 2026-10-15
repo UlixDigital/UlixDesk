@@ -438,18 +438,22 @@ model InvoiceTime {
   @@index([invoiceLineId])
 }
 
-/// A payment recorded against an invoice. Recording payments is a later slice.
+/// A payment recorded against an open invoice. Money is integer minor units
+/// of the invoice currency. The database rejects a non-positive amount and
+/// a paid total above the invoice total, so an overpayment cannot be stored.
 model InvoicePayment {
   id           String   @id @default(cuid())
   invoiceId    String
   invoice      Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   amountMinor  Int
   paidOn       DateTime @db.Date
+  /// bank_transfer, card, cash, check, or other.
   method       String?
   note         String?
   recordedById String
   recordedBy   User     @relation(fields: [recordedById], references: [id], onDelete: Restrict)
   createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@index([invoiceId])
 }

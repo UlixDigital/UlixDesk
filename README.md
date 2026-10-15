@@ -28,7 +28,7 @@ npm run dev
 
 `npm run dev` listens on `127.0.0.1` only. Open [http://127.0.0.1:3000/login](http://127.0.0.1:3000/login). Copy `.env.example` to `.env` (`.env` is not committed). The local bootstrap owner is `owner@ulix.local` / `local-owner-password`. Those are local defaults, not production secrets. After sign-in, change that password under Extension access, then remove `ULIXDESK_BOOTSTRAP_PASSWORD` from `.env` if this database will keep being used. Clients are at [http://127.0.0.1:3000/clients](http://127.0.0.1:3000/clients), projects at `/projects`, timesheets at `/timesheets`, reports at `/reports` (including time edits at `/reports/manual-time-edits`), invoices at `/invoices` for owners and admins, extension tokens and the password form at `/settings`, and the team page at `/team` for owners and admins.
 
-Invoice bank account numbers are not in git. The saved default uses placeholders. To load them once, copy `secrets/invoice-bank-details.example.txt` to `secrets/invoice-bank-details.txt` (gitignored), replace the placeholders, and run `npm run invoice:seed-bank`. Lines that start with `#` are comments in that seed file and are not saved. On the invoice settings form, a line that starts with `#` is kept and printed. Blank lines at the start and end of the seed file are trimmed. That updates the workspace row only. It does not print the file. Issuing, voiding, the client link, and email are described in [docs/INVOICES.md](docs/INVOICES.md).
+Invoice bank account numbers are not in git. The saved default uses placeholders. To load them once, copy `secrets/invoice-bank-details.example.txt` to `secrets/invoice-bank-details.txt` (gitignored), replace the placeholders, and run `npm run invoice:seed-bank`. Lines that start with `#` are comments in that seed file and are not saved. On the invoice settings form, a line that starts with `#` is kept and printed. Blank lines at the start and end of the seed file are trimmed. That updates the workspace row only. It does not print the file. Issuing, voiding, payments, the client link, and email are described in [docs/INVOICES.md](docs/INVOICES.md). Client invoice and aging reports are at `/reports/client-invoices` and `/reports/invoice-aging` for owners and admins.
 
 A new database starts empty. To copy a Phase 1 SQLite file after the owner exists, see [docs/DEPLOY.md](docs/DEPLOY.md). `npm run import:sqlite -- --from <path> --dry-run` prints counts and writes nothing.
 
@@ -306,6 +306,14 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - Budgets on projects and clients, by hours or by cost in the client's currency. Total, weekly, or monthly, with an optional start date, in the workspace timezone. See [docs/BUDGETS.md](docs/BUDGETS.md).
 - In-app alerts at a percent of the budget. An optional project hard stop blocks new timers and manual entries once the budget is already used up, for the web app, the Chrome extension, and the API.
 - A Budgets report at `/reports/budgets`, with CSV and PDF export. Members see hours progress for projects they track, and no money.
+
+## What shipped in Slice 15
+
+- Record a full or partial payment on an open invoice: amount in the client's currency (a thousands comma is accepted, as in `1,000.00`), paid-on date, method, note, and who recorded it. The invoice keeps a payment history. Correct and delete update paid and amount due, and each change is written to the status history.
+- The status stays open while a balance remains and becomes paid when the amount due is 0. Overdue appears when the due date has passed in Asia/Colombo and a balance remains. The invoice page, the public client page, and the PDF show paid, amount due, and overdue.
+- An overpayment is refused. No credit balance is stored.
+- Void and reopen stay blocked while any payment exists. A paid invoice cannot be voided or reopened until its payments are removed, which returns it to open.
+- Client invoices and invoice aging reports, with CSV and PDF export and saved reports. Drafts and void invoices are excluded. Aging buckets are Current, 1-30, 31-60, 61-90, and 90+ days past the due date, totaled per currency. A past as-of date counts only payments on or before that date. Members do not see these reports.
 
 ## Deferred
 

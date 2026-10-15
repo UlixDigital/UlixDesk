@@ -55,6 +55,8 @@ export type InvoicePdfInput = {
   clientAddress: string;
   issueDate: string;
   dueDate: string;
+  /** Drawn when the due date has passed and a balance remains. */
+  overdue?: boolean;
   poNumber: string | null;
   lines: InvoicePdfLine[];
   totals: InvoicePdfTotal[];
@@ -196,6 +198,7 @@ function drawDateBlock(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePd
   const rows = [
     ["Issue date:", input.issueDate],
     ["Due date:", input.dueDate],
+    ...(input.overdue ? [["Overdue:", "Yes"]] : []),
     ...(input.poNumber ? [["PO number:", input.poNumber]] : []),
   ];
   let cursor = y;

@@ -1,7 +1,10 @@
+import { isOverdue } from "@/lib/invoice-balance";
+import { amountDueMinor } from "@/lib/invoice-money";
 import { renderStoredInvoicePdf } from "@/lib/invoice-render";
 import { getInvoiceSettings } from "@/lib/invoice-settings";
-import { getInvoice } from "@/lib/invoices";
+import { getInvoice, invoiceDateKey } from "@/lib/invoices";
 import { getCurrentUser } from "@/lib/session";
+import { todayInTimeZone } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 export const dynamic = "force-dynamic";
@@ -37,6 +40,11 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     taxMinor: invoice.taxMinor,
     totalMinor: invoice.totalMinor,
     paidMinor: invoice.paidMinor,
+    overdue: isOverdue({
+      dueDate: invoiceDateKey(invoice.dueDate),
+      today: todayInTimeZone(settings.timeZone),
+      dueMinor: amountDueMinor(invoice.totalMinor, invoice.paidMinor),
+    }),
     lines: invoice.lines,
   });
   return new Response(new Uint8Array(pdf), {

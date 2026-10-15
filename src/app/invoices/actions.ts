@@ -9,6 +9,7 @@ import { isInvoiceGrouping, parseCreateInvoice } from "@/lib/invoice-form";
 import { revokeClientLink, rotateClientLink } from "@/lib/invoice-link";
 import { sendInvoice } from "@/lib/invoice-send";
 import { saveInvoiceSettings } from "@/lib/invoice-settings";
+import { correctPayment, deletePayment, recordPayment } from "@/lib/invoice-payments";
 import { reopenInvoice, voidInvoice } from "@/lib/invoice-status";
 import { createInvoice, deleteDraft, getInvoice, parseDraftFromForm, refreshDraftFromTime, saveDraft } from "@/lib/invoices";
 
@@ -175,6 +176,61 @@ export async function sendInvoiceAction(_previous: SendInvoiceState, formData: F
   revalidatePath("/invoices");
   revalidatePath(`/invoices/${id}`);
   redirect(`/invoices/${id}?notice=sent`);
+}
+
+function paymentFields(formData: FormData) {
+  return {
+    invoiceId: String(formData.get("invoiceId") ?? ""),
+    amount: String(formData.get("amount") ?? ""),
+    paidOn: String(formData.get("paidOn") ?? ""),
+    method: String(formData.get("method") ?? ""),
+    note: String(formData.get("note") ?? ""),
+  };
+}
+
+function refreshInvoice(id: string) {
+  revalidatePath("/invoices");
+  revalidatePath(`/invoices/${id}`);
+  revalidatePath("/reports/client-invoices");
+  revalidatePath("/reports/invoice-aging");
+}
+
+export async function recordPaymentAction(_previous: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
+  const gate = await gateManager();
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
+  const fields = paymentFields(formData);
+  const result = await recordPayment({ actor: gate.user, ...fields });
+  if (!result.ok) return { error: result.error, notice: null };
+  refreshInvoice(fields.invoiceId);
+  redirect(`/invoices/${fields.invoiceId}?notice=payment-recorded`);
+}
+
+export async function correctPaymentAction(_previous: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
+  const gate = await gateManager();
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
+  const fields = paymentFields(formData);
+  const result = await correctPayment({
+    actor: gate.user,
+    ...fields,
+    paymentId: String(formData.get("paymentId") ?? ""),
+  });
+  if (!result.ok) return { error: result.error, notice: null };
+  refreshInvoice(fields.invoiceId);
+  redirect(`/invoices/${fields.invoiceId}?notice=payment-corrected`);
+}
+
+export async function deletePaymentAction(_previous: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
+  const gate = await gateManager();
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
+  const invoiceId = String(formData.get("invoiceId") ?? "");
+  const result = await deletePayment({
+    actor: gate.user,
+    invoiceId,
+    paymentId: String(formData.get("paymentId") ?? ""),
+  });
+  if (!result.ok) return { error: result.error, notice: null };
+  refreshInvoice(invoiceId);
+  redirect(`/invoices/${invoiceId}?notice=payment-deleted`);
 }
 
 export async function deleteDraftAction(_previous: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
