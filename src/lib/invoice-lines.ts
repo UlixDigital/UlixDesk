@@ -10,6 +10,12 @@ import {
 
 export type InvoiceGrouping = "period" | "project" | "member" | "day";
 
+export type InvoiceWindow = {
+  timeEntryId: string;
+  sliceStart: Date;
+  sliceEnd: Date;
+};
+
 export type InvoiceSlice = {
   timeEntryId: string;
   projectId: string;
@@ -19,6 +25,9 @@ export type InvoiceSlice = {
   /** Workspace calendar date of this slice, after the midnight split. */
   day: string;
   durationMs: number;
+  /** The billed window. Exclusive of any part already on another invoice. */
+  sliceStart: Date;
+  sliceEnd: Date;
   /** Null when the entry has no rate, or the rate currency is not the client's. */
   rateMinor: number | null;
   unratedReason: "no-rate" | "currency" | null;
@@ -32,6 +41,7 @@ export type BuiltInvoiceLine = {
   unitPriceMinor: number;
   amountMinor: number;
   timeEntryIds: string[];
+  windows: InvoiceWindow[];
 };
 
 export type UnratedTime = {
@@ -65,6 +75,7 @@ export function buildInvoiceLines(input: {
       unitPriceMinor: number;
       durationMs: number;
       timeEntryIds: string[];
+      windows: InvoiceWindow[];
     }
   >();
 
@@ -102,6 +113,11 @@ export function buildInvoiceLines(input: {
       if (!existing.timeEntryIds.includes(slice.timeEntryId)) {
         existing.timeEntryIds.push(slice.timeEntryId);
       }
+      existing.windows.push({
+        timeEntryId: slice.timeEntryId,
+        sliceStart: slice.sliceStart,
+        sliceEnd: slice.sliceEnd,
+      });
       continue;
     }
     groups.set(key, {
@@ -111,6 +127,13 @@ export function buildInvoiceLines(input: {
       unitPriceMinor: slice.rateMinor,
       durationMs: slice.durationMs,
       timeEntryIds: [slice.timeEntryId],
+      windows: [
+        {
+          timeEntryId: slice.timeEntryId,
+          sliceStart: slice.sliceStart,
+          sliceEnd: slice.sliceEnd,
+        },
+      ],
     });
   }
 
@@ -132,6 +155,7 @@ export function buildInvoiceLines(input: {
           unitPriceMinor: group.unitPriceMinor,
           amountMinor: lineAmountMinor(group.unitPriceMinor, quantitySeconds),
           timeEntryIds: group.timeEntryIds,
+          windows: group.windows,
         },
       ];
     });
@@ -171,7 +195,7 @@ export function describeTimeLineChanges(
     unused.splice(match, 1);
     if (!next) continue;
     if (next.quantitySeconds !== line.quantitySeconds || next.amountMinor !== line.amountMinor) {
-      diffs.push(`${line.title}: ${lineLabel(line, currency)} → ${lineLabel(next, currency)}`);
+      diffs.push(`${line.title}: ${lineLabel(line, currency)} -> ${lineLabel(next, currency)}`);
     }
   }
   for (const candidate of unused) {

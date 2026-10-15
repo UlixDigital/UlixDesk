@@ -19,7 +19,12 @@ const PRICE_RIGHT = 504;
 const AMOUNT_RIGHT = 575;
 const DATE_X = 407;
 const TOTAL_GAP = 8;
-/** Wide enough that "to Ulix Digital" stays on one line at 9pt DejaVu. */
+const TITLE_SIZE = 14;
+const NAME_SIZE = 10.6;
+const SMALL_SIZE = 7.2;
+const ADDRESS_SIZE = 7.8;
+const BODY_SIZE = 8.3;
+/** Wide enough that "to Ulix Digital" stays on one line at the notes size. */
 export const INVOICE_NOTES_WIDTH = 380;
 
 export type InvoicePdfLine = {
@@ -130,35 +135,35 @@ function fontFile(name: string) {
 }
 
 function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
-  doc.fillColor(INK).font(FONT).fontSize(14);
+  doc.fillColor(INK).font(FONT).fontSize(TITLE_SIZE);
   doc.text(`Invoice ${input.number}`, LEFT, 84, { lineBreak: false });
   traceText(trace, `Invoice ${input.number}`, LEFT, 84);
   doc.image(ulixLogoPng, 482, 100, { fit: [90, 28], align: "right" });
 
   let y = 115;
-  doc.font(FONT).fontSize(8).fillColor(MUTED);
+  doc.font(FONT).fontSize(SMALL_SIZE).fillColor(MUTED);
   doc.text("FROM", LEFT, y, { lineBreak: false });
   traceText(trace, "FROM", LEFT, y);
   y = 130;
-  doc.font(FONT).fontSize(12).fillColor(INK);
+  doc.font(FONT).fontSize(NAME_SIZE).fillColor(INK);
   doc.text(input.companyName, LEFT, y, { width: 300, lineBreak: false });
   traceText(trace, input.companyName, LEFT, y);
   y = 145;
-  y = drawWrapped(doc, trace, input.companyAddress, LEFT, y, 320, 9, FONT, INK);
+  y = drawWrapped(doc, trace, input.companyAddress, LEFT, y, 320, ADDRESS_SIZE, FONT, INK);
 
   y += 16;
   const toY = y;
-  doc.font(FONT).fontSize(8).fillColor(MUTED);
+  doc.font(FONT).fontSize(SMALL_SIZE).fillColor(MUTED);
   doc.text("TO", LEFT, toY, { lineBreak: false });
   traceText(trace, "TO", LEFT, toY);
   drawDateBlock(doc, trace, input, toY);
   y = toY + 15;
-  doc.font(FONT).fontSize(12).fillColor(INK);
+  doc.font(FONT).fontSize(NAME_SIZE).fillColor(INK);
   doc.text(input.clientName, LEFT, y, { width: 300, lineBreak: false });
   traceText(trace, input.clientName, LEFT, y);
   y += 15;
   if (input.clientAddress) {
-    y = drawWrapped(doc, trace, input.clientAddress, LEFT, y, 360, 9, FONT, INK);
+    y = drawWrapped(doc, trace, input.clientAddress, LEFT, y, 360, ADDRESS_SIZE, FONT, INK);
   }
   y += 38;
 
@@ -189,10 +194,10 @@ function drawDateBlock(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePd
   ];
   let cursor = y;
   for (const [label, value] of rows) {
-    doc.font(FONT).fontSize(9).fillColor(MUTED);
+    doc.font(FONT).fontSize(BODY_SIZE).fillColor(MUTED);
     doc.text(label ?? "", DATE_X, cursor, { lineBreak: false });
     traceText(trace, label ?? "", DATE_X, cursor);
-    drawRight(doc, trace, value ?? "", RIGHT, cursor, FONT, 9, INK);
+    drawRight(doc, trace, value ?? "", RIGHT, cursor, FONT_BOLD, BODY_SIZE, INK);
     cursor += 12;
   }
 }
@@ -216,20 +221,20 @@ function drawTableHeader(
   doc.rect(LEFT, y, RIGHT - LEFT, 28).fill(SHADE);
   doc.restore();
   doc.rect(LEFT, y + 27, RIGHT - LEFT, 1).fill(RULE);
-  doc.font(FONT_BOLD).fontSize(8).fillColor(INK);
+  doc.font(FONT_BOLD).fontSize(SMALL_SIZE).fillColor(INK);
   doc.text("Total hours", HOURS_X, y + 4, { lineBreak: false });
   traceText(trace, "Total hours", HOURS_X, y + 4);
   doc.text("(qty)", HOURS_X, y + 15, { lineBreak: false });
   traceText(trace, "(qty)", HOURS_X, y + 15);
   doc.text("Description", LEFT + PAD, y + 15, { lineBreak: false });
   traceText(trace, "Description", LEFT + PAD, y + 15);
-  drawRight(doc, trace, "Unit price", PRICE_RIGHT, y + 15, FONT_BOLD, 8, INK);
-  drawRight(doc, trace, "Amount", AMOUNT_RIGHT, y + 15, FONT_BOLD, 8, INK);
+  drawRight(doc, trace, "Unit price", PRICE_RIGHT, y + 15, FONT_BOLD, SMALL_SIZE, INK);
+  drawRight(doc, trace, "Amount", AMOUNT_RIGHT, y + 15, FONT_BOLD, SMALL_SIZE, INK);
   return y + 42;
 }
 
 function measureLine(doc: Doc, line: InvoicePdfLine, columns: ReturnType<typeof columnLayout>) {
-  doc.font(FONT).fontSize(9);
+  doc.font(FONT).fontSize(SMALL_SIZE);
   const detail = line.detail ? doc.heightOfString(line.detail, { width: columns.description - 8 }) : 0;
   return 14 + detail + 4;
 }
@@ -241,7 +246,7 @@ function drawLine(
   columns: ReturnType<typeof columnLayout>,
   y: number,
 ) {
-  doc.font(FONT).fontSize(9).fillColor(INK);
+  doc.font(FONT_BOLD).fontSize(SMALL_SIZE).fillColor(INK);
   doc.text(line.title, LEFT + PAD, y, {
     width: columns.description - 8,
     lineBreak: false,
@@ -249,55 +254,65 @@ function drawLine(
   traceText(trace, line.title, LEFT + PAD, y);
   let next = y + 12;
   if (line.detail) {
-    doc.font(FONT).fontSize(9).fillColor(MUTED);
+    doc.font(FONT).fontSize(SMALL_SIZE).fillColor(MUTED);
     doc.text(line.detail, LEFT + PAD, next, { width: columns.description - 8 });
     traceText(trace, line.detail, LEFT + PAD, next);
     next += doc.heightOfString(line.detail, { width: columns.description - 8 });
   }
-  doc.font(FONT).fontSize(9).fillColor(INK);
+  doc.font(FONT).fontSize(SMALL_SIZE).fillColor(INK);
   doc.text(line.quantity, HOURS_X, y, { lineBreak: false });
   traceText(trace, line.quantity, HOURS_X, y);
-  drawRight(doc, trace, line.unitPrice, PRICE_RIGHT, y, FONT, 9, INK);
-  drawRight(doc, trace, line.amount, AMOUNT_RIGHT, y, FONT, 9, INK);
+  drawRight(doc, trace, line.unitPrice, PRICE_RIGHT, y, FONT, SMALL_SIZE, INK);
+  drawRight(doc, trace, line.amount, AMOUNT_RIGHT, y, FONT, SMALL_SIZE, INK);
   return next + 4;
 }
 
 function drawNotes(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInput, y: number, width: number) {
-  doc.font(FONT_BOLD).fontSize(10).fillColor(INK);
+  doc.font(FONT).fontSize(BODY_SIZE).fillColor(INK);
   doc.text("Notes", LEFT + PAD, y, { lineBreak: false });
   traceText(trace, "Notes", LEFT + PAD, y);
   const body = [input.notes, input.bankDetails].filter(Boolean).join("\n\n");
   if (!body) return;
-  drawWrapped(doc, trace, body, LEFT + PAD, y + 14, width, 9, FONT, INK);
+  drawWrapped(doc, trace, body, LEFT + PAD, y + 14, width, BODY_SIZE, FONT, INK);
+}
+
+function totalMetrics(doc: Doc, totals: InvoicePdfTotal[]) {
+  return totals.map((total) => {
+    const valueFont = total.emphasize ? FONT_BOLD : FONT;
+    doc.font(FONT_BOLD).fontSize(SMALL_SIZE);
+    const labelWidth = doc.widthOfString(total.label);
+    doc.font(valueFont).fontSize(SMALL_SIZE);
+    const valueWidth = doc.widthOfString(total.value);
+    return { total, labelWidth, valueWidth, valueFont };
+  });
 }
 
 function totalPairWidth(doc: Doc, totals: InvoicePdfTotal[]) {
-  doc.font(FONT_BOLD).fontSize(9);
-  let max = 0;
-  for (const total of totals) {
-    max = Math.max(max, doc.widthOfString(total.label) + TOTAL_GAP + doc.widthOfString(total.value));
-  }
-  return max;
+  const metrics = totalMetrics(doc, totals);
+  const maxLabel = Math.max(0, ...metrics.map((metric) => metric.labelWidth));
+  const maxValue = Math.max(0, ...metrics.map((metric) => metric.valueWidth));
+  return maxLabel + TOTAL_GAP + maxValue;
 }
 
 function drawTotals(doc: Doc, trace: PdfTrace[] | undefined, totals: InvoicePdfTotal[], y: number) {
+  const metrics = totalMetrics(doc, totals);
+  const maxValue = Math.max(0, ...metrics.map((metric) => metric.valueWidth));
+  const labelRight = AMOUNT_RIGHT - maxValue - TOTAL_GAP;
   let cursor = y;
-  for (const total of totals) {
-    doc.font(FONT_BOLD).fontSize(9);
-    const valueWidth = doc.widthOfString(total.value);
-    const labelWidth = doc.widthOfString(total.label);
-    const valueX = AMOUNT_RIGHT - valueWidth;
-    const labelX = valueX - TOTAL_GAP - labelWidth;
-    if (total.emphasize) {
+  for (const metric of metrics) {
+    const valueX = AMOUNT_RIGHT - metric.valueWidth;
+    const labelX = labelRight - metric.labelWidth;
+    if (metric.total.emphasize) {
       doc.save();
       doc.rect(labelX - 6, cursor - 3, AMOUNT_RIGHT - labelX + 10, 16).fill(SHADE);
       doc.restore();
     }
-    doc.font(FONT_BOLD).fontSize(9).fillColor(INK);
-    doc.text(total.label, labelX, cursor, { lineBreak: false });
-    traceText(trace, total.label, labelX, cursor);
-    doc.text(total.value, valueX, cursor, { lineBreak: false });
-    traceText(trace, total.value, valueX, cursor);
+    doc.font(FONT_BOLD).fontSize(SMALL_SIZE).fillColor(INK);
+    doc.text(metric.total.label, labelX, cursor, { lineBreak: false });
+    traceText(trace, metric.total.label, labelX, cursor);
+    doc.font(metric.valueFont).fontSize(SMALL_SIZE).fillColor(INK);
+    doc.text(metric.total.value, valueX, cursor, { lineBreak: false });
+    traceText(trace, metric.total.value, valueX, cursor);
     cursor += 16;
   }
 }

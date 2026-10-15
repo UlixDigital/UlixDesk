@@ -24,6 +24,8 @@ describe("invoice pdf layout", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pdf.toString("latin1").includes("/Image")).toBe(true);
     expect(pdf.toString("latin1")).toContain("DejaVuSans");
+    expect(pdf.toString("latin1")).toContain("7.2");
+    expect(pdf.toString("latin1")).toContain("8.3");
 
     const at = (text: string) => trace.find((item) => item.text === text);
     const title = at("Invoice LE1175");
@@ -62,6 +64,14 @@ describe("invoice pdf layout", () => {
     expect(notes!.y).toBeGreaterThan(line!.y);
     expect(hoursHeader!.y).toBeLessThan(qtyHeader!.y);
     expect(qtyHeader!.x).toBe(374);
+    const paid = at("Paid");
+    const docWidths = new PDFDocument({ size: "LETTER", margin: 0 });
+    docWidths.registerFont("DejaVu-Bold", "assets/fonts/DejaVuSans-Bold.ttf");
+    docWidths.font("DejaVu-Bold").fontSize(7.2);
+    const subtotalRight = (subtotal?.x ?? 0) + docWidths.widthOfString("Subtotal");
+    const paidRight = (paid?.x ?? 0) + docWidths.widthOfString("Paid");
+    docWidths.end();
+    expect(paidRight).toBeCloseTo(subtotalRight, 0);
 
     const positions = pdfTextPositions(pdf);
     const positioned = (text: string) => positions.find((item) => item.text.includes(text));
@@ -91,7 +101,7 @@ describe("invoice pdf layout", () => {
   it("gives the notes column enough room for Ulix Digital", () => {
     const doc = new PDFDocument({ size: "LETTER", margin: 0 });
     doc.registerFont("DejaVu", "assets/fonts/DejaVuSans.ttf");
-    doc.font("DejaVu").fontSize(9);
+    doc.font("DejaVu").fontSize(8.3);
     const sentence = "* Use these details to send both Domestic wires and ACH transfers to Ulix Digital";
     expect(doc.widthOfString(sentence)).toBeLessThan(INVOICE_NOTES_WIDTH);
     doc.end();

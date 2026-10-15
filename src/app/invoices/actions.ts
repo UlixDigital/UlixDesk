@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { gateManager } from "@/lib/auth";
+import { authCopy } from "@/lib/auth-copy";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import { isInvoiceGrouping, parseCreateInvoice } from "@/lib/invoice-form";
 import { saveInvoiceSettings } from "@/lib/invoice-settings";
@@ -14,12 +15,16 @@ export type InvoiceFormState = {
   confirmDiffs?: string[] | null;
 };
 
+function gateError(error: string) {
+  return error === authCopy.manageDenied ? invoiceCopy.denied : error;
+}
+
 export async function saveInvoiceSettingsAction(
   _previous: InvoiceFormState,
   formData: FormData,
 ): Promise<InvoiceFormState> {
   const gate = await gateManager();
-  if (!gate.ok) return { error: gate.error, notice: null };
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
   const saved = await saveInvoiceSettings(gate.user.role, {
     companyName: String(formData.get("companyName") ?? ""),
     companyAddress: String(formData.get("companyAddress") ?? ""),
@@ -42,7 +47,7 @@ export async function createInvoiceAction(
   formData: FormData,
 ): Promise<InvoiceFormState> {
   const gate = await gateManager();
-  if (!gate.ok) return { error: gate.error, notice: null };
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
   const parsed = parseCreateInvoice({
     clientId: String(formData.get("clientId") ?? ""),
     periodStart: String(formData.get("periodStart") ?? ""),
@@ -62,7 +67,7 @@ export async function saveDraftAction(
   formData: FormData,
 ): Promise<InvoiceFormState> {
   const gate = await gateManager();
-  if (!gate.ok) return { error: gate.error, notice: null };
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
   const id = String(formData.get("id") ?? "");
   const invoice = await getInvoice(gate.user.role, id);
   if (!invoice) return { error: invoiceCopy.notFound, notice: null };
@@ -96,7 +101,7 @@ export async function saveDraftAction(
 
 export async function deleteDraftAction(_previous: InvoiceFormState, formData: FormData): Promise<InvoiceFormState> {
   const gate = await gateManager();
-  if (!gate.ok) return { error: gate.error, notice: null };
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
   const id = String(formData.get("id") ?? "");
   const removed = await deleteDraft({ actor: gate.user, id });
   if (!removed.ok) return { error: removed.error, notice: null };

@@ -184,7 +184,7 @@ model TimeEntry {
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   runningTimer RunningTimer?
-  invoiceTime  InvoiceTime?
+  invoiceTimes InvoiceTime[]
 
   @@index([projectId])
   @@index([userId, startedAt])
@@ -401,17 +401,24 @@ model InvoiceLine {
   @@index([invoiceId])
 }
 
-/// Links a time entry to one invoice. The primary key blocks billing the same time twice.
-/// Drafts do not lock the entry. Issued statuses do, via time_entry_invoice_lock.
+/// One billed window of a time entry. Two invoices may bill different parts of
+/// the same entry. InvoiceTime_no_overlap rejects overlapping windows.
+/// Drafts do not lock the entry. Any issued window locks the whole entry,
+/// via time_entry_invoice_lock.
 model InvoiceTime {
+  id            String      @id @default(cuid())
   timeEntryId   String
   timeEntry     TimeEntry   @relation(fields: [timeEntryId], references: [id], onDelete: Cascade)
   invoiceId     String
   invoice       Invoice     @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   invoiceLineId String
   line          InvoiceLine @relation(fields: [invoiceLineId], references: [id], onDelete: Cascade)
+  /// Inclusive start of the billed window.
+  sliceStart    DateTime
+  /// Exclusive end of the billed window.
+  sliceEnd      DateTime
 
-  @@id([timeEntryId])
+  @@index([timeEntryId])
   @@index([invoiceId])
   @@index([invoiceLineId])
 }

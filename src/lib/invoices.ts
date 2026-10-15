@@ -168,18 +168,27 @@ export async function createInvoice(input: {
       const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
       const rangeStart = zonedDayStart(input.periodStart, timeZone);
       const rangeEnd = zonedDayEnd(input.periodEnd, timeZone);
-      const rows = await overlappingEntries(tx, {
+      const lockedIds = await lockIssueTimeEntries(tx, {
+        invoiceId: null,
         clientId: client.id,
         rangeStart,
         rangeEnd,
-        invoiceId: null,
       });
+      const rows = await lockedEntries(tx, lockedIds);
       const rates = await loadRates(tx);
       const built = buildInvoiceLines({
         grouping: input.grouping,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
-        slices: rowsToSlices(rows, rates, client.currency, timeZone, rangeStart, rangeEnd),
+        slices: rowsToSlices(
+          rows,
+          rates,
+          client.currency,
+          timeZone,
+          rangeStart,
+          rangeEnd,
+          await takenSlices(tx, lockedIds, null),
+        ),
       });
       if (built.lines.length === 0) return fail(invoiceCopy.noEligible);
       const number = await allocateInvoiceNumber(tx);
@@ -238,7 +247,7 @@ export async function createInvoice(input: {
       };
     });
   } catch (error) {
-    if (isUniqueViolation(error)) return fail(invoiceCopy.timeTaken);
+    if (isSliceConflict(error)) return fail(invoiceCopy.timeTaken);
     if (error instanceof Error && error.message === "Amount is too large.") {
       return fail(invoiceCopy.amountTooLarge);
     }
@@ -366,7 +375,7 @@ export async function saveDraft(input: {
       return { ok: true as const, issued: input.issue };
     });
   } catch (error) {
-    if (isUniqueViolation(error)) return fail(invoiceCopy.timeTaken);
+    if (isSliceConflict(error)) return fail(invoiceCopy.timeTaken);
     throw error;
   }
 }
@@ -387,17 +396,28 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
       const periodEnd = utcDateKey(invoice.periodEnd);
       const rangeStart = zonedDayStart(periodStart, timeZone);
       const rangeEnd = zonedDayEnd(periodEnd, timeZone);
-      const rows = await overlappingEntries(tx, {
+      const lockedIds = await lockIssueTimeEntries(tx, {
+        invoiceId: invoice.id,
         clientId: invoice.clientId,
         rangeStart,
         rangeEnd,
-        invoiceId: invoice.id,
       });
+      const rows = (await lockedEntries(tx, lockedIds)).filter(
+        (row) => row.billable && row.project.billable && row.project.clientId === invoice.clientId,
+      );
       const derived = buildInvoiceLines({
         grouping: groupingOf(invoice.grouping),
         periodStart,
         periodEnd,
-        slices: rowsToSlices(rows, await loadRates(tx), invoice.currency, timeZone, rangeStart, rangeEnd),
+        slices: rowsToSlices(
+          rows,
+          await loadRates(tx),
+          invoice.currency,
+          timeZone,
+          rangeStart,
+          rangeEnd,
+          await takenSlices(tx, lockedIds, invoice.id),
+        ),
       }).lines;
       const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
       await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
@@ -470,6 +490,7 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
       return { ok: true as const };
     });
   } catch (error) {
+    if (isSliceConflict(error)) return fail(invoiceCopy.timeTaken);
     if (error instanceof Error && error.message === "Amount is too large.") {
       return fail(invoiceCopy.amountTooLarge);
     }
@@ -505,9 +526,16 @@ export async function unratedForInvoice(invoice: {
     clientId: invoice.clientId,
     rangeStart,
     rangeEnd,
-    invoiceId: null,
   });
-  const slices = rowsToSlices(rows, await loadRates(prisma), invoice.currency, timeZone, rangeStart, rangeEnd);
+  const slices = rowsToSlices(
+    rows,
+    await loadRates(prisma),
+    invoice.currency,
+    timeZone,
+    rangeStart,
+    rangeEnd,
+    await takenSlices(prisma, rows.map((row) => row.id), null),
+  );
   return buildInvoiceLines({ grouping: "period", periodStart: start, periodEnd: end, slices }).unrated;
 }
 
@@ -566,34 +594,48 @@ const entryInclude = {
 } as const;
 
 /**
- * Lock every time row this issue might bill or unlink, before any write.
- * A row that crosses midnight is still one TimeEntry, so the lock covers the
- * whole entry even when only part of it is billed.
+ * Lock every time row this invoice might bill or unlink, before any write.
+ * A row that crosses midnight is still one TimeEntry. The lock covers the
+ * whole entry even when only one slice is billed.
  */
 async function lockIssueTimeEntries(
   tx: Tx,
-  input: { invoiceId: string; clientId: string; rangeStart: Date; rangeEnd: Date },
+  input: { invoiceId: string | null; clientId: string; rangeStart: Date; rangeEnd: Date },
 ) {
-  const rows = await tx.$queryRaw<Array<{ id: string }>>`
-    SELECT te."id"
-    FROM "TimeEntry" te
-    INNER JOIN "Project" p ON p."id" = te."projectId"
-    LEFT JOIN "InvoiceTime" it ON it."timeEntryId" = te."id"
-    WHERE te."endedAt" IS NOT NULL
-      AND (
-        (
-          te."billable" = true
+  const rows = input.invoiceId
+    ? await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT te."id"
+        FROM "TimeEntry" te
+        INNER JOIN "Project" p ON p."id" = te."projectId"
+        WHERE te."endedAt" IS NOT NULL
+          AND (
+            (
+              te."billable" = true
+              AND p."billable" = true
+              AND p."clientId" = ${input.clientId}
+              AND te."startedAt" < ${input.rangeEnd}
+              AND te."endedAt" > ${input.rangeStart}
+            )
+            OR te."id" IN (
+              SELECT link."timeEntryId" FROM "InvoiceTime" AS link WHERE link."invoiceId" = ${input.invoiceId}
+            )
+          )
+        ORDER BY te."id"
+        FOR UPDATE OF te
+      `
+    : await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT te."id"
+        FROM "TimeEntry" te
+        INNER JOIN "Project" p ON p."id" = te."projectId"
+        WHERE te."endedAt" IS NOT NULL
+          AND te."billable" = true
           AND p."billable" = true
           AND p."clientId" = ${input.clientId}
           AND te."startedAt" < ${input.rangeEnd}
           AND te."endedAt" > ${input.rangeStart}
-          AND (it."invoiceId" IS NULL OR it."invoiceId" = ${input.invoiceId})
-        )
-        OR it."invoiceId" = ${input.invoiceId}
-      )
-    ORDER BY te."id"
-    FOR UPDATE OF te
-  `;
+        ORDER BY te."id"
+        FOR UPDATE OF te
+      `;
   return rows.map((row) => row.id);
 }
 
@@ -621,9 +663,7 @@ async function prepareIssue(
     rangeStart,
     rangeEnd,
   });
-  const rows = lockedIds.length
-    ? await tx.timeEntry.findMany({ where: { id: { in: lockedIds } }, include: entryInclude })
-    : [];
+  const rows = await lockedEntries(tx, lockedIds);
   const derived = buildInvoiceLines({
     grouping: groupingOf(invoice.grouping),
     periodStart,
@@ -635,6 +675,7 @@ async function prepareIssue(
       timeZone,
       rangeStart,
       rangeEnd,
+      await takenSlices(tx, lockedIds, invoice.id),
     ),
   }).lines;
   return {
@@ -647,9 +688,14 @@ async function prepareIssue(
   };
 }
 
+async function lockedEntries(tx: Tx, ids: string[]) {
+  if (ids.length === 0) return [];
+  return tx.timeEntry.findMany({ where: { id: { in: ids } }, include: entryInclude });
+}
+
 async function overlappingEntries(
   tx: Tx | typeof prisma,
-  input: { clientId: string; rangeStart: Date; rangeEnd: Date; invoiceId: string | null },
+  input: { clientId: string; rangeStart: Date; rangeEnd: Date },
 ) {
   return tx.timeEntry.findMany({
     where: {
@@ -657,13 +703,46 @@ async function overlappingEntries(
       startedAt: { lt: input.rangeEnd },
       endedAt: { gt: input.rangeStart },
       project: { clientId: input.clientId, billable: true },
-      OR: [
-        { invoiceTime: { is: null } },
-        ...(input.invoiceId ? [{ invoiceTime: { invoiceId: input.invoiceId } }] : []),
-      ],
     },
     include: entryInclude,
   });
+}
+
+type TakenWindow = { start: number; end: number };
+
+/** Windows already reserved by other invoices. This invoice's own windows are omitted so a refresh can shrink or drop them. */
+async function takenSlices(tx: Tx | typeof prisma, entryIds: string[], exceptInvoiceId: string | null) {
+  const map = new Map<string, TakenWindow[]>();
+  if (entryIds.length === 0) return map;
+  const rows = await tx.invoiceTime.findMany({
+    where: {
+      timeEntryId: { in: entryIds },
+      ...(exceptInvoiceId ? { invoiceId: { not: exceptInvoiceId } } : {}),
+    },
+    select: { timeEntryId: true, sliceStart: true, sliceEnd: true },
+  });
+  for (const row of rows) {
+    const list = map.get(row.timeEntryId) ?? [];
+    list.push({ start: row.sliceStart.getTime(), end: row.sliceEnd.getTime() });
+    map.set(row.timeEntryId, list);
+  }
+  return map;
+}
+
+/** Subtract reserved windows. The result stays inside [start, end). */
+function freeWindows(start: number, end: number, taken: TakenWindow[]) {
+  const windows: TakenWindow[] = [];
+  let cursor = start;
+  const ranges = [...taken].sort((a, b) => a.start - b.start || a.end - b.end);
+  for (const range of ranges) {
+    if (range.end <= cursor) continue;
+    if (range.start >= end) break;
+    if (range.start > cursor) windows.push({ start: cursor, end: Math.min(range.start, end) });
+    cursor = Math.max(cursor, range.end);
+    if (cursor >= end) return windows;
+  }
+  if (cursor < end) windows.push({ start: cursor, end });
+  return windows;
 }
 
 async function loadRates(tx: Tx | typeof prisma) {
@@ -686,6 +765,7 @@ function rowsToSlices(
   timeZone: string,
   rangeStart: Date,
   rangeEnd: Date,
+  taken: Map<string, TakenWindow[]>,
 ) {
   const slices: InvoiceSlice[] = [];
   for (const row of rows) {
@@ -706,12 +786,17 @@ function rowsToSlices(
       rate: null,
     };
     for (const slice of slicesForEntry(source, rangeStart, rangeEnd, timeZone)) {
-      const sliceStart = new Date(
-        Math.max(row.startedAt.getTime(), zonedDayStart(slice.date, timeZone).getTime(), rangeStart.getTime()),
+      const sliceStartMs = Math.max(
+        row.startedAt.getTime(),
+        zonedDayStart(slice.date, timeZone).getTime(),
+        rangeStart.getTime(),
       );
+      const sliceEndMs = Math.min(row.endedAt.getTime(), zonedDayEnd(slice.date, timeZone).getTime(), rangeEnd.getTime());
+      if (sliceEndMs <= sliceStartMs) continue;
+      const rateAt = new Date(sliceStartMs);
       const rate = pickRate(
         rates,
-        { projectId: row.projectId, clientId: row.project.clientId, userId: row.userId, startedAt: sliceStart },
+        { projectId: row.projectId, clientId: row.project.clientId, userId: row.userId, startedAt: rateAt },
         timeZone,
       );
       let rateMinor: number | null = null;
@@ -719,17 +804,22 @@ function rowsToSlices(
       if (!rate) unratedReason = "no-rate";
       else if (rate.currency !== currency) unratedReason = "currency";
       else rateMinor = rate.amountMinor;
-      slices.push({
-        timeEntryId: row.id,
-        projectId: row.projectId,
-        projectName: row.project.name,
-        userId: row.userId,
-        userName: row.user?.name ?? "Unknown member",
-        day: slice.date,
-        durationMs: slice.durationMs,
-        rateMinor,
-        unratedReason,
-      });
+      for (const piece of freeWindows(sliceStartMs, sliceEndMs, taken.get(row.id) ?? [])) {
+        if (piece.end <= piece.start) continue;
+        slices.push({
+          timeEntryId: row.id,
+          projectId: row.projectId,
+          projectName: row.project.name,
+          userId: row.userId,
+          userName: row.user?.name ?? "Unknown member",
+          day: slice.date,
+          durationMs: piece.end - piece.start,
+          sliceStart: new Date(piece.start),
+          sliceEnd: new Date(piece.end),
+          rateMinor,
+          unratedReason,
+        });
+      }
     }
   }
   return slices;
@@ -737,7 +827,6 @@ function rowsToSlices(
 
 async function insertTimeLines(tx: Tx, invoiceId: string, lines: BuiltInvoiceLine[]) {
   const ids: string[] = [];
-  const linked = new Set<string>();
   for (let position = 0; position < lines.length; position += 1) {
     const line = lines[position];
     if (!line) continue;
@@ -754,12 +843,7 @@ async function insertTimeLines(tx: Tx, invoiceId: string, lines: BuiltInvoiceLin
       },
     });
     ids.push(created.id);
-    const timeEntryIds = line.timeEntryIds.filter((id) => !linked.has(id));
-    for (const id of timeEntryIds) linked.add(id);
-    if (timeEntryIds.length === 0) continue;
-    await tx.invoiceTime.createMany({
-      data: timeEntryIds.map((timeEntryId) => ({ timeEntryId, invoiceId, invoiceLineId: created.id })),
-    });
+    await linkWindows(tx, invoiceId, created.id, line.windows);
   }
   return ids;
 }
@@ -770,17 +854,29 @@ async function linkTimeLines(
   lines: Array<{ id: string; position: number }>,
   built: BuiltInvoiceLine[],
 ) {
-  const linked = new Set<string>();
   for (const line of lines) {
     const source = built[line.position];
     if (!source) continue;
-    const timeEntryIds = source.timeEntryIds.filter((id) => !linked.has(id));
-    for (const id of timeEntryIds) linked.add(id);
-    if (timeEntryIds.length === 0) continue;
-    await tx.invoiceTime.createMany({
-      data: timeEntryIds.map((timeEntryId) => ({ timeEntryId, invoiceId, invoiceLineId: line.id })),
-    });
+    await linkWindows(tx, invoiceId, line.id, source.windows);
   }
+}
+
+async function linkWindows(
+  tx: Tx,
+  invoiceId: string,
+  invoiceLineId: string,
+  windows: BuiltInvoiceLine["windows"],
+) {
+  if (windows.length === 0) return;
+  await tx.invoiceTime.createMany({
+    data: windows.map((window) => ({
+      timeEntryId: window.timeEntryId,
+      invoiceId,
+      invoiceLineId,
+      sliceStart: window.sliceStart,
+      sliceEnd: window.sliceEnd,
+    })),
+  });
 }
 
 async function renumberLines(tx: Tx, invoiceId: string) {
@@ -801,11 +897,15 @@ function groupingOf(value: string): InvoiceGrouping {
   return "period";
 }
 
-function isUniqueViolation(error: unknown) {
-  return (
+function isSliceConflict(error: unknown) {
+  if (
     typeof error === "object" &&
     error !== null &&
     "code" in error &&
     (error as { code?: string }).code === "P2002"
-  );
+  ) {
+    return true;
+  }
+  const message = error instanceof Error ? error.message : "";
+  return message.includes("23P01") || message.includes("InvoiceTime_no_overlap");
 }

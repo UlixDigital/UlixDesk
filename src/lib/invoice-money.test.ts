@@ -22,6 +22,8 @@ function slice(patch: Partial<InvoiceSlice> & Pick<InvoiceSlice, "timeEntryId" |
     userName: "Mia",
     day: "2026-10-06",
     durationMs: hour,
+    sliceStart: new Date("2026-10-06T02:30:00.000Z"),
+    sliceEnd: new Date("2026-10-06T03:30:00.000Z"),
     unratedReason: patch.rateMinor === null ? "no-rate" : null,
     ...patch,
   };

@@ -22,6 +22,11 @@ export default async function InvoiceSettingsPage() {
       </p>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">{invoiceCopy.settingsTitle}</h1>
       <p className="mt-1 max-w-2xl text-sm text-slate-600">{invoiceCopy.settingsIntro}</p>
+      {!values.invoiceBankDetails.trim() ? (
+        <p role="status" className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+          {invoiceCopy.emptyBank}
+        </p>
+      ) : null}
       <div className="mt-6">
         <InvoiceSettingsForm {...values} />
       </div>

@@ -1,16 +1,18 @@
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { isLockedInvoiceStatus } from "@/lib/invoice-form";
 
 type Tx = Prisma.TransactionClient | typeof prisma;
 
-/** True when the entry is on an issued invoice. Drafts and void invoices do not lock. */
+/** True when any slice of the entry is on an issued invoice. Drafts and void do not lock. */
 export async function timeEntryIsLocked(tx: Tx, timeEntryId: string) {
-  const link = await tx.invoiceTime.findUnique({
-    where: { timeEntryId },
-    select: { invoice: { select: { status: true } } },
+  const link = await tx.invoiceTime.findFirst({
+    where: {
+      timeEntryId,
+      invoice: { status: { in: ["open", "paid", "partially_paid"] } },
+    },
+    select: { id: true },
   });
-  return Boolean(link && isLockedInvoiceStatus(link.invoice.status));
+  return link !== null;
 }
 
 export class InvoicedTimeError extends Error {

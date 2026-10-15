@@ -54,6 +54,15 @@ describe("invoice form errors", () => {
     });
   });
 
+  it("keeps a hash line when settings are saved", () => {
+    const bank = "# Account note\nBeneficiary Name: Ulix Digital";
+    const parsed = parseInvoiceSettings({ ...settings, invoiceBankDetails: bank, invoiceNotes: "# keep this note" });
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.data.invoiceBankDetails).toBe(bank);
+    expect(parsed.data.invoiceNotes).toBe("# keep this note");
+  });
+
   it("rejects a negative discount with a clear message", () => {
     expect(parseDraftInvoice({ ...draft, discountKind: "amount", discountValue: "-5" }, "USD")).toEqual({
       ok: false,
