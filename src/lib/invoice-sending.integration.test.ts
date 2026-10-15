@@ -17,12 +17,12 @@ import {
 import { findPublicInvoice } from "@/lib/invoice-public";
 import { setPublicInvoiceRateLimitForTests } from "@/lib/rate-limit";
 import { resetTestDatabase } from "@/lib/reset-test-db";
-import { createInvoice, getInvoice, saveDraft } from "@/lib/invoices";
+import { createInvoice, getInvoice, issueSavedDraft, saveDraft } from "@/lib/invoices";
 import { reopenInvoice, voidInvoice } from "@/lib/invoice-status";
 import { sendInvoice } from "@/lib/invoice-send";
 import { hashViewToken } from "@/lib/invoice-view-token";
 import { createTestUser, signInAs } from "@/lib/test-actor";
-import { updateManualEntry } from "@/lib/time-entries";
+import { deleteTimeEntry, updateManualEntry } from "@/lib/time-entries";
 import { zonedDayStart } from "@/lib/time-zone";
 
 beforeEach(async () => {
@@ -199,6 +199,74 @@ describe("invoice status transitions", () => {
     });
     expect(second).toEqual({ ok: false, error: invoiceCopy.noEligible });
     expect(await prisma.invoiceTime.count({ where: { timeEntryId: entry.id, active: true } })).toBe(1);
+  });
+
+  it("refuses to reopen a void invoice when any billed time entry was deleted", async () => {
+    const { owner, member, client, project, entry } = await workspace();
+    const actor = { id: owner.id, role: owner.role };
+    const startedAt = new Date(zonedDayStart("2026-10-07", "Asia/Colombo").getTime() + 2 * 60 * 60 * 1000);
+    const other = await prisma.timeEntry.create({
+      data: {
+        projectId: project.id,
+        userId: member.id,
+        startedAt,
+        endedAt: new Date(startedAt.getTime() + 3600 * 1000),
+        billable: true,
+        source: "manual",
+      },
+    });
+    const invoice = await draftInvoice(actor, client.id);
+    expect(invoice.lines.filter((line) => line.kind === "time").reduce((sum, line) => sum + line.quantitySeconds, 0)).toBe(
+      7200,
+    );
+    expect((await saveDraft({ actor, id: invoice.id, draft: draftOf(invoice), issue: true })).ok).toBe(true);
+    expect((await voidInvoice({ actor, id: invoice.id, reason: "Hold" })).ok).toBe(true);
+
+    const removed = await deleteTimeEntry(other.id, member.id, {
+      actorId: owner.id,
+      source: "web",
+      changedAt: new Date("2026-10-16T12:00:00.000Z"),
+    });
+    expect(removed.ok).toBe(true);
+    expect((await reopenInvoice({ actor, id: invoice.id, reason: "Put it back" })).error).toBe(
+      invoiceCopy.reopenMissingTime,
+    );
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.status).toBe("void");
+    expect(await prisma.invoiceTime.count({ where: { invoiceId: invoice.id, active: true } })).toBe(0);
+
+    const removedRest = await deleteTimeEntry(entry.id, member.id, {
+      actorId: owner.id,
+      source: "web",
+      changedAt: new Date("2026-10-16T12:05:00.000Z"),
+    });
+    expect(removedRest.ok).toBe(true);
+    expect((await reopenInvoice({ actor, id: invoice.id, reason: "Put it back" })).error).toBe(
+      invoiceCopy.reopenMissingTime,
+    );
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.status).toBe("void");
+  });
+
+  it("refuses to reopen a void invoice when billed time moved to another client", async () => {
+    const { owner, client, project, entry } = await workspace();
+    const actor = { id: owner.id, role: owner.role };
+    const invoice = await draftInvoice(actor, client.id);
+    expect((await saveDraft({ actor, id: invoice.id, draft: draftOf(invoice), issue: true })).ok).toBe(true);
+    expect((await voidInvoice({ actor, id: invoice.id, reason: "Hold" })).ok).toBe(true);
+    const other = await prisma.client.create({ data: { name: "Other Client", currency: "USD" } });
+    await prisma.project.update({ where: { id: project.id }, data: { clientId: other.id } });
+    expect((await reopenInvoice({ actor, id: invoice.id, reason: "Put it back" })).error).toBe(invoiceCopy.reopenMoved);
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.status).toBe("void");
+
+    await prisma.project.update({ where: { id: project.id }, data: { clientId: client.id } });
+    const elsewhere = await prisma.project.create({
+      data: { name: "Elsewhere", clientId: other.id, billable: true },
+    });
+    await prisma.timeEntry.update({ where: { id: entry.id }, data: { projectId: elsewhere.id } });
+    expect((await reopenInvoice({ actor, id: invoice.id, reason: "Put it back" })).error).toBe(invoiceCopy.reopenMoved);
+
+    await prisma.timeEntry.update({ where: { id: entry.id }, data: { projectId: project.id } });
+    expect((await reopenInvoice({ actor, id: invoice.id, reason: "Time is back on this client" })).ok).toBe(true);
+    expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.status).toBe("draft");
   });
 
   it("refuses to reopen a void invoice after the time entry was edited", async () => {
@@ -396,6 +464,76 @@ describe("sending an invoice", () => {
     });
     expect(failure.error).toContain("mailbox full");
     expect(failure.toAddresses).toEqual(["billing@wsi.test"]);
+  });
+
+  it("does not issue a draft when the link key is missing or invalid", async () => {
+    const { owner, client } = await workspace();
+    const actor = { id: owner.id, role: owner.role };
+    const invoice = await draftInvoice(actor, client.id);
+    const saved = process.env.INVOICE_LINK_KEY;
+    setInvoiceMailTransportForTests({
+      async send() {
+        throw new Error("should not send");
+      },
+    });
+    const payload = {
+      actor,
+      id: invoice.id,
+      to: "billing@wsi.test",
+      cc: "",
+      subject: "Invoice",
+      body: "Hello",
+      confirmIssue: true,
+      confirmTime: true,
+    };
+    try {
+      delete process.env.INVOICE_LINK_KEY;
+      expect(await sendInvoice(payload)).toEqual({ ok: false, error: invoiceCopy.linkKeyMissing });
+      process.env.INVOICE_LINK_KEY = "not-a-key";
+      expect(await sendInvoice(payload)).toEqual({ ok: false, error: invoiceCopy.linkKeyInvalid });
+      expect((await getInvoice(owner.role, invoice.id))?.status).toBe("draft");
+      expect(await prisma.invoiceStatusEvent.count({ where: { invoiceId: invoice.id } })).toBe(0);
+      expect(await prisma.invoiceEmail.count()).toBe(0);
+
+      delete process.env.INVOICE_LINK_KEY;
+      expect((await issueSavedDraft({ actor, id: invoice.id })).ok).toBe(true);
+      expect((await getInvoice(owner.role, invoice.id))?.status).toBe("open");
+    } finally {
+      if (saved === undefined) delete process.env.INVOICE_LINK_KEY;
+      else process.env.INVOICE_LINK_KEY = saved;
+      setInvoiceMailTransportForTests(null);
+    }
+  });
+
+  it("does not email a void invoice", async () => {
+    const { owner, client } = await workspace();
+    const actor = { id: owner.id, role: owner.role };
+    const invoice = await draftInvoice(actor, client.id);
+    expect((await saveDraft({ actor, id: invoice.id, draft: draftOf(invoice), issue: true })).ok).toBe(true);
+    expect((await voidInvoice({ actor, id: invoice.id, reason: "Cancel" })).ok).toBe(true);
+    setInvoiceMailTransportForTests({
+      async send() {
+        throw new Error("should not send");
+      },
+    });
+    try {
+      expect(
+        await sendInvoice({
+          actor,
+          id: invoice.id,
+          to: "billing@wsi.test",
+          cc: "",
+          subject: "Invoice",
+          body: "Hello",
+          confirmIssue: true,
+          confirmTime: false,
+        }),
+      ).toEqual({ ok: false, error: invoiceCopy.sendVoid });
+      expect(await prisma.invoiceEmail.count()).toBe(0);
+      expect((await prisma.invoice.findUnique({ where: { id: invoice.id } }))?.status).toBe("void");
+    } finally {
+      setInvoiceMailTransportForTests(null);
+    }
   });
 
   it("does not send or issue when email is not configured", async () => {
