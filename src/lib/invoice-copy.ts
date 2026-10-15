@@ -85,11 +85,12 @@ export const invoiceCopy = {
   applyFilters: "Apply",
   back: "Invoices",
   readOnly: "This invoice is issued. Time on it is locked until it is voided or reopened as a draft.",
-  voidBanner: "This invoice is void. Its time is unlocked and can be billed on another invoice.",
+  voidBanner:
+    "This invoice is void. Its time is unlocked and can be billed on another invoice. It cannot be emailed.",
   voidRules:
     "Void is available for an open invoice with no payment recorded. A paid invoice cannot be voided until every payment is deleted, which returns it to open. Void releases the time so it can be billed again.",
   reopenRules:
-    "Reopen is available for an open or void invoice with no payment recorded. A paid invoice cannot be reopened until every payment is deleted, which returns it to open. A void invoice can be reopened only when its time slices still fit the entries and have not been billed elsewhere.",
+    "Reopen is available for an open or void invoice with no payment recorded. A paid invoice cannot be reopened until every payment is deleted, which returns it to open. A void invoice can be reopened only when its time entries still exist, still belong to this client, still fit the billed slices, and have not been billed elsewhere.",
   reason: "Reason",
   reasonRequired: "Enter a reason.",
   reasonTooLong: "Keep the reason to 500 characters.",
@@ -106,6 +107,7 @@ export const invoiceCopy = {
   reopenTaken: "Some of this time was billed on another invoice, so this one cannot be reopened.",
   reopenEdited: "The time was edited after this invoice was voided, so it cannot be reopened.",
   reopenMissingTime: "The billed time no longer exists, so this invoice cannot be reopened.",
+  reopenMoved: "The time no longer belongs to this client, so this invoice cannot be reopened.",
   clientLink: "Client link",
   clientLinkHint:
     "Anyone with this link can view this invoice and download the PDF. No sign-in is required. The link does not open a draft. Revoking it makes the old address a not-found page.",
@@ -153,6 +155,7 @@ export const invoiceCopy = {
   bodyRequired: "Enter a message.",
   bodyTooLong: "Keep the message to 5,000 characters.",
   sendStatus: "This invoice cannot be emailed.",
+  sendVoid: "A void invoice cannot be emailed.",
   historyTitle: "Email history",
   historyEmpty: "No emails have been sent for this invoice.",
   historyWhen: "When",

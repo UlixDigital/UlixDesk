@@ -173,7 +173,38 @@ Sign in at `http://127.0.0.1:3000/login` with the bootstrap email and password.
 
 ### Invoice email
 
-Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works. Google Workspace uses `smtp.gmail.com`, port `587`, STARTTLS, and an app password in `INVOICE_SMTP_PASS`.
+Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SMTP_PASS`, `INVOICE_SMTP_FROM`, and `INVOICE_SMTP_FROM_NAME` blank until sending should work. Blank values keep the send button disabled. Copy link still works.
+
+#### Gmail SMTP for Anupa
+
+Use these steps to send invoices from a Gmail account. Do staging first. Google Workspace uses the same host and port when an admin allows app passwords.
+
+1. Sign in to the Google account that should send the invoices.
+2. Turn on 2-Step Verification if it is off. Google will not create an app password until that is on. In Google Account, open **Security**, then **2-Step Verification**.
+3. Open **App passwords** (Google Account → Security → App passwords). If it is missing, 2-Step Verification is off, or a Workspace admin has turned app passwords off.
+4. Create an app password named `UlixDesk`. Copy the 16-character password. Google shows it once. Do not commit it.
+5. In the env file for that environment (`env/staging.env` or `env/production.env` on the server), set:
+
+```bash
+INVOICE_SMTP_HOST=smtp.gmail.com
+INVOICE_SMTP_PORT=587
+INVOICE_SMTP_USER=the-gmail-address@gmail.com
+INVOICE_SMTP_PASS=the-16-character-app-password
+INVOICE_SMTP_FROM=the-gmail-address@gmail.com
+INVOICE_SMTP_FROM_NAME=Ulix Digital
+```
+
+`INVOICE_SMTP_USER` is the Gmail account. `INVOICE_SMTP_PASS` is the app password, not the normal Google password. Port `587` uses STARTTLS. `INVOICE_SMTP_FROM` must be that same Gmail account, or a verified alias on that account (Gmail **Send mail as**). Gmail rejects a From address the account cannot send as. `INVOICE_SMTP_FROM_NAME` is optional.
+
+6. Recreate the app container so it reads the file. From `/opt/ulixdesk`:
+
+```bash
+docker compose -f docker-compose.prod.yml up -d --no-deps --force-recreate app-staging
+```
+
+Use `app-production` for the live copy. `restart` does not reload the env file.
+
+7. Open an open invoice and choose **Send**. The button stays disabled while any of host, port, user, password, or From is blank. A void invoice has no send button.
 
 `INVOICE_LINK_KEY` seals the client link so it can be shown again. It is 32 bytes, as base64 or as 64 hex characters. Generate a base64 key with:
 
@@ -181,7 +212,18 @@ Leave `INVOICE_SMTP_HOST`, `INVOICE_SMTP_PORT`, `INVOICE_SMTP_USER`, `INVOICE_SM
 openssl rand -base64 32
 ```
 
-Use a different value on staging and production. Leave it blank and creating a link fails with a message on the invoice. A link that was already shared still opens, because the public page looks up the hash. The rules for void, reopen, and the client link are in [INVOICES.md](INVOICES.md).
+Use a different value on staging and production. `scripts/write-local-stack-env.mjs` writes a local stand-in into `env/staging.env` and `env/production.env` for the laptop stack, the same way it writes the other local secrets. Do not use those stand-ins on the real servers.
+
+Leave the key blank and creating or regenerating a link fails with a message on the invoice. Sending a draft also refuses, and does not mark the draft as issued, until the key is valid. Mark as issued still works without the key.
+
+If the key is lost or rotated:
+
+- A client link that was already shared still opens. The public page looks up the SHA-256 hash and does not need the key.
+- Creating a new link needs the current key.
+- Showing the plaintext token again (Copy link, and the link placed in an email) needs the current key. A missing, invalid, or different key leaves the saved link in place and says it cannot be shown.
+- Regenerating a link replaces the token. The old address then returns 404. Send the new link to the client.
+
+The rules for void, reopen, and the client link are in [INVOICES.md](INVOICES.md).
 
 After that first sign-in, on staging and on production:
 
@@ -385,6 +427,8 @@ This does not use the real DNS names or Let's Encrypt. Caddy makes a local certi
 node scripts/write-local-stack-env.mjs
 docker compose -f docker-compose.prod.yml -f docker-compose.local.yml up -d --build
 ```
+
+The script writes local stand-in secrets, including a different `INVOICE_LINK_KEY` for staging and for production. Those values are for this laptop stack only.
 
 Open `https://desk.localhost` and `https://staging.desk.localhost`. The browser will warn about Caddy's local certificate. Accept it for this test, or trust Caddy's local CA. Sign in with the passwords written into `env/production.env` and `env/staging.env` (`local-owner-password` and `staging-owner-password`). Those files are gitignored.
 
