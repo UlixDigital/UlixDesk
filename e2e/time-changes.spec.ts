@@ -79,22 +79,23 @@ test("owners see every time change and members see only their own", async ({ bro
     await signIn(ownerContext, prisma, owner.email);
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto("/reports/manual-time-edits");
+    const filters = ownerPage.getByRole("form", { name: "Filters" });
     await expect(ownerPage.getByRole("heading", { name: "Manual time edits" })).toBeVisible();
     await expect(ownerPage.getByText("Time entries that already existed before this log have no history.")).toBeVisible();
-    await expect(ownerPage.getByLabel("From")).toBeVisible();
-    await expect(ownerPage.getByLabel("Client")).toBeVisible();
-    await expect(ownerPage.getByLabel("Project")).toBeVisible();
-    await expect(ownerPage.getByLabel("Member")).toBeVisible();
-    await expect(ownerPage.getByLabel("Action")).toBeVisible();
+    await expect(filters.getByLabel("From")).toBeVisible();
+    await expect(filters.getByLabel("Client")).toBeVisible();
+    await expect(filters.getByLabel("Project")).toBeVisible();
+    await expect(filters.getByLabel("Member")).toBeVisible();
+    await expect(filters.getByLabel("Action")).toBeVisible();
     await expect(ownerPage.getByText("Edited by Jane Admin for Sam Member")).toBeVisible();
-    await expect(ownerPage.getByText("Owner only")).toBeVisible();
+    await expect(ownerPage.getByText("Owner only").first()).toBeVisible();
     await expect(ownerPage.getByText("Extension").first()).toBeVisible();
     await expect(ownerPage.getByText("Customers")).toHaveCount(0);
     await ownerPage.screenshot({ path: `${shots}/manual_time_edits_owner.png`, fullPage: true });
     await ownerPage.locator("form[aria-label='Filters']").screenshot({
       path: `${shots}/manual_time_edits_filters.png`,
     });
-    await ownerPage.getByLabel("Action").selectOption("deleted");
+    await filters.getByLabel("Action").selectOption("deleted");
     await ownerPage.waitForURL(/action=deleted/);
     await expect(ownerPage.getByText("Deleted by E2E Owner")).toBeVisible();
     await expect(ownerPage.getByText("Edited by Jane Admin for Sam Member")).toHaveCount(0);
@@ -108,7 +109,7 @@ test("owners see every time change and members see only their own", async ({ bro
     expect(html ?? "").not.toMatch(/USD|JPY|amountMinor/);
     await expect(memberPage.getByText("Edited by Jane Admin for Sam Member")).toBeVisible();
     await expect(memberPage.getByText("You see changes to your own time.")).toBeVisible();
-    await expect(memberPage.getByLabel("Member")).toHaveCount(0);
+    await expect(memberPage.getByRole("form", { name: "Filters" }).getByLabel("Member")).toHaveCount(0);
     await expect(memberPage.getByText("Owner only")).toHaveCount(0);
     await memberPage.screenshot({ path: `${shots}/manual_time_edits_member.png`, fullPage: true });
   } finally {
