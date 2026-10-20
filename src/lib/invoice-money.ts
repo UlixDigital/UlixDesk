@@ -17,6 +17,13 @@ const MONEY_SYMBOLS: Record<string, string> = {
 
 export type DiscountKind = "none" | "amount" | "percent";
 
+/** Thrown when an amount discount is larger than the line subtotal. Callers refuse the save. */
+export const DISCOUNT_EXCEEDS = "Discount exceeds the subtotal.";
+
+/** Item counts use five decimal places. 1 item is 100000. 1.5 is 150000. */
+const ITEM_SCALE = BigInt(100_000);
+const MAX_ITEM_QUANTITY = BigInt(1_000_000);
+
 /**
  * `bps` is basis points of a percent: 10% is 1000, 8.5% is 850, 100% is 10000.
  * Half a minor unit rounds away from zero. The inputs are integers.
@@ -53,7 +60,7 @@ export function invoiceTotals(input: {
   } else if (input.discountKind === "amount") {
     discountMinor = input.discountAmountMinor;
   }
-  if (discountMinor > subtotalMinor) discountMinor = subtotalMinor;
+  if (discountMinor > subtotalMinor) throw new Error(DISCOUNT_EXCEEDS);
   const taxable = subtotalMinor - discountMinor;
   const taxMinor = input.taxEnabled ? percentOfMinor(taxable, input.taxRateBps) : 0;
   const totalMinor = taxable + taxMinor;
@@ -189,8 +196,59 @@ export function formatQuantityMs(quantityMs: bigint) {
   return fraction ? `${whole}.${fraction}` : String(whole);
 }
 
-export function invoiceLineQuantity(line: { quantitySeconds: number; quantityMs?: bigint | string | null }) {
+export function invoiceLineQuantity(line: {
+  quantitySeconds: number;
+  quantityMs?: bigint | string | null;
+  quantityKind?: string | null;
+}) {
+  if (line.quantityKind === "item") return formatItemQuantity(itemQuantityScaled(line.quantityMs));
   return formatQuantityMs(resolveQuantityMs(line));
+}
+
+export function itemQuantityScaled(raw: bigint | string | null | undefined) {
+  if (typeof raw === "bigint") return raw < ZERO ? ZERO : raw;
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return BigInt(raw);
+  return ZERO;
+}
+
+/**
+ * A plain item count, such as `1` or `2.5`. At most five decimal places.
+ * `1` is exactly 100000. `1.5` is exactly 150000. A colon is not an item count.
+ */
+export function parseItemQuantity(raw: string): { ok: true; scaled: bigint } | { ok: false } {
+  const trimmed = raw.trim();
+  if (trimmed.includes(":") || !/^\d+(\.\d{1,5})?$/.test(trimmed)) return { ok: false };
+  const [whole, frac = ""] = trimmed.split(".");
+  const scale = TEN ** BigInt(frac.length);
+  const numerator = BigInt(whole) * scale + BigInt(frac || "0");
+  const scaled = (numerator * ITEM_SCALE) / scale;
+  if ((numerator * ITEM_SCALE) % scale !== ZERO) return { ok: false };
+  if (scaled > ITEM_SCALE * MAX_ITEM_QUANTITY) return { ok: false };
+  return { ok: true, scaled };
+}
+
+/** `1`, `1.5`, `2.25`. Whole counts have no decimal. Not H:MM:SS. */
+export function formatItemQuantity(scaled: bigint) {
+  if (scaled <= ZERO) return "0";
+  const whole = scaled / ITEM_SCALE;
+  const remainder = scaled % ITEM_SCALE;
+  if (remainder === ZERO) return whole.toString();
+  const digits = remainder.toString().padStart(5, "0").replace(/0+$/, "");
+  return `${whole}.${digits}`;
+}
+
+/**
+ * Item count × unit price, rounded half away from zero to the minor unit.
+ * `amount = round(unitPriceMinor × scaled / 100000)`.
+ */
+export function lineAmountFromCount(unitPriceMinor: number, scaled: bigint) {
+  if (!Number.isInteger(unitPriceMinor) || unitPriceMinor < 0) {
+    throw new Error("Prices must be a non-negative integer of minor units.");
+  }
+  if (scaled <= ZERO || unitPriceMinor <= 0) return 0;
+  const rounded = (BigInt(unitPriceMinor) * scaled + ITEM_SCALE / TWO) / ITEM_SCALE;
+  if (rounded > BigInt(MAX_MONEY_MINOR)) throw new Error("Amount is too large.");
+  return Number(rounded);
 }
 
 /** A manual date range replaces the free-text detail on the page and the PDF. */

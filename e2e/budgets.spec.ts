@@ -7,7 +7,7 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { saveBudget } from "../src/lib/budgets";
 import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry } from "../src/lib/time-entries";
-import { todayInTimeZone, zonedDayStart } from "../src/lib/time-zone";
+import { addCalendarDays, todayInTimeZone, zonedDayStart } from "../src/lib/time-zone";
 import { signIn } from "./auth";
 
 function artifactDir(testInfo: TestInfo) {
@@ -209,7 +209,8 @@ test("a member sees hours alerts only for projects they track, and cannot move t
     hardStop: false,
   };
   const context = await browser.newContext();
-  const today = todayInTimeZone("Asia/Colombo");
+  // Yesterday, so the edited end time is in the past even when CI runs just after midnight in Colombo.
+  const today = addCalendarDays(todayInTimeZone("Asia/Colombo"), -1);
   const start = zonedDayStart(today, "Asia/Colombo");
   const now = new Date(start.getTime() + 15 * 60 * 60 * 1000);
   let moveId = "";

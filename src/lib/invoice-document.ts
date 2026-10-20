@@ -39,6 +39,7 @@ export function toInvoicePdfInput(input: {
     detail: string;
     quantitySeconds: number;
     quantityMs?: bigint | string | null;
+    quantityKind?: string | null;
     rangeStart?: Date | string | null;
     rangeEnd?: Date | string | null;
     unitPriceMinor: number;

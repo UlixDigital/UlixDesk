@@ -5,7 +5,7 @@ import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createManualEntry } from "../src/lib/time-entries";
-import { zonedDayStart } from "../src/lib/time-zone";
+import { addCalendarDays, startOfWeekDate, todayInTimeZone, zonedDayStart } from "../src/lib/time-zone";
 import { signIn } from "./auth";
 
 function artifactDir(testInfo: TestInfo) {
@@ -53,19 +53,22 @@ test("an owner creates a blank invoice, issues it, downloads the PDF, and record
     const page = await ownerContext.newPage();
     await page.goto("/invoices/new?blank=1");
     await waitForHydration(page);
-    await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Blank invoice" })).toBeVisible();
     await page.locator("#blank-invoice-client").selectOption(client.id);
     await shot(page, shots, "manual-invoice-form");
     await page.getByRole("button", { name: "Create invoice" }).click();
     await expect(page.getByRole("heading", { name: /^Invoice LE2100/ })).toBeVisible();
 
     await page.getByRole("button", { name: "Add line" }).click();
+    await page.getByLabel("Type 1").selectOption("hours");
     await page.getByLabel("Description 1").fill("Design review");
+    await page.locator("[data-line-kind='custom']").first().locator("summary").click();
     await page.getByLabel("Range start 1").fill("2026-10-01");
     await page.getByLabel("Range end 1").fill("2026-10-03");
     await page.getByLabel("Total hours (qty) 1").fill("1.5");
     await page.getByLabel("Unit price 1").fill("40");
     await page.getByRole("button", { name: "Add line" }).click();
+    await page.getByLabel("Type 2").selectOption("hours");
     await page.getByLabel("Description 2").fill("Support");
     await page.getByLabel("Total hours (qty) 2").fill("2:00:00");
     await page.getByLabel("Unit price 2").fill("25");
@@ -163,31 +166,33 @@ test("an owner adds a manual line to a time draft and reorders it", async ({ bro
   try {
     await signIn(context, prisma, owner.email);
     const page = await context.newPage();
-    await page.goto("/invoices/new");
+    await page.goto("/invoices/new?time=1");
     await waitForHydration(page);
     await page.locator("#invoice-client").selectOption(client.id);
     await page.locator("#invoice-period-start").fill("2026-10-05");
     await page.locator("#invoice-period-end").fill("2026-10-11");
     await page.getByRole("button", { name: "Create draft" }).click();
-    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly Invoice");
+    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly site");
 
     await page.getByRole("button", { name: "Add line" }).click();
+    await page.getByLabel("Type 2").selectOption("hours");
     await page.getByLabel("Description 2").fill("Rush fee");
+    await page.locator("[data-line-kind='custom']").locator("summary").click();
     await page.getByLabel("Range start 2").fill("2026-10-06");
     await page.getByLabel("Range end 2").fill("2026-10-06");
     await page.getByLabel("Total hours (qty) 2").fill("1:00:00");
     await page.getByLabel("Unit price 2").fill("50");
     await page.getByRole("button", { name: "Move up 2" }).click();
     await expect(page.getByLabel("Description 1")).toHaveValue("Rush fee");
-    await expect(page.getByLabel("Description 2")).toHaveValue("Weekly Invoice");
+    await expect(page.getByLabel("Description 2")).toHaveValue("Weekly site");
     await shot(page, shots, "mixed-invoice");
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Draft saved." })).toBeVisible();
     await expect(page.getByLabel("Description 1")).toHaveValue("Rush fee");
-    await expect(page.getByLabel("Description 2")).toHaveValue("Weekly Invoice");
+    await expect(page.getByLabel("Description 2")).toHaveValue("Weekly site");
 
     await page.getByRole("button", { name: "Refresh from time" }).click();
-    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly Invoice");
+    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly site");
     await expect(page.getByLabel("Description 2")).toHaveValue("Rush fee");
     await expect(page.getByLabel("Total hours (qty) 2")).toHaveValue("1:00:00");
     await expect(page.getByLabel("Range start 2")).toHaveValue("2026-10-06");
@@ -235,7 +240,7 @@ test("a time line quantity is read-only, and the server rejects a change", async
   try {
     await signIn(context, prisma, owner.email);
     const page = await context.newPage();
-    await page.goto("/invoices/new");
+    await page.goto("/invoices/new?time=1");
     await waitForHydration(page);
     await page.locator("#invoice-client").selectOption(client.id);
     await page.locator("#invoice-period-start").fill("2026-10-05");
@@ -301,6 +306,15 @@ test("a zero-total invoice is paid when issued, and it can be reopened", async (
     await page.getByRole("button", { name: "Create invoice" }).click();
     await expect(page.getByRole("heading", { name: /^Invoice LE2200/ })).toBeVisible();
     await page.getByRole("button", { name: "Mark as issued" }).click();
+    await expect(page.locator("#invoice-draft").getByRole("alert")).toContainText(
+      "Add at least one line before issuing this invoice.",
+    );
+    await expect(page.locator("#invoice-status")).toHaveText("Draft");
+    await page.getByRole("button", { name: "Add line" }).click();
+    await page.getByLabel("Description 1").fill("Courtesy");
+    await page.getByLabel("Qty 1").fill("1");
+    await page.getByLabel("Unit price 1").fill("0");
+    await page.getByRole("button", { name: "Mark as issued" }).click();
     await expect(page.locator("#invoice-status")).toHaveText("Paid");
     await expect(page.getByText("This invoice is paid because the total is zero.")).toBeVisible();
     await expect(page.locator("#invoice-status-history")).toContainText("Auto-paid because the total is zero");
@@ -339,6 +353,116 @@ test("a zero-total invoice is paid when issued, and it can be reopened", async (
   } finally {
     await context.close();
     await publicContext.close();
+    await prisma.$disconnect();
+  }
+});
+
+test("new invoice offers equal choices, a blank draft stays quiet, and an item line prints a plain quantity", async ({
+  browser,
+}, testInfo) => {
+  test.setTimeout(180_000);
+  const prisma = new PrismaClient();
+  const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
+  await prisma.workspaceSettings.upsert({
+    where: { id: "workspace" },
+    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD", nextInvoiceNumber: 2300 },
+    create: { id: "workspace", timeZone: "Asia/Colombo", defaultCurrency: "USD" },
+  });
+  const client = await prisma.client.create({
+    data: { name: "Item Invoice Co", currency: "USD", billingAddress: "4 Item Road" },
+  });
+  const quiet = await prisma.project.create({
+    data: { name: "Unrated quiet", clientId: client.id, billable: true },
+  });
+  const today = todayInTimeZone("Asia/Colombo");
+  const periodStart = addCalendarDays(startOfWeekDate(today), -7);
+  const day = addCalendarDays(periodStart, 2);
+  const startedAt = new Date(zonedDayStart(day, "Asia/Colombo").getTime() + 60 * 60 * 1000);
+  await createManualEntry(
+    { projectId: quiet.id, startedAt, endedAt: new Date(startedAt.getTime() + 3600 * 1000), billable: true, note: null },
+    new Date("2026-10-15T12:00:00.000Z"),
+    owner.id,
+  );
+
+  const shots = artifactDir(testInfo);
+  const context = await browser.newContext();
+  try {
+    await signIn(context, prisma, owner.email);
+    const page = await context.newPage();
+    await page.goto("/invoices");
+    await page.getByRole("link", { name: "New invoice", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "New invoice" })).toBeVisible();
+    const choices = page.locator("#invoice-start-choices a");
+    await expect(choices).toHaveCount(2);
+    await expect(choices.nth(0)).toHaveText(/Blank invoice/);
+    await expect(choices.nth(1)).toHaveText(/From tracked time/);
+    await shot(page, shots, "new-invoice-choice");
+
+    await choices.nth(0).click();
+    await expect(page.getByRole("heading", { name: "Blank invoice" })).toBeVisible();
+    await page.goto("/invoices/new?time=1");
+    await expect(page.getByRole("heading", { name: "From tracked time" })).toBeVisible();
+    await page.goto("/invoices/new?blank=1");
+    await waitForHydration(page);
+    await page.locator("#blank-invoice-client").selectOption(client.id);
+    await page.getByRole("button", { name: "Create invoice" }).click();
+    await expect(page.getByRole("heading", { name: /^Invoice LE2300/ })).toBeVisible();
+    await expect(page.getByText("Some time was left off this invoice")).toHaveCount(0);
+    await expect(page.getByRole("group", { name: "Tracked time" })).toHaveCount(0);
+    await expect(page.locator("h1 + p")).not.toContainText("–");
+    await expect(page.getByRole("button", { name: "Add tracked time" })).toBeVisible();
+    await shot(page, shots, "blank-draft");
+
+    await page.getByRole("button", { name: "Add line" }).click();
+    await expect(page.getByLabel("Type 1")).toHaveValue("item");
+    await expect(page.locator("[data-line-kind='custom'] summary")).toBeVisible();
+    await expect(page.getByLabel("Range start 1")).toBeHidden();
+    await page.getByLabel("Description 1").fill("Website design");
+    await page.getByLabel("Qty 1").fill("1");
+    await page.getByLabel("Unit price 1").fill("500");
+    await page.getByRole("button", { name: "Save draft" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Draft saved." })).toBeVisible();
+    await page.getByRole("button", { name: "Mark as issued" }).click();
+    await expect(page.getByText("This invoice is issued.")).toBeVisible();
+    await expect(page.getByRole("cell", { name: "1", exact: true })).toBeVisible();
+    await expect(page.getByText("1:00:00")).toHaveCount(0);
+
+    const order = await page.evaluate(() => {
+      const lines = document.querySelector("#invoice-issued-lines");
+      const link = document.querySelector("#invoice-client-link-section");
+      const history = document.querySelector("#invoice-status-history");
+      const voidButton = document.querySelector("#invoice-void");
+      if (!lines || !link || !history || !voidButton) return "missing";
+      const follows = (earlier: Element, later: Element) =>
+        (earlier.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+      const quiet = voidButton.className.includes("ring-rose-200") && !voidButton.className.includes("bg-rose-700");
+      return follows(lines, link) && follows(lines, history) && follows(history, voidButton) && quiet ? "ok" : "bad";
+    });
+    expect(order).toBe("ok");
+    await shot(page, shots, "issued-detail");
+
+    const invoiceUrl = new URL(page.url());
+    const pdf = await page.request.get(`${invoiceUrl.pathname}/pdf`);
+    expect(pdf.status()).toBe(200);
+    const pdfPath = path.join(shots, "item-invoice.pdf");
+    await mkdir(shots, { recursive: true });
+    await writeFile(pdfPath, await pdf.body());
+    const text = execFileSync("pdftotext", ["-layout", pdfPath, "-"], { encoding: "utf8" });
+    expect(text).toContain("Website design");
+    expect(text).toContain("$500.00");
+    expect(text).not.toContain("1:00:00");
+    expect(text).toMatch(/Website design[\s\S]{0,400}\b1\b/);
+    execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", pdfPath, path.join(shots, "item-line-pdf")]);
+
+    await page.getByRole("button", { name: "Create client link" }).click();
+    await expect(page.getByText("A client link is active.")).toBeVisible();
+    const clientPath = await page.locator("#invoice-client-link").inputValue();
+    const clientPage = await context.newPage();
+    await clientPage.goto(clientPath);
+    await expect(clientPage.getByRole("cell", { name: "1", exact: true })).toBeVisible();
+    await expect(clientPage.getByText("1:00:00")).toHaveCount(0);
+  } finally {
+    await context.close();
     await prisma.$disconnect();
   }
 });

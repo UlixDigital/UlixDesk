@@ -33,6 +33,7 @@ export type PublicInvoice = {
     detail: string;
     quantitySeconds: number;
     quantityMs: string;
+    quantityKind: string;
     rangeStart: Date | null;
     rangeEnd: Date | null;
     unitPriceMinor: number;
@@ -89,6 +90,7 @@ export async function findPublicInvoice(token: string): Promise<PublicInvoice | 
       detail: line.detail,
       quantitySeconds: line.quantitySeconds,
       quantityMs: line.quantityMs.toString(),
+      quantityKind: line.quantityKind,
       rangeStart: line.rangeStart,
       rangeEnd: line.rangeEnd,
       unitPriceMinor: line.unitPriceMinor,

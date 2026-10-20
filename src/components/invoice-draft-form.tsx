@@ -3,7 +3,7 @@
 import { useActionState, useState } from "react";
 import { saveDraftAction, type InvoiceFormState } from "@/app/invoices/actions";
 import { invoiceCopy } from "@/lib/invoice-copy";
-import { lineAmountFromMs, parseQuantityInput } from "@/lib/invoice-money";
+import { lineAmountFromCount, lineAmountFromMs, parseItemQuantity, parseQuantityInput } from "@/lib/invoice-money";
 import { formatMoney, parseRateInput } from "@/lib/money";
 import { ui } from "@/lib/ui";
 
@@ -13,6 +13,7 @@ type LineState = {
   key: string;
   id: string;
   kind: "time" | "custom";
+  quantityKind: "hours" | "item";
   title: string;
   detail: string;
   rangeStart: string;
@@ -38,6 +39,7 @@ export function InvoiceDraftForm({
   taxLabel,
   taxRate,
   lines,
+  hasTimeLines = false,
 }: {
   invoiceId: string;
   currency: string;
@@ -55,9 +57,12 @@ export function InvoiceDraftForm({
   taxLabel: string;
   taxRate: string;
   lines: LineState[];
+  /** Time lines are already on the draft, so the tracked-time section stays open. */
+  hasTimeLines?: boolean;
 }) {
   const [state, action, pending] = useActionState(saveDraftAction, idle);
   const [rows, setRows] = useState(lines);
+  const [showTracked, setShowTracked] = useState(hasTimeLines);
   return (
     <form action={action} className="space-y-6" id="invoice-draft">
       <input type="hidden" name="id" value={invoiceId} />
@@ -101,7 +106,7 @@ export function InvoiceDraftForm({
           <thead className="bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-3 py-2 font-medium">{invoiceCopy.description}</th>
-              <th className="px-3 py-2 font-medium">{invoiceCopy.hours}</th>
+              <th className="px-3 py-2 font-medium">{invoiceCopy.qty}</th>
               <th className="px-3 py-2 font-medium">{invoiceCopy.unitPrice}</th>
               <th className="px-3 py-2 font-medium">{invoiceCopy.amount}</th>
               <th className="px-3 py-2" />
@@ -113,9 +118,26 @@ export function InvoiceDraftForm({
                 <td className="px-3 py-2">
                   <input type="hidden" name="lineId" value={row.id} />
                   <input type="hidden" name="lineKind" value={row.kind} />
+                  <input type="hidden" name="lineQuantityKind" value={row.kind === "time" ? "hours" : row.quantityKind} />
                   <p className="mb-1 text-xs font-medium text-slate-500">
                     {row.kind === "time" ? invoiceCopy.timeLine : invoiceCopy.manualLine}
                   </p>
+                  {row.kind === "custom" ? (
+                    <label className="mb-2 block text-xs font-medium text-slate-600">
+                      {invoiceCopy.lineType}
+                      <select
+                        aria-label={`${invoiceCopy.lineType} ${index + 1}`}
+                        value={row.quantityKind}
+                        onChange={(event) =>
+                          update(setRows, index, { quantityKind: event.target.value === "item" ? "item" : "hours" })
+                        }
+                        className={`${ui.input} mt-1`}
+                      >
+                        <option value="item">{invoiceCopy.lineTypeItem}</option>
+                        <option value="hours">{invoiceCopy.lineTypeHours}</option>
+                      </select>
+                    </label>
+                  ) : null}
                   <input
                     aria-label={`${invoiceCopy.description} ${index + 1}`}
                     name="lineTitle"
@@ -135,30 +157,41 @@ export function InvoiceDraftForm({
                     <input type="hidden" name="lineDetail" value={row.detail} />
                   )}
                   {row.kind === "custom" ? (
-                    <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                      <label className="block text-xs font-medium text-slate-600">
-                        {invoiceCopy.rangeStart}
-                        <input
-                          aria-label={`${invoiceCopy.rangeStart} ${index + 1}`}
-                          name="lineRangeStart"
-                          type="date"
-                          value={row.rangeStart}
-                          onChange={(event) => update(setRows, index, { rangeStart: event.target.value })}
-                          className={`${ui.input} mt-1`}
-                        />
-                      </label>
-                      <label className="block text-xs font-medium text-slate-600">
-                        {invoiceCopy.rangeEnd}
-                        <input
-                          aria-label={`${invoiceCopy.rangeEnd} ${index + 1}`}
-                          name="lineRangeEnd"
-                          type="date"
-                          value={row.rangeEnd}
-                          onChange={(event) => update(setRows, index, { rangeEnd: event.target.value })}
-                          className={`${ui.input} mt-1`}
-                        />
-                      </label>
-                    </div>
+                    <details
+                      className="mt-2"
+                      ref={(node) => {
+                        if (!node || node.dataset.seeded === "1") return;
+                        node.dataset.seeded = "1";
+                        if (row.rangeStart !== "" || row.rangeEnd !== "") node.open = true;
+                      }}
+                    >
+                      <summary className="cursor-pointer text-xs font-medium text-slate-600">{invoiceCopy.dateRange}</summary>
+                      <p className="mt-1 text-xs text-slate-500">{invoiceCopy.dateRangeHint}</p>
+                      <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                        <label className="block text-xs font-medium text-slate-600">
+                          {invoiceCopy.rangeStart}
+                          <input
+                            aria-label={`${invoiceCopy.rangeStart} ${index + 1}`}
+                            name="lineRangeStart"
+                            type="date"
+                            value={row.rangeStart}
+                            onChange={(event) => update(setRows, index, { rangeStart: event.target.value })}
+                            className={`${ui.input} mt-1`}
+                          />
+                        </label>
+                        <label className="block text-xs font-medium text-slate-600">
+                          {invoiceCopy.rangeEnd}
+                          <input
+                            aria-label={`${invoiceCopy.rangeEnd} ${index + 1}`}
+                            name="lineRangeEnd"
+                            type="date"
+                            value={row.rangeEnd}
+                            onChange={(event) => update(setRows, index, { rangeEnd: event.target.value })}
+                            className={`${ui.input} mt-1`}
+                          />
+                        </label>
+                      </div>
+                    </details>
                   ) : (
                     <>
                       <input type="hidden" name="lineRangeStart" value="" />
@@ -184,7 +217,7 @@ export function InvoiceDraftForm({
                     </>
                   ) : (
                     <input
-                      aria-label={`${invoiceCopy.hours} ${index + 1}`}
+                      aria-label={`${row.quantityKind === "item" ? invoiceCopy.qty : invoiceCopy.hours} ${index + 1}`}
                       name="lineQuantity"
                       value={row.quantity}
                       onChange={(event) => update(setRows, index, { quantity: event.target.value })}
@@ -246,11 +279,12 @@ export function InvoiceDraftForm({
               key: `new-${current.length}-${Date.now()}`,
               id: "",
               kind: "custom",
-              title: invoiceCopy.customTitle,
+              quantityKind: "item",
+              title: "",
               detail: "",
               rangeStart: "",
               rangeEnd: "",
-              quantity: "1:00:00",
+              quantity: "1",
               unitPrice: "0",
             },
           ])
@@ -258,6 +292,7 @@ export function InvoiceDraftForm({
       >
         {invoiceCopy.addLine}
       </button>
+      {showTracked ? (
       <fieldset className="grid gap-4 rounded-lg border border-slate-200 p-4 sm:grid-cols-4">
         <legend className="px-1 text-sm font-medium text-slate-800">{invoiceCopy.trackedTime}</legend>
         <p className="text-xs text-slate-500 sm:col-span-4">{invoiceCopy.trackedTimeHint}</p>
@@ -296,6 +331,11 @@ export function InvoiceDraftForm({
           </button>
         </div>
       </fieldset>
+      ) : (
+        <button type="button" className={ui.secondaryButton} onClick={() => setShowTracked(true)}>
+          {invoiceCopy.addTrackedTime}
+        </button>
+      )}
       <div className="grid gap-4 sm:grid-cols-2">
         <label className="block text-sm font-medium text-slate-800" htmlFor="invoice-discount-kind">
           {invoiceCopy.discount}
@@ -391,10 +431,18 @@ function move(rows: LineState[], index: number, direction: -1 | 1) {
 }
 
 function previewAmount(row: LineState, currency: string) {
-  const quantity = parseQuantityInput(row.quantity);
-  const price = parseRateInput(row.unitPrice.trim() || "0", currency);
-  if (!quantity.ok || !price.ok) return "—";
+  const priceRaw = row.unitPrice.trim();
+  if (priceRaw.startsWith("-") || priceRaw.startsWith("−")) return "—";
+  const price = parseRateInput(priceRaw || "0", currency);
+  if (!price.ok) return "—";
   try {
+    if (row.kind !== "time" && row.quantityKind === "item") {
+      const quantity = parseItemQuantity(row.quantity);
+      if (!quantity.ok) return "—";
+      return formatMoney(lineAmountFromCount(price.amountMinor, quantity.scaled), currency);
+    }
+    const quantity = parseQuantityInput(row.quantity);
+    if (!quantity.ok) return "—";
     return formatMoney(lineAmountFromMs(price.amountMinor, quantity.ms), currency);
   } catch {
     return "—";

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useActionState } from "react";
 import { createBlankInvoiceAction, createInvoiceAction, type InvoiceFormState } from "@/app/invoices/actions";
 import { invoiceCopy } from "@/lib/invoice-copy";
@@ -49,9 +48,6 @@ function BlankInvoiceForm({ clients }: { clients: Array<{ id: string; name: stri
         <button type="submit" className={ui.primaryButton} disabled={pending || clients.length === 0}>
           {pending ? invoiceCopy.creating : invoiceCopy.blankCreate}
         </button>
-        <Link href="/invoices/new" className="text-sm text-slate-600 hover:text-accent">
-          {invoiceCopy.timeLink}
-        </Link>
       </div>
     </form>
   );
@@ -110,9 +106,6 @@ function TimeInvoiceForm({
         <button type="submit" className={ui.primaryButton} disabled={pending || clients.length === 0}>
           {pending ? invoiceCopy.creating : invoiceCopy.create}
         </button>
-        <Link href="/invoices/new?blank=1" className="text-sm text-slate-600 hover:text-accent">
-          {invoiceCopy.blankLink}
-        </Link>
       </div>
     </form>
   );

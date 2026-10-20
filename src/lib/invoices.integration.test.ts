@@ -831,7 +831,9 @@ describe("invoice qa", () => {
       confirm: true,
       draft: draftWrite(current!),
     });
-    expect(issued.ok).toBe(true);
+    expect(issued).toEqual({ ok: false, error: invoiceCopy.issueNeedsLines });
+    expect(await prisma.invoiceTime.count({ where: { timeEntryId: other.id } })).toBe(1);
+    expect((await deleteDraft({ actor, id: second.id })).ok).toBe(true);
     expect(await prisma.invoiceTime.count({ where: { timeEntryId: other.id } })).toBe(0);
     expect((await prisma.timeEntry.update({ where: { id: other.id }, data: { note: "free" } })).note).toBe("free");
     const elsewhere = await createInvoice({

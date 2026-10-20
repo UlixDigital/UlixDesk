@@ -90,7 +90,7 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
     await expect(page.locator("#invoice-bank-details")).toContainText("[not set]");
     await shot(page, shots, "invoice-settings");
 
-    await page.goto("/invoices/new");
+    await page.goto("/invoices/new?time=1");
     await waitForHydration(page);
     await page.locator("#invoice-client").selectOption(client.id);
     await page.locator("#invoice-period-start").fill("2026-10-05");
@@ -99,7 +99,7 @@ test("an owner drafts, edits, issues, and downloads an invoice", async ({ browse
     await shot(page, shots, "invoice-create");
     await page.getByRole("button", { name: "Create draft" }).click();
     await expect(page.getByRole("heading", { name: /^Invoice LE/ })).toBeVisible();
-    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly Invoice");
+    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly site");
     await expect(page.getByLabel("Total hours (qty) 1")).toHaveValue("26:22:12");
     await expect(page.getByText("USD 659.25").first()).toBeVisible();
 

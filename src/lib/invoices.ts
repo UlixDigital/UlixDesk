@@ -19,7 +19,9 @@ import {
   type InvoiceSlice,
 } from "@/lib/invoice-lines";
 import {
+  DISCOUNT_EXCEEDS,
   invoiceTotals,
+  itemQuantityScaled,
   lineAmountFromMs,
   quantityMsFromSeconds,
   resolveQuantityMs,
@@ -265,6 +267,7 @@ export async function createInvoice(input: {
             create: built.lines.map((line, position) => ({
               position,
               kind: "time",
+              quantityKind: "hours",
               title: line.title.slice(0, 200),
               detail: line.detail.slice(0, 200),
               quantitySeconds: line.quantitySeconds,
@@ -388,6 +391,8 @@ export async function saveDraft(input: {
       const existing = new Map(invoice.lines.map((line) => [line.id, line]));
       if (timeQuantityChanged(existing, draftLines)) return fail(invoiceCopy.timeQuantityLocked);
       draftLines = draftLines.map((line) => lockTimeLineAmount(existing, line));
+      const issuedCount = (replacingTime && prepared ? prepared.derived.length : 0) + draftLines.length;
+      if (input.issue && issuedCount === 0) return fail(invoiceCopy.issueNeedsLines);
 
       let preservedIds: string[] = [];
       let derivedAmounts: number[] = [];
@@ -402,7 +407,7 @@ export async function saveDraft(input: {
         ...preservedIds,
       ]);
       for (const id of keptIds) {
-        if (!existing.has(id) && !preservedIds.includes(id)) return fail(invoiceCopy.notDraft);
+        if (!existing.has(id) && !preservedIds.includes(id)) return fail(invoiceCopy.lineNotOnInvoice);
       }
       let totals: ReturnType<typeof invoiceTotals>;
       try {
@@ -414,7 +419,8 @@ export async function saveDraft(input: {
           taxEnabled: input.draft.taxEnabled,
           taxRateBps: input.draft.taxRateBps,
         });
-      } catch {
+      } catch (error) {
+        if (error instanceof Error && error.message === DISCOUNT_EXCEEDS) return fail(invoiceCopy.discountExceeds);
         return fail(invoiceCopy.amountTooLarge);
       }
 
@@ -428,7 +434,7 @@ export async function saveDraft(input: {
         if (!line) continue;
         if (line.id) {
           const prior = existing.get(line.id);
-          if (!prior) return fail(invoiceCopy.notDraft);
+          if (!prior) return fail(invoiceCopy.lineNotOnInvoice);
           const kind = prior.kind === "time" ? "time" : "custom";
           await tx.invoiceLine.update({
             where: { id: line.id },
@@ -565,6 +571,8 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
         if (!line) continue;
         const position = preservedIds.length + index;
         if (line.id) {
+          const prior = invoice.lines.find((row) => row.id === line.id);
+          if (!prior || prior.kind === "time") return fail(invoiceCopy.lineNotOnInvoice);
           await tx.invoiceLine.update({
             where: { id: line.id },
             data: {
@@ -619,6 +627,7 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
     });
   } catch (error) {
     if (isSliceConflict(error)) return fail(invoiceCopy.timeTaken);
+    if (error instanceof Error && error.message === DISCOUNT_EXCEEDS) return fail(invoiceCopy.discountExceeds);
     if (error instanceof Error && error.message === "Amount is too large.") {
       return fail(invoiceCopy.amountTooLarge);
     }
@@ -647,6 +656,7 @@ export function storedDraft(invoice: {
     detail: string;
     quantitySeconds: number;
     quantityMs?: bigint | null;
+    quantityKind?: string | null;
     rangeStart?: Date | null;
     rangeEnd?: Date | null;
     unitPriceMinor: number;
@@ -670,17 +680,21 @@ export function storedDraft(invoice: {
     taxEnabled: invoice.taxEnabled,
     taxLabel: invoice.taxLabel,
     taxRateBps: invoice.taxRateBps,
-    lines: invoice.lines.map((line) => ({
-      id: line.id,
-      title: line.title,
-      detail: line.detail,
-      quantitySeconds: line.quantitySeconds,
-      quantityMs: resolveQuantityMs(line),
-      unitPriceMinor: line.unitPriceMinor,
-      amountMinor: line.amountMinor,
-      rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : null,
-      rangeEnd: line.rangeEnd ? invoiceDateKey(line.rangeEnd) : null,
-    })),
+    lines: invoice.lines.map((line) => {
+      const quantityKind = line.quantityKind === "item" ? ("item" as const) : ("hours" as const);
+      return {
+        id: line.id,
+        title: line.title,
+        detail: line.detail,
+        quantityKind,
+        quantitySeconds: line.quantitySeconds,
+        quantityMs: quantityKind === "item" ? itemQuantityScaled(line.quantityMs) : resolveQuantityMs(line),
+        unitPriceMinor: line.unitPriceMinor,
+        amountMinor: line.amountMinor,
+        rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : null,
+        rangeEnd: line.rangeEnd ? invoiceDateKey(line.rangeEnd) : null,
+      };
+    }),
   };
 }
 
@@ -754,6 +768,7 @@ export function parseDraftFromForm(formData: FormData, currency: string) {
   const titles = formData.getAll("lineTitle").map(String);
   const details = formData.getAll("lineDetail").map(String);
   const quantities = formData.getAll("lineQuantity").map(String);
+  const kinds = formData.getAll("lineQuantityKind").map(String);
   const prices = formData.getAll("lineUnitPrice").map(String);
   const rangeStarts = formData.getAll("lineRangeStart").map(String);
   const rangeEnds = formData.getAll("lineRangeEnd").map(String);
@@ -763,6 +778,7 @@ export function parseDraftFromForm(formData: FormData, currency: string) {
     title: titles[index] ?? "",
     detail: details[index] ?? "",
     quantity: quantities[index] ?? "",
+    quantityKind: kinds[index] ?? "",
     unitPrice: prices[index] ?? "",
     rangeStart: rangeStarts[index] ?? "",
     rangeEnd: rangeEnds[index] ?? "",
@@ -1066,6 +1082,7 @@ async function insertTimeLines(tx: Tx, invoiceId: string, lines: BuiltInvoiceLin
         invoiceId,
         position,
         kind: "time",
+        quantityKind: "hours",
         title: line.title.slice(0, 200),
         detail: line.detail.slice(0, 200),
         quantitySeconds: line.quantitySeconds,
@@ -1168,13 +1185,23 @@ function lockTimeLineAmount(existing: ReadonlyMap<string, StoredLine>, line: Dra
 }
 
 function lineColumns(line: DraftWrite["lines"][number], kind: "time" | "custom") {
-  const quantityMs = line.quantityMs ?? quantityMsFromSeconds(line.quantitySeconds);
-  const quantitySeconds = line.quantityMs === undefined ? line.quantitySeconds : wholeSecondsFromQuantityMs(quantityMs);
   const rangeStart = kind === "custom" ? line.rangeStart : null;
   const rangeEnd = kind === "custom" ? line.rangeEnd : null;
+  const quantityKind = kind === "custom" && line.quantityKind === "item" ? "item" : "hours";
+  const quantityMs =
+    quantityKind === "item"
+      ? (line.quantityMs ?? BigInt(0))
+      : (line.quantityMs ?? quantityMsFromSeconds(line.quantitySeconds));
+  const quantitySeconds =
+    quantityKind === "item"
+      ? 0
+      : line.quantityMs === undefined
+        ? line.quantitySeconds
+        : wholeSecondsFromQuantityMs(quantityMs);
   return {
     title: line.title,
     detail: line.detail,
+    quantityKind,
     quantitySeconds,
     quantityMs,
     unitPriceMinor: line.unitPriceMinor,

@@ -94,7 +94,10 @@ async function applyPaymentChange(input: { actor: Actor; invoiceId: string; chan
     const payments = invoice.payments as PaymentRow[];
 
     if (input.change.kind === "record") {
-      if (invoice.status === "paid") return fail(invoiceCopy.paymentClosed);
+      if (invoice.status === "paid") {
+        const autoPaid = invoice.totalMinor === 0 && invoice.paidMinor === 0 && payments.length === 0;
+        return fail(autoPaid ? invoiceCopy.paymentAlreadyPaid : invoiceCopy.paymentClosed);
+      }
       if (!payable) return fail(invoiceCopy.paymentStatus);
       const due = invoice.totalMinor - sumPayments(payments);
       if (input.change.amountMinor > due) return fail(invoiceCopy.paymentOverpay);
