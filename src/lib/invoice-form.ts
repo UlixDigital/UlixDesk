@@ -2,9 +2,9 @@ import { isCurrencyCode } from "@/lib/currencies";
 import type { InvoiceGrouping } from "@/lib/invoice-lines";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import {
-  lineAmountMinor,
-  parseDurationInput,
+  lineAmountFromMs,
   parsePercentBps,
+  parseQuantityInput,
   type DiscountKind,
 } from "@/lib/invoice-money";
 import { parseRateInput } from "@/lib/money";
@@ -151,8 +151,12 @@ export type DraftLineWrite = {
   title: string;
   detail: string;
   quantitySeconds: number;
+  /** Precise duration. Omitted on older callers; the save path then uses quantitySeconds × 1000. */
+  quantityMs?: bigint;
   unitPriceMinor: number;
   amountMinor: number;
+  rangeStart?: string | null;
+  rangeEnd?: string | null;
 };
 
 export type DraftWrite = {
@@ -168,6 +172,10 @@ export type DraftWrite = {
   taxLabel: string;
   taxRateBps: number;
   lines: DraftLineWrite[];
+  /** Present when the draft form saved the tracked-time window. */
+  periodStart?: string;
+  periodEnd?: string;
+  grouping?: InvoiceGrouping;
 };
 
 export function parseDraftInvoice(
@@ -182,7 +190,18 @@ export function parseDraftInvoice(
     taxEnabled: boolean;
     taxLabel: string;
     taxRate: string;
-    lines: Array<{ id: string; title: string; detail: string; quantity: string; unitPrice: string }>;
+    lines: Array<{
+      id: string;
+      title: string;
+      detail: string;
+      quantity: string;
+      unitPrice: string;
+      rangeStart?: string;
+      rangeEnd?: string;
+    }>;
+    periodStart?: string;
+    periodEnd?: string;
+    grouping?: string;
   },
   currency: string,
 ): { ok: true; data: DraftWrite } | { ok: false; error: string } {
@@ -224,6 +243,20 @@ export function parseDraftInvoice(
   const tax = parsePercentBps(input.taxRate.trim() || "0");
   if (!tax.ok) return { ok: false, error: invoiceCopy.percentInvalid };
 
+  let period: { periodStart: string; periodEnd: string; grouping: InvoiceGrouping } | undefined;
+  if (input.periodStart !== undefined || input.periodEnd !== undefined || input.grouping !== undefined) {
+    const periodStart = input.periodStart ?? "";
+    const periodEnd = input.periodEnd ?? "";
+    if (!dateOk(periodStart) || !dateOk(periodEnd)) {
+      return { ok: false, error: invoiceCopy.dateInvalid };
+    }
+    if (periodEnd < periodStart) return { ok: false, error: invoiceCopy.dateOrder };
+    if (!input.grouping || !isInvoiceGrouping(input.grouping)) {
+      return { ok: false, error: invoiceCopy.groupingInvalid };
+    }
+    period = { periodStart, periodEnd, grouping: input.grouping };
+  }
+
   const lines: DraftLineWrite[] = [];
   for (const line of input.lines) {
     const title = line.title.trim();
@@ -231,13 +264,24 @@ export function parseDraftInvoice(
     if (title.length > TITLE_MAX || line.detail.trim().length > TITLE_MAX) {
       return { ok: false, error: invoiceCopy.tooLong };
     }
-    const quantity = parseDurationInput(line.quantity);
+    const rangeStart = line.rangeStart?.trim() ?? "";
+    const rangeEnd = line.rangeEnd?.trim() ?? "";
+    if ((rangeStart && !rangeEnd) || (!rangeStart && rangeEnd)) {
+      return { ok: false, error: invoiceCopy.rangeIncomplete };
+    }
+    if (rangeStart || rangeEnd) {
+      if (!dateOk(rangeStart) || !dateOk(rangeEnd)) {
+        return { ok: false, error: invoiceCopy.dateInvalid };
+      }
+      if (rangeEnd < rangeStart) return { ok: false, error: invoiceCopy.rangeOrder };
+    }
+    const quantity = parseQuantityInput(line.quantity);
     if (!quantity.ok) return { ok: false, error: invoiceCopy.quantityInvalid };
     const price = parseRateInput(line.unitPrice.trim() || "0", currency);
     if (!price.ok) return { ok: false, error: price.error };
     let amountMinor = 0;
     try {
-      amountMinor = lineAmountMinor(price.amountMinor, quantity.seconds);
+      amountMinor = lineAmountFromMs(price.amountMinor, quantity.ms);
     } catch {
       return { ok: false, error: invoiceCopy.amountTooLarge };
     }
@@ -246,8 +290,11 @@ export function parseDraftInvoice(
       title,
       detail: line.detail.trim(),
       quantitySeconds: quantity.seconds,
+      quantityMs: quantity.ms,
       unitPriceMinor: price.amountMinor,
       amountMinor,
+      rangeStart: rangeStart || null,
+      rangeEnd: rangeEnd || null,
     });
   }
 
@@ -266,6 +313,7 @@ export function parseDraftInvoice(
       taxLabel,
       taxRateBps: tax.bps,
       lines,
+      ...period,
     },
   };
 }

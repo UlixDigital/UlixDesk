@@ -36,6 +36,9 @@ export function parseTransitionReason(raw: string) {
  *   It is refused when a billed entry was deleted, the entry now belongs to
  *   another client, a slice was billed elsewhere, or the entry was edited so
  *   the slice no longer fits.
+ * - An invoice with only manual lines has no InvoiceTime rows. Void and reopen
+ *   still follow the payment rules. The missing-time, moved-client, and overlap
+ *   checks apply only to time lines.
  */
 export async function voidInvoice(input: { actor: Actor; id: string; reason: string }) {
   if (!canManageWorkspace(input.actor.role)) return denied();

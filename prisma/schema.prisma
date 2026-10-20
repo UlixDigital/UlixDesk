@@ -394,18 +394,27 @@ model Invoice {
   @@index([issueDate])
 }
 
-/// One invoice row. `quantitySeconds` is the billed duration, shown as H:MM:SS.
-/// `amountMinor` is billAmountMinor(unitPriceMinor, quantitySeconds * 1000).
+/// One invoice row.
+/// `quantityMs` is the duration in whole milliseconds and is the source of truth
+/// for `amountMinor` (see docs/INVOICES.md). `quantitySeconds` is that duration
+/// rounded to the nearest second, half away from zero, and is what H:MM:SS shows
+/// when the quantity is a whole number of seconds.
+/// `kind` is `time` (tracked slices) or `custom` (a manual line, no InvoiceTime).
+/// `rangeStart` and `rangeEnd` are the optional date range on a manual line.
 model InvoiceLine {
-  id              String   @id @default(cuid())
+  id              String    @id @default(cuid())
   invoiceId       String
-  invoice         Invoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  invoice         Invoice   @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   position        Int
   /// time or custom.
   kind            String
   title           String
-  detail          String   @default("")
+  detail          String    @default("")
   quantitySeconds Int
+  /// Precise duration in milliseconds. See docs/INVOICES.md.
+  quantityMs      BigInt    @default(0)
+  rangeStart      DateTime? @db.Date
+  rangeEnd        DateTime? @db.Date
   unitPriceMinor  Int
   amountMinor     Int
   timeLinks       InvoiceTime[]

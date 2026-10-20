@@ -29,6 +29,9 @@ export async function renderStoredInvoicePdf(input: {
     title: string;
     detail: string;
     quantitySeconds: number;
+    quantityMs?: bigint | string | null;
+    rangeStart?: Date | string | null;
+    rangeEnd?: Date | string | null;
     unitPriceMinor: number;
     amountMinor: number;
   }>;

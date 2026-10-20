@@ -2,11 +2,13 @@ import { invoiceCopy } from "@/lib/invoice-copy";
 import type { InvoicePdfInput } from "@/lib/invoice-pdf";
 import {
   amountDueMinor,
-  formatDurationHms,
   formatInvoiceDate,
   formatInvoiceMoney,
   formatPercentBps,
+  invoiceLineDetail,
+  invoiceLineQuantity,
 } from "@/lib/invoice-money";
+import { utcDateKey } from "@/lib/rates";
 
 export function toInvoicePdfInput(input: {
   companyName: string;
@@ -35,6 +37,9 @@ export function toInvoicePdfInput(input: {
     title: string;
     detail: string;
     quantitySeconds: number;
+    quantityMs?: bigint | string | null;
+    rangeStart?: Date | string | null;
+    rangeEnd?: Date | string | null;
     unitPriceMinor: number;
     amountMinor: number;
   }>;
@@ -77,11 +82,20 @@ export function toInvoicePdfInput(input: {
     bankDetails: input.bankDetails,
     lines: input.lines.map((line) => ({
       title: line.title,
-      detail: line.detail,
-      quantity: formatDurationHms(line.quantitySeconds),
+      detail: invoiceLineDetail({
+        detail: line.detail,
+        rangeStart: dateKey(line.rangeStart),
+        rangeEnd: dateKey(line.rangeEnd),
+      }),
+      quantity: invoiceLineQuantity(line),
       unitPrice: money(line.unitPriceMinor),
       amount: money(line.amountMinor),
     })),
     totals,
   };
+}
+
+function dateKey(value: Date | string | null | undefined) {
+  if (!value) return null;
+  return value instanceof Date ? utcDateKey(value) : value;
 }

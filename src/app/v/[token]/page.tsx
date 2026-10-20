@@ -3,7 +3,13 @@ import { notFound } from "next/navigation";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { isOverdue } from "@/lib/invoice-balance";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
-import { amountDueMinor, formatDurationHms, formatInvoiceDate, formatPercentBps } from "@/lib/invoice-money";
+import {
+  amountDueMinor,
+  formatInvoiceDate,
+  formatPercentBps,
+  invoiceLineDetail,
+  invoiceLineQuantity,
+} from "@/lib/invoice-money";
 import { findPublicInvoice, takePublicInvoiceRead } from "@/lib/invoice-public";
 import { formatMoney } from "@/lib/money";
 import { utcDateKey } from "@/lib/rates";
@@ -92,17 +98,24 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
             </tr>
           </thead>
           <tbody>
-            {invoice.lines.map((line) => (
-              <tr key={`${line.title}-${line.quantitySeconds}-${line.amountMinor}`} className="border-t border-slate-200">
+            {invoice.lines.map((line, index) => {
+              const detail = invoiceLineDetail({
+                detail: line.detail,
+                rangeStart: line.rangeStart ? utcDateKey(line.rangeStart) : null,
+                rangeEnd: line.rangeEnd ? utcDateKey(line.rangeEnd) : null,
+              });
+              return (
+              <tr key={`${line.title}-${index}`} className="border-t border-slate-200">
                 <td className="px-4 py-3">
                   <p className="font-medium text-ink">{line.title}</p>
-                  {line.detail ? <p className="text-slate-500">{line.detail}</p> : null}
+                  {detail ? <p className="text-slate-500">{detail}</p> : null}
                 </td>
-                <td className="px-4 py-3">{formatDurationHms(line.quantitySeconds)}</td>
+                <td className="px-4 py-3">{invoiceLineQuantity(line)}</td>
                 <td className="px-4 py-3">{formatMoney(line.unitPriceMinor, invoice.currency)}</td>
                 <td className="px-4 py-3">{formatMoney(line.amountMinor, invoice.currency)}</td>
               </tr>
-            ))}
+              );
+            })}
           </tbody>
         </table>
       </div>

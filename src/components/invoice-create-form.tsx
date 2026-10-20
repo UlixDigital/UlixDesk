@@ -1,13 +1,63 @@
 "use client";
 
+import Link from "next/link";
 import { useActionState } from "react";
-import { createInvoiceAction, type InvoiceFormState } from "@/app/invoices/actions";
+import { createBlankInvoiceAction, createInvoiceAction, type InvoiceFormState } from "@/app/invoices/actions";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import { ui } from "@/lib/ui";
 
 const idle: InvoiceFormState = { error: null, notice: null };
 
 export function InvoiceCreateForm({
+  clients,
+  periodStart,
+  periodEnd,
+  blank = false,
+}: {
+  clients: Array<{ id: string; name: string; currency: string }>;
+  periodStart: string;
+  periodEnd: string;
+  blank?: boolean;
+}) {
+  if (blank) return <BlankInvoiceForm clients={clients} />;
+  return <TimeInvoiceForm clients={clients} periodStart={periodStart} periodEnd={periodEnd} />;
+}
+
+function BlankInvoiceForm({ clients }: { clients: Array<{ id: string; name: string; currency: string }> }) {
+  const [state, action, pending] = useActionState(createBlankInvoiceAction, idle);
+  return (
+    <form id="invoice-blank" action={action} className="space-y-5 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+      {state.error ? (
+        <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
+          {state.error}
+        </p>
+      ) : null}
+      <label className="block text-sm font-medium text-slate-800" htmlFor="blank-invoice-client">
+        {invoiceCopy.client}
+        <select id="blank-invoice-client" name="clientId" className={`${ui.input} mt-1.5`} required defaultValue="">
+          <option value="" disabled>
+            {invoiceCopy.clientRequired.replace(/\.$/, "")}
+          </option>
+          {clients.map((client) => (
+            <option key={client.id} value={client.id}>
+              {client.name} ({client.currency})
+            </option>
+          ))}
+        </select>
+      </label>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className={ui.primaryButton} disabled={pending || clients.length === 0}>
+          {pending ? invoiceCopy.creating : invoiceCopy.blankCreate}
+        </button>
+        <Link href="/invoices/new" className="text-sm text-slate-600 hover:text-accent">
+          {invoiceCopy.timeLink}
+        </Link>
+      </div>
+    </form>
+  );
+}
+
+function TimeInvoiceForm({
   clients,
   periodStart,
   periodEnd,
@@ -56,9 +106,14 @@ export function InvoiceCreateForm({
           <option value="day">{invoiceCopy.groupingDay}</option>
         </select>
       </label>
-      <button type="submit" className={ui.primaryButton} disabled={pending || clients.length === 0}>
-        {pending ? invoiceCopy.creating : invoiceCopy.create}
-      </button>
+      <div className="flex flex-wrap items-center gap-3">
+        <button type="submit" className={ui.primaryButton} disabled={pending || clients.length === 0}>
+          {pending ? invoiceCopy.creating : invoiceCopy.create}
+        </button>
+        <Link href="/invoices/new?blank=1" className="text-sm text-slate-600 hover:text-accent">
+          {invoiceCopy.blankLink}
+        </Link>
+      </div>
     </form>
   );
 }

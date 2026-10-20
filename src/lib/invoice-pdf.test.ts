@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import { describe, expect, it } from "vitest";
 import { parseInvoiceBankFile } from "../../scripts/invoice-bank-file.mjs";
+import { toInvoicePdfInput } from "@/lib/invoice-document";
 import {
   INVOICE_NOTES_LINE_GAP,
   INVOICE_NOTES_WIDTH,
@@ -145,6 +146,53 @@ describe("invoice pdf layout", () => {
     expect(trace.some((item) => item.text === "$40.00")).toBe(true);
     expect(trace.some((item) => item.text === "Amount due")).toBe(true);
     expect(trace.some((item) => item.text === "$60.00")).toBe(true);
+  });
+
+  it("prints a manual line's date range and H:MM:SS quantity", async () => {
+    const trace: Array<{ text: string; x: number; y: number }> = [];
+    const input = toInvoicePdfInput({
+      companyName: "Ulix Digital",
+      companyAddress: "30 North Gould Street, Sheridan, WY 82801",
+      number: "LE2001",
+      clientName: "WSI Web Enhancers",
+      clientAddress: "4801 Lang Ave NE",
+      currency: "USD",
+      issueDate: "2026-10-12",
+      dueDate: "2026-10-19",
+      poNumber: null,
+      notes: "",
+      bankDetails: placeholderBank,
+      discountMinor: 0,
+      discountKind: "none",
+      discountBps: 0,
+      taxEnabled: false,
+      taxLabel: "Tax",
+      taxRateBps: 0,
+      subtotalMinor: 6000,
+      taxMinor: 0,
+      totalMinor: 6000,
+      paidMinor: 0,
+      lines: [
+        {
+          title: "Design review",
+          detail: "",
+          quantitySeconds: 5400,
+          quantityMs: 5_400_000n,
+          rangeStart: "2026-10-01",
+          rangeEnd: "2026-10-03",
+          unitPriceMinor: 4000,
+          amountMinor: 6000,
+        },
+      ],
+    });
+    expect(input.lines[0]).toMatchObject({
+      quantity: "1:30:00",
+      detail: "Thu, Oct 1, 2026 - Sat, Oct 3, 2026",
+    });
+    await renderInvoicePdf(input, { compress: false, trace });
+    expect(trace.some((item) => item.text === "Design review")).toBe(true);
+    expect(trace.some((item) => item.text === "1:30:00")).toBe(true);
+    expect(trace.some((item) => item.text === "Thu, Oct 1, 2026 - Sat, Oct 3, 2026")).toBe(true);
   });
 
   it("gives the notes column enough room for Ulix Digital", () => {

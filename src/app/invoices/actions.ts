@@ -11,7 +11,15 @@ import { sendInvoice } from "@/lib/invoice-send";
 import { saveInvoiceSettings } from "@/lib/invoice-settings";
 import { correctPayment, deletePayment, recordPayment } from "@/lib/invoice-payments";
 import { reopenInvoice, voidInvoice } from "@/lib/invoice-status";
-import { createInvoice, deleteDraft, getInvoice, parseDraftFromForm, refreshDraftFromTime, saveDraft } from "@/lib/invoices";
+import {
+  createBlankInvoice,
+  createInvoice,
+  deleteDraft,
+  getInvoice,
+  parseDraftFromForm,
+  refreshDraftFromTime,
+  saveDraft,
+} from "@/lib/invoices";
 
 export type InvoiceFormState = {
   error: string | null;
@@ -61,6 +69,20 @@ export async function createInvoiceAction(
   if (!parsed.ok) return { error: parsed.error, notice: null };
   if (!isInvoiceGrouping(parsed.data.grouping)) return { error: invoiceCopy.groupingInvalid, notice: null };
   const created = await createInvoice({ actor: gate.user, ...parsed.data });
+  if (!created.ok) return { error: created.error, notice: null };
+  revalidatePath("/invoices");
+  redirect(`/invoices/${created.id}`);
+}
+
+export async function createBlankInvoiceAction(
+  _previous: InvoiceFormState,
+  formData: FormData,
+): Promise<InvoiceFormState> {
+  const gate = await gateManager();
+  if (!gate.ok) return { error: gateError(gate.error), notice: null };
+  const clientId = String(formData.get("clientId") ?? "").trim();
+  if (!clientId) return { error: invoiceCopy.clientRequired, notice: null };
+  const created = await createBlankInvoice({ actor: gate.user, clientId });
   if (!created.ok) return { error: created.error, notice: null };
   revalidatePath("/invoices");
   redirect(`/invoices/${created.id}`);

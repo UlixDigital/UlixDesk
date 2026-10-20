@@ -1,5 +1,4 @@
 import { minorDigits } from "@/lib/currencies";
-import { billAmountMinor } from "@/lib/money";
 import { addCalendarDays, formatCivilDate, weekdayIndex } from "@/lib/time-zone";
 
 const PERCENT_DENOMINATOR = BigInt(10_000);
@@ -89,11 +88,115 @@ export function parseDurationInput(raw: string): { ok: true; seconds: number } |
   return { ok: true, seconds: total };
 }
 
+const ZERO = BigInt(0);
+const TWO = BigInt(2);
+const TEN = BigInt(10);
+const HALF_SECOND_MS = BigInt(500);
+const SECOND_MS = BigInt(1000);
+const HOUR_MS = BigInt(3_600_000);
+const HOUR_SCALE = BigInt(100_000);
+
+export function quantityMsFromSeconds(seconds: number) {
+  return BigInt(seconds) * SECOND_MS;
+}
+
+/**
+ * Milliseconds are the stored quantity. A row written before `quantityMs`
+ * existed, or a fixture that only set `quantitySeconds`, still has the default
+ * 0. Fall back to the seconds column in that case. A real sub-second quantity
+ * has a non-zero `quantityMs` even when the rounded second is 0.
+ */
+export function resolveQuantityMs(line: { quantitySeconds: number; quantityMs?: bigint | string | null }) {
+  const raw = line.quantityMs;
+  const quantityMs = typeof raw === "string" && /^\d+$/.test(raw) ? BigInt(raw) : typeof raw === "bigint" ? raw : null;
+  if (typeof quantityMs === "bigint" && (quantityMs !== ZERO || line.quantitySeconds === 0)) {
+    return quantityMs;
+  }
+  return quantityMsFromSeconds(line.quantitySeconds);
+}
+
+/** Nearest second, half away from zero. Matches `secondsFromMs`. */
+export function wholeSecondsFromQuantityMs(quantityMs: bigint) {
+  if (quantityMs <= ZERO) return 0;
+  const seconds = (quantityMs + HALF_SECOND_MS) / SECOND_MS;
+  if (seconds > BigInt(MAX_QUANTITY_SECONDS)) throw new Error("Amount is too large.");
+  return Number(seconds);
+}
+
+/**
+ * Hourly price × duration, rounded half away from zero to the minor unit.
+ * `amount = round(unitPriceMinor × quantityMs / 3_600_000)`.
+ * This is `billAmountMinor` for a duration in milliseconds. A whole number of
+ * seconds (`quantityMs = quantitySeconds × 1000`) matches `lineAmountMinor`.
+ */
+export function lineAmountFromMs(unitPriceMinor: number, quantityMs: bigint) {
+  if (!Number.isInteger(unitPriceMinor) || unitPriceMinor < 0) {
+    throw new Error("Hourly rates must be a non-negative integer of minor units.");
+  }
+  if (quantityMs <= ZERO || unitPriceMinor <= 0) return 0;
+  const rounded = (BigInt(unitPriceMinor) * quantityMs + HOUR_MS / TWO) / HOUR_MS;
+  if (rounded > BigInt(MAX_MONEY_MINOR)) throw new Error("Amount is too large.");
+  return Number(rounded);
+}
+
 export function lineAmountMinor(unitPriceMinor: number, quantitySeconds: number) {
   if (quantitySeconds <= 0 || unitPriceMinor <= 0) return 0;
-  const amount = billAmountMinor(unitPriceMinor, quantitySeconds * 1000);
-  if (amount > MAX_MONEY_MINOR) throw new Error("Amount is too large.");
-  return amount;
+  return lineAmountFromMs(unitPriceMinor, quantityMsFromSeconds(quantitySeconds));
+}
+
+/**
+ * Hours as `H:MM:SS`, `H:MM` (seconds default to 0), or a plain number of hours.
+ * A plain number allows at most five decimal places. Five places is the limit
+ * that still converts to an integer number of milliseconds: one hour is
+ * 3,600,000 ms, and 3,600,000 is divisible by 100,000, so `0.00001` hour is
+ * exactly 36 ms. The parse uses integer arithmetic, not a binary float.
+ * `1.5` is exactly `1:30:00`. `1.25` is exactly `1:15:00`.
+ */
+export function parseQuantityInput(raw: string): { ok: true; ms: bigint; seconds: number } | { ok: false } {
+  const trimmed = raw.trim();
+  if (trimmed.includes(":")) {
+    const parsed = parseDurationInput(trimmed);
+    if (!parsed.ok) return { ok: false };
+    return { ok: true, ms: quantityMsFromSeconds(parsed.seconds), seconds: parsed.seconds };
+  }
+  if (!/^\d+(\.\d{1,5})?$/.test(trimmed)) return { ok: false };
+  const [whole, frac = ""] = trimmed.split(".");
+  const scale = TEN ** BigInt(frac.length);
+  const numerator = BigInt(whole) * scale + BigInt(frac || "0");
+  const ms = (numerator * HOUR_MS) / scale;
+  if ((numerator * HOUR_MS) % scale !== ZERO) return { ok: false };
+  if (ms > BigInt(MAX_QUANTITY_SECONDS) * SECOND_MS) return { ok: false };
+  try {
+    return { ok: true, ms, seconds: wholeSecondsFromQuantityMs(ms) };
+  } catch {
+    return { ok: false };
+  }
+}
+
+/** `H:MM:SS` when the milliseconds are a whole number of seconds, otherwise decimal hours. */
+export function formatQuantityMs(quantityMs: bigint) {
+  if (quantityMs <= ZERO) return formatDurationHms(0);
+  if (quantityMs % SECOND_MS === ZERO) {
+    const seconds = quantityMs / SECOND_MS;
+    if (seconds > BigInt(Number.MAX_SAFE_INTEGER)) return formatDurationHms(MAX_QUANTITY_SECONDS);
+    return formatDurationHms(Number(seconds));
+  }
+  const whole = quantityMs / HOUR_MS;
+  const remainder = quantityMs % HOUR_MS;
+  const scale = HOUR_SCALE;
+  const digits = (remainder * scale) / HOUR_MS;
+  const fraction = digits.toString().padStart(5, "0").replace(/0+$/, "");
+  return fraction ? `${whole}.${fraction}` : String(whole);
+}
+
+export function invoiceLineQuantity(line: { quantitySeconds: number; quantityMs?: bigint | string | null }) {
+  return formatQuantityMs(resolveQuantityMs(line));
+}
+
+/** A manual date range replaces the free-text detail on the page and the PDF. */
+export function invoiceLineDetail(line: { detail: string; rangeStart?: string | null; rangeEnd?: string | null }) {
+  if (line.rangeStart && line.rangeEnd) return formatInvoiceRange(line.rangeStart, line.rangeEnd);
+  return line.detail;
 }
 
 export function formatPercentBps(bps: number) {

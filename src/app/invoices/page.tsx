@@ -45,8 +45,11 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
           <Link href="/invoices/settings" className={ui.secondaryButton}>
             {invoiceCopy.settings}
           </Link>
-          <Link href="/invoices/new" className={ui.primaryButton}>
+          <Link href="/invoices/new?blank=1" className={ui.primaryButton}>
             {invoiceCopy.new}
+          </Link>
+          <Link href="/invoices/new" className={ui.secondaryButton}>
+            {invoiceCopy.fromTime}
           </Link>
         </div>
       </div>

@@ -10,9 +10,10 @@ import { canManageWorkspace } from "@/lib/users-validation";
 
 export const metadata: Metadata = { title: "New invoice" };
 
-export default async function NewInvoicePage() {
+export default async function NewInvoicePage({ searchParams }: { searchParams: Promise<{ blank?: string }> }) {
   const user = await getCurrentUser();
   if (!user || !canManageWorkspace(user.role)) return null;
+  const blank = (await searchParams).blank === "1";
   const [clients, settings] = await Promise.all([listInvoiceClients(), getInvoiceSettings()]);
   const today = todayInTimeZone(settings.timeZone);
   const thisMonday = startOfWeekDate(today);
@@ -26,10 +27,10 @@ export default async function NewInvoicePage() {
           {invoiceCopy.back}
         </Link>
       </p>
-      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">{invoiceCopy.new}</h1>
-      <p className="mt-1 text-sm text-slate-600">{invoiceCopy.intro}</p>
+      <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">{blank ? invoiceCopy.new : invoiceCopy.fromTime}</h1>
+      <p className="mt-1 text-sm text-slate-600">{blank ? invoiceCopy.blankIntro : invoiceCopy.intro}</p>
       <div className="mt-6" id="invoice-create">
-        <InvoiceCreateForm clients={clients} periodStart={periodStart} periodEnd={periodEnd} />
+        <InvoiceCreateForm clients={clients} periodStart={periodStart} periodEnd={periodEnd} blank={blank} />
       </div>
     </div>
   );
