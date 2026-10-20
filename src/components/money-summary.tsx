@@ -30,7 +30,9 @@ export function MoneySummary({
 export function MoneyAmount({ amount }: { amount: MoneyTotal | null }) {
   if (!amount) {
     return (
-      <span className="whitespace-nowrap text-slate-500">
+      // The hidden label is positioned against this span. Without that, it
+      // sits at the far edge of a wide timesheet and makes the page scroll.
+      <span className="relative whitespace-nowrap text-slate-500">
         —<span className="sr-only"> {rateCopy.noAmount}</span>
       </span>
     );
