@@ -140,6 +140,7 @@ describe("invoice line grouping", () => {
       grouping: "period",
       periodStart: "2026-10-05",
       periodEnd: "2026-10-11",
+      currency: "USD",
       slices: [
         slice({ timeEntryId: "a", rateMinor: 1, durationMs: quarter }),
         slice({ timeEntryId: "b", rateMinor: 1, durationMs: quarter }),
@@ -148,11 +149,12 @@ describe("invoice line grouping", () => {
     });
     expect(billAmountMinor(1, quarter) + billAmountMinor(1, quarter)).toBe(0);
     const combined = built.lines.find((line) => line.unitPriceMinor === 1);
-    expect(combined?.title).toBe("Website");
+    expect(combined?.title).toBe("Website · $0.01");
     expect(combined?.quantitySeconds).toBe(1800);
     expect(combined?.amountMinor).toBe(1);
     expect(combined?.timeEntryIds).toEqual(["a", "b"]);
     const full = built.lines.find((line) => line.unitPriceMinor === 2500);
+    expect(full?.title).toBe("Website · $25.00");
     expect(full?.amountMinor).toBe(2500);
     expect(built.lines.every((line) => line.amountMinor === lineAmountMinor(line.unitPriceMinor, line.quantitySeconds))).toBe(
       true,
@@ -164,6 +166,7 @@ describe("invoice line grouping", () => {
       grouping: "project",
       periodStart: "2026-10-05",
       periodEnd: "2026-10-11",
+      currency: "USD",
       slices: [
         slice({ timeEntryId: "rated", rateMinor: 2500, projectName: "Website" }),
         slice({
@@ -198,6 +201,7 @@ describe("invoice line grouping", () => {
       grouping: "member",
       periodStart: "2026-10-05",
       periodEnd: "2026-10-11",
+      currency: "USD",
       slices,
     });
     expect(members.lines.map((line) => line.title)).toEqual(["Website · Mia", "Website · Noa"]);
@@ -205,9 +209,48 @@ describe("invoice line grouping", () => {
       grouping: "day",
       periodStart: "2026-10-05",
       periodEnd: "2026-10-11",
+      currency: "USD",
       slices,
     });
     expect(days.lines.map((line) => line.title)).toEqual(["Mon, Oct 5, 2026", "Tue, Oct 6, 2026"]);
     expect(days.lines[0]?.detail).toBe("");
+  });
+
+  it("gives a rate split on one project a distinct title", () => {
+    const byMember = buildInvoiceLines({
+      grouping: "project",
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      currency: "USD",
+      slices: [
+        slice({ timeEntryId: "mia", rateMinor: 2500, userId: "mia", userName: "Mia" }),
+        slice({ timeEntryId: "noa", rateMinor: 4000, userId: "noa", userName: "Noa" }),
+      ],
+    });
+    expect(byMember.lines.map((line) => line.title)).toEqual(["Website · Mia", "Website · Noa"]);
+
+    const byRate = buildInvoiceLines({
+      grouping: "member",
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      currency: "JPY",
+      slices: [
+        slice({ timeEntryId: "low", rateMinor: 1500, userName: "Mia" }),
+        slice({ timeEntryId: "high", rateMinor: 3000, userName: "Mia", day: "2026-10-07" }),
+      ],
+    });
+    expect(byRate.lines.map((line) => line.title)).toEqual(["Website · Mia · ¥1,500", "Website · Mia · ¥3,000"]);
+
+    const single = buildInvoiceLines({
+      grouping: "project",
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      currency: "USD",
+      slices: [
+        slice({ timeEntryId: "mia", rateMinor: 2500, userName: "Mia" }),
+        slice({ timeEntryId: "noa", rateMinor: 2500, userId: "noa", userName: "Noa" }),
+      ],
+    });
+    expect(single.lines.map((line) => line.title)).toEqual(["Website"]);
   });
 });

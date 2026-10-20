@@ -56,12 +56,15 @@ export type UnratedTime = {
  * Group billable slices, then split a group that contains more than one rate.
  * The line amount is billAmountMinor of the combined duration, so
  * quantity × unit price rounds to the line amount. Summing per-entry
- * rounding is not used.
+ * rounding is not used. When one project would be listed twice because of
+ * that split, each line adds the member name, or the rate when the member
+ * name would still match.
  */
 export function buildInvoiceLines(input: {
   grouping: InvoiceGrouping;
   periodStart: string;
   periodEnd: string;
+  currency: string;
   slices: InvoiceSlice[];
 }): { lines: BuiltInvoiceLine[]; unrated: UnratedTime[] } {
   const unrated: UnratedTime[] = [];
@@ -73,7 +76,7 @@ export function buildInvoiceLines(input: {
       unitPriceMinor: number;
       durationMs: number;
       projectNames: string[];
-      userName: string;
+      userNames: string[];
       day: string;
       timeEntryIds: string[];
       windows: InvoiceWindow[];
@@ -111,6 +114,7 @@ export function buildInvoiceLines(input: {
     if (existing) {
       existing.durationMs += slice.durationMs;
       if (!existing.projectNames.includes(slice.projectName)) existing.projectNames.push(slice.projectName);
+      if (!existing.userNames.includes(slice.userName)) existing.userNames.push(slice.userName);
       if (!existing.timeEntryIds.includes(slice.timeEntryId)) {
         existing.timeEntryIds.push(slice.timeEntryId);
       }
@@ -127,7 +131,7 @@ export function buildInvoiceLines(input: {
       unitPriceMinor: slice.rateMinor,
       durationMs: slice.durationMs,
       projectNames: [slice.projectName],
-      userName: slice.userName,
+      userNames: [slice.userName],
       day: slice.day,
       timeEntryIds: [slice.timeEntryId],
       windows: [
@@ -140,28 +144,27 @@ export function buildInvoiceLines(input: {
     });
   }
 
-  const lines = [...groups.values()]
+  const visible = [...groups.values()]
+    .filter((group) => secondsFromMs(group.durationMs) > 0)
     .sort((a, b) => {
       const bySort = a.sort.localeCompare(b.sort, "en", { sensitivity: "base" });
       if (bySort !== 0) return bySort;
       return a.unitPriceMinor - b.unitPriceMinor;
-    })
-    .flatMap((group) => {
-      const quantitySeconds = secondsFromMs(group.durationMs);
-      if (quantitySeconds <= 0) return [];
-      return [
-        {
-          kind: "time" as const,
-          title: groupTitle(input.grouping, group.projectNames, group.userName, group.day),
-          detail: group.detail,
-          quantitySeconds,
-          unitPriceMinor: group.unitPriceMinor,
-          amountMinor: lineAmountMinor(group.unitPriceMinor, quantitySeconds),
-          timeEntryIds: group.timeEntryIds,
-          windows: group.windows,
-        },
-      ];
     });
+  const titles = titlesForRateSplits(input.grouping, visible, input.currency);
+  const lines = visible.map((group, index) => {
+    const quantitySeconds = secondsFromMs(group.durationMs);
+    return {
+      kind: "time" as const,
+      title: titles[index] ?? groupTitle(input.grouping, group.projectNames, group.userNames, group.day),
+      detail: group.detail,
+      quantitySeconds,
+      unitPriceMinor: group.unitPriceMinor,
+      amountMinor: lineAmountMinor(group.unitPriceMinor, quantitySeconds),
+      timeEntryIds: group.timeEntryIds,
+      windows: group.windows,
+    };
+  });
 
   unrated.sort((a, b) => a.day.localeCompare(b.day) || a.userName.localeCompare(b.userName));
   return { lines, unrated };
@@ -217,12 +220,49 @@ export function unratedLineLabel(item: UnratedTime) {
 }
 
 /** Project name, with the member name when the line is split by member. */
-function groupTitle(grouping: InvoiceGrouping, projectNames: string[], userName: string, day: string) {
+function groupTitle(grouping: InvoiceGrouping, projectNames: string[], userNames: string[], day: string) {
   const projects = [...new Set(projectNames)].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
   const projectLabel = projects.join(", ");
-  if (grouping === "member") return projectLabel ? `${projectLabel} · ${userName}` : userName;
+  const members = memberLabel(userNames);
+  if (grouping === "member") return projectLabel ? `${projectLabel} · ${members}` : members;
   if (grouping === "day") return formatInvoiceDate(day);
   return projectLabel;
+}
+
+/**
+ * Same project and same rate stay one line. A rate split that would repeat
+ * the title adds the member name. When that still matches, it adds the rate.
+ */
+function titlesForRateSplits(
+  grouping: InvoiceGrouping,
+  groups: Array<{ projectNames: string[]; userNames: string[]; day: string; unitPriceMinor: number }>,
+  currency: string,
+) {
+  const bases = groups.map((group) => groupTitle(grouping, group.projectNames, group.userNames, group.day));
+  const baseCounts = counts(bases);
+  const withMember = bases.map((base, index) => {
+    if ((baseCounts.get(base) ?? 0) < 2 || grouping === "member") return base;
+    const members = memberLabel(groups[index]?.userNames ?? []);
+    return members ? `${base} · ${members}` : base;
+  });
+  const memberCounts = counts(withMember);
+  return withMember.map((title, index) => {
+    if ((memberCounts.get(title) ?? 0) < 2) return title;
+    const rate = formatInvoiceMoney(groups[index]?.unitPriceMinor ?? 0, currency);
+    return `${bases[index] ?? title} · ${rate}`;
+  });
+}
+
+function memberLabel(userNames: string[]) {
+  return [...new Set(userNames.map((name) => name.trim()).filter(Boolean))]
+    .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }))
+    .join(", ");
+}
+
+function counts(values: string[]) {
+  const map = new Map<string, number>();
+  for (const value of values) map.set(value, (map.get(value) ?? 0) + 1);
+  return map;
 }
 
 function sortKey(grouping: InvoiceGrouping, slice: InvoiceSlice) {
