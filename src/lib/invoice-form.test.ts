@@ -63,6 +63,44 @@ describe("invoice form errors", () => {
     expect(parsed.data.invoiceNotes).toBe("# keep this note");
   });
 
+  it("accepts a plain-number quantity and an optional date range", () => {
+    const parsed = parseDraftInvoice(
+      {
+        ...draft,
+        lines: [
+          {
+            id: "",
+            title: "Design",
+            detail: "",
+            quantity: "1.5",
+            unitPrice: "40",
+            rangeStart: "2026-10-01",
+            rangeEnd: "2026-10-03",
+          },
+        ],
+      },
+      "USD",
+    );
+    expect(parsed.ok).toBe(true);
+    if (!parsed.ok) return;
+    expect(parsed.data.lines[0]).toMatchObject({
+      quantityMs: 5_400_000n,
+      quantitySeconds: 5400,
+      amountMinor: 6000,
+      rangeStart: "2026-10-01",
+      rangeEnd: "2026-10-03",
+    });
+    expect(
+      parseDraftInvoice(
+        {
+          ...draft,
+          lines: [{ id: "", title: "Design", detail: "", quantity: "1.5", unitPrice: "40", rangeStart: "2026-10-03", rangeEnd: "" }],
+        },
+        "USD",
+      ),
+    ).toMatchObject({ ok: false, error: invoiceCopy.rangeIncomplete });
+  });
+
   it("rejects a negative discount with a clear message", () => {
     expect(parseDraftInvoice({ ...draft, discountKind: "amount", discountValue: "-5" }, "USD")).toEqual({
       ok: false,

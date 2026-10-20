@@ -40,6 +40,7 @@ export async function GET(_request: Request, context: { params: Promise<{ id: st
     taxMinor: invoice.taxMinor,
     totalMinor: invoice.totalMinor,
     paidMinor: invoice.paidMinor,
+    status: invoice.status,
     overdue: isOverdue({
       dueDate: invoiceDateKey(invoice.dueDate),
       today: todayInTimeZone(settings.timeZone),

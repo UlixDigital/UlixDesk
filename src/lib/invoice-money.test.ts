@@ -4,9 +4,12 @@ import { buildInvoiceLines, type InvoiceSlice } from "@/lib/invoice-lines";
 import {
   formatDurationHms,
   formatInvoiceMoney,
+  formatQuantityMs,
   invoiceTotals,
+  lineAmountFromMs,
   lineAmountMinor,
   parseDurationInput,
+  parseQuantityInput,
   percentOfMinor,
   periodLineTitle,
   secondsFromMs,
@@ -70,6 +73,32 @@ describe("invoice money", () => {
     expect(formatDurationHms(94932)).toBe("26:22:12");
     expect(periodLineTitle("2026-10-05", "2026-10-11")).toBe("Weekly Invoice");
     expect(periodLineTitle("2026-10-05", "2026-10-10")).toBe("Invoice");
+  });
+
+  it("stores a plain hour quantity as exact milliseconds and rounds the amount like a bill rate", () => {
+    expect(parseQuantityInput("1:30:00")).toEqual({ ok: true, ms: 5_400_000n, seconds: 5400 });
+    expect(parseQuantityInput("1.5")).toEqual({ ok: true, ms: 5_400_000n, seconds: 5400 });
+    expect(parseQuantityInput("1.25")).toEqual({ ok: true, ms: 4_500_000n, seconds: 4500 });
+    expect(parseQuantityInput("0.00001")).toEqual({ ok: true, ms: 36n, seconds: 0 });
+    expect(parseQuantityInput("1.00001")).toEqual({ ok: true, ms: 3_600_036n, seconds: 3600 });
+    expect(parseQuantityInput("1.000001").ok).toBe(false);
+    expect(parseQuantityInput("1.5.0").ok).toBe(false);
+    expect(formatQuantityMs(5_400_000n)).toBe("1:30:00");
+    expect(formatQuantityMs(36n)).toBe("0.00001");
+    expect(lineAmountFromMs(2500, 5_400_000n)).toBe(3750);
+    expect(lineAmountFromMs(2500, 3_603_600n)).toBe(2503);
+    const halfSecondWouldDiffer = lineAmountFromMs(10_000, 1_440n);
+    expect(halfSecondWouldDiffer).toBe(4);
+    expect(lineAmountMinor(10_000, 1)).toBe(3);
+    const totals = invoiceTotals({
+      lineAmounts: [lineAmountFromMs(4000, 5_400_000n), lineAmountMinor(2500, 7200)],
+      discountKind: "percent",
+      discountAmountMinor: 0,
+      discountBps: 1000,
+      taxEnabled: true,
+      taxRateBps: 850,
+    });
+    expect(totals).toEqual({ subtotalMinor: 11_000, discountMinor: 1_100, taxMinor: 842, totalMinor: 10_742 });
   });
 });
 

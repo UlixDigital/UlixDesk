@@ -25,10 +25,14 @@ export async function renderStoredInvoicePdf(input: {
   totalMinor: number;
   paidMinor: number;
   overdue?: boolean;
+  status?: string;
   lines: Array<{
     title: string;
     detail: string;
     quantitySeconds: number;
+    quantityMs?: bigint | string | null;
+    rangeStart?: Date | string | null;
+    rangeEnd?: Date | string | null;
     unitPriceMinor: number;
     amountMinor: number;
   }>;
@@ -57,6 +61,7 @@ export async function renderStoredInvoicePdf(input: {
       totalMinor: input.totalMinor,
       paidMinor: input.paidMinor,
       overdue: input.overdue,
+      paid: input.status === "paid",
       lines: input.lines,
     }),
   );

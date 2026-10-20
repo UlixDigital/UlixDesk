@@ -2,6 +2,30 @@
 
 Owners and admins manage invoices. Members have no invoice pages, and the invoice PDF route answers 403 for them. A member never sees bill rates or invoice amounts in the staff app.
 
+## Manual invoices
+
+New invoice starts a draft with no lines. From tracked time is the existing flow, which builds lines from uninvoiced billable time. Both allocate the number from `InvoiceNumber` with the workspace prefix (LE unless settings change it). A number is never reused, including after the draft is deleted. The currency is the client's currency. The issue date is today in the workspace timezone (Asia/Colombo) and the due date is that day plus the default net terms.
+
+A manual line (`InvoiceLine.kind = custom`) has a description, an optional date range (`rangeStart` and `rangeEnd`, both or neither), a quantity, and a unit price. The amount is quantity times unit price, rounded to minor units with the same half-away-from-zero rule as a bill rate. Manual lines do not create `InvoiceTime` rows, so they do not lock time and they do not take part in `InvoiceTime_no_overlap` or `time_entry_invoice_lock`.
+
+Quantity is stored as `quantityMs`, an integer number of milliseconds. `quantitySeconds` is that duration rounded to the nearest second, half a second away from zero (the same rule as `secondsFromMs`). The page and the PDF show `H:MM:SS` when the milliseconds are a whole number of seconds. Otherwise they show the decimal hours.
+
+- `H:MM:SS`, or `H:MM` with the seconds taken as 0, is an exact number of seconds. `quantityMs = quantitySeconds × 1000`.
+- A plain number is a number of hours, such as `1.5` or `2`. It is parsed with integer arithmetic, not a binary float. At most five decimal places are accepted. Five places is the limit that still converts to an integer number of milliseconds: one hour is 3,600,000 ms, and 3,600,000 is divisible by 100,000, so `0.00001` hour is exactly 36 ms. `1.5` is exactly `1:30:00`. `1.25` is exactly `1:15:00`.
+- The line amount is `round(unitPriceMinor × quantityMs / 3_600_000)`, half away from zero. That is `billAmountMinor` for a duration in milliseconds. When the quantity is a whole number of seconds it matches `lineAmountMinor(unitPriceMinor, quantitySeconds)`. A fractional second is billed from the milliseconds, not from the rounded second.
+
+Tracked time on a draft uses the existing slice logic. The draft's period and grouping choose the window. Windows already on another active invoice are left out, so the same time is not billed twice. Those lines stay `kind = time` and keep their `InvoiceTime` rows. Adding tracked time is the Refresh from time action.
+
+A tracked-time line's quantity is read-only. The form shows "Edit the time entries, then Refresh from time". Saving a different quantity is refused, including a request that does not use the form. The description and the unit price can still be edited. The amount is the stored quantity times the new unit price. A different amount is a manual line. Refresh from time still replaces time lines from the slices, so it does not keep a quantity typed over a time line.
+
+Refresh from time replaces every time line and its slices with a fresh derive. It does not delete manual lines. Their description, date range, quantity, unit price, and amount are the values submitted with the refresh, so an edit in the form is saved. Manual lines are not given `InvoiceTime` rows. After a refresh, tracked-time lines are listed first in the newly derived order, and manual lines follow in the order they were submitted. A manual line that had been moved above a time line returns to after the time lines. Saving the draft without refreshing keeps the order you set. The number, client, and currency do not change. If `InvoiceTime_no_overlap` rejects the new windows, the refresh is rolled back and the draft is unchanged.
+
+Issuing a draft that already has time lines still compares those lines with a fresh derive and asks for confirmation when they differ. Confirming replaces the time lines the same way and keeps the manual lines. That can leave the invoice with no lines when the tracked time has all moved out of the period. Issuing a draft that has no time lines does not pull in tracked time and does not lock any time entry. A blank draft can be issued. When the total is zero, Mark as issued and Send both mark it paid in the same action. `paidMinor` stays 0 and no payment row is written. The audit is two `InvoiceStatusEvent` rows: draft to open with the usual issue reason, then open to paid with the reason "Auto-paid because the total is zero". There is no event-kind enum, so that reason is the auto-paid kind. Reports list the invoice as paid. Aging leaves it out, because nothing is due. The PDF date block says Status: Paid, and the client page shows Paid. Void and reopen still apply, because no payment was recorded. A paid invoice that has a payment stays blocked until that payment is deleted.
+
+Void and reopen of an invoice with only manual lines follow the same payment rules as any other invoice. The checks for a deleted entry, a moved client, an edited slice, and an overlapping window apply only to time lines. With no `InvoiceTime` rows there is nothing to restore, and reopen does not fail for missing time. An auto-paid zero-total invoice is the same: void and reopen are allowed while `paidMinor` is 0 and there is no payment row.
+
+The optional tax line, discount, and notes are unchanged. After the draft exists, the PDF, send, client link, void, reopen, and payments are the same path as a time invoice. On the PDF, a manual line's date range is the detail under the description, in the same format as a tracked-time line, and the quantity is `H:MM:SS` when the stored milliseconds are a whole number of seconds.
+
 ## Status
 
 | From | To | When it is allowed |

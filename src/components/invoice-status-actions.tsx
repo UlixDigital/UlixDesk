@@ -7,12 +7,21 @@ import { ui } from "@/lib/ui";
 
 const idle: InvoiceFormState = { error: null, notice: null };
 
-export function InvoiceStatusActions({ invoiceId, status }: { invoiceId: string; status: string }) {
+export function InvoiceStatusActions({
+  invoiceId,
+  status,
+  zeroPaid = false,
+}: {
+  invoiceId: string;
+  status: string;
+  /** Issued at a zero total, with no payment recorded. */
+  zeroPaid?: boolean;
+}) {
   const [voidState, voidAction, voidPending] = useActionState(voidInvoiceAction, idle);
   const [reopenState, reopenAction, reopenPending] = useActionState(reopenInvoiceAction, idle);
   const error = voidState.error ?? reopenState.error;
-  const canVoid = status === "open";
-  const canReopen = status === "open" || status === "void";
+  const canVoid = status === "open" || zeroPaid;
+  const canReopen = status === "open" || status === "void" || zeroPaid;
   if (!canVoid && !canReopen) return null;
   return (
     <section id="invoice-status-actions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">

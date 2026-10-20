@@ -113,6 +113,7 @@ export async function sendInvoice(input: {
     taxMinor: invoice.taxMinor,
     totalMinor: invoice.totalMinor,
     paidMinor: invoice.paidMinor,
+    status: invoice.status,
     lines: invoice.lines,
   });
 

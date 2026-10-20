@@ -18,10 +18,16 @@ import {
   type InvoiceGrouping,
   type InvoiceSlice,
 } from "@/lib/invoice-lines";
-import { invoiceTotals } from "@/lib/invoice-money";
+import {
+  invoiceTotals,
+  lineAmountFromMs,
+  quantityMsFromSeconds,
+  resolveQuantityMs,
+  wholeSecondsFromQuantityMs,
+} from "@/lib/invoice-money";
 import { pickRate, utcDateKey, type BillRateRecord } from "@/lib/rates";
 import { slicesForEntry, type SourceEntry } from "@/lib/reports";
-import { addCalendarDays, todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
+import { addCalendarDays, startOfWeekDate, todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { DEFAULT_TIME_ZONE } from "@/lib/workspace-time";
 
@@ -262,6 +268,7 @@ export async function createInvoice(input: {
               title: line.title.slice(0, 200),
               detail: line.detail.slice(0, 200),
               quantitySeconds: line.quantitySeconds,
+              quantityMs: quantityMsFromSeconds(line.quantitySeconds),
               unitPriceMinor: line.unitPriceMinor,
               amountMinor: line.amountMinor,
             })),
@@ -286,6 +293,63 @@ export async function createInvoice(input: {
   }
 }
 
+/**
+ * A draft with no lines. The number, currency, and issue/due dates follow the
+ * same rules as an invoice generated from time. Tracked time is not attached
+ * until someone adds it on the draft.
+ */
+export async function createBlankInvoice(input: { actor: InvoiceActor; clientId: string }) {
+  if (!canManageWorkspace(input.actor.role)) return denied();
+  const client = await prisma.client.findUnique({ where: { id: input.clientId } });
+  if (!client) return fail(invoiceCopy.clientRequired);
+  if (client.archivedAt) return fail(invoiceCopy.clientArchived);
+  if (!isCurrencyCode(client.currency)) return fail(invoiceCopy.priceInvalid);
+
+  return prisma.$transaction(async (tx) => {
+    const settings = await ensureWorkspace(tx);
+    const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
+    const number = await allocateInvoiceNumber(tx);
+    const issueDate = todayInTimeZone(timeZone);
+    const dueDate = addCalendarDays(issueDate, settings.invoiceNetTermsDays);
+    const thisMonday = startOfWeekDate(issueDate);
+    const periodStart = addCalendarDays(thisMonday, -7);
+    const periodEnd = addCalendarDays(thisMonday, -1);
+    const totals = invoiceTotals({
+      lineAmounts: [],
+      discountKind: "none",
+      discountAmountMinor: 0,
+      discountBps: 0,
+      taxEnabled: settings.invoiceTaxEnabled,
+      taxRateBps: settings.invoiceTaxRateBps,
+    });
+    const invoice = await tx.invoice.create({
+      data: {
+        number,
+        clientId: client.id,
+        status: "draft",
+        currency: client.currency,
+        issueDate: dateColumn(issueDate),
+        dueDate: dateColumn(dueDate),
+        periodStart: dateColumn(periodStart),
+        periodEnd: dateColumn(periodEnd),
+        grouping: "period",
+        notes: settings.invoiceNotes,
+        bankDetails: settings.invoiceBankDetails,
+        taxEnabled: settings.invoiceTaxEnabled,
+        taxLabel: settings.invoiceTaxLabel,
+        taxRateBps: settings.invoiceTaxRateBps,
+        subtotalMinor: totals.subtotalMinor,
+        discountMinor: totals.discountMinor,
+        taxMinor: totals.taxMinor,
+        totalMinor: totals.totalMinor,
+        paidMinor: 0,
+        createdById: input.actor.id,
+      },
+    });
+    return { ok: true as const, id: invoice.id, number: invoice.number };
+  });
+}
+
 export async function saveDraft(input: {
   actor: InvoiceActor;
   id: string;
@@ -307,28 +371,36 @@ export async function saveDraft(input: {
       if (!invoice) return fail(invoiceCopy.notFound);
       if (invoice.status !== "draft") return fail(invoiceCopy.notDraft);
 
+      const period = draftPeriod(invoice, input.draft);
       let draftLines = input.draft.lines;
-      let preservedIds: string[] = [];
-      let derivedAmounts: number[] = [];
+      let prepared: Awaited<ReturnType<typeof prepareIssue>> | null = null;
       if (input.issue) {
-        const prepared = await prepareIssue(tx, invoice);
+        prepared = await prepareIssue(tx, invoice, period);
         if (prepared.diffs.length > 0 && !input.confirm) {
           return { ok: false as const, confirm: true as const, diffs: prepared.diffs };
         }
-        if (prepared.diffs.length > 0 && input.confirm) {
-          const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
-          await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
-          preservedIds = await insertTimeLines(tx, invoice.id, prepared.derived);
-          draftLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
-          derivedAmounts = prepared.derived.map((line) => line.amountMinor);
-        }
+      }
+      const replacingTime = Boolean(prepared && prepared.diffs.length > 0 && input.confirm);
+      if (replacingTime) {
+        const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
+        draftLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
+      }
+      const existing = new Map(invoice.lines.map((line) => [line.id, line]));
+      if (timeQuantityChanged(existing, draftLines)) return fail(invoiceCopy.timeQuantityLocked);
+      draftLines = draftLines.map((line) => lockTimeLineAmount(existing, line));
+
+      let preservedIds: string[] = [];
+      let derivedAmounts: number[] = [];
+      if (replacingTime && prepared) {
+        await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
+        preservedIds = await insertTimeLines(tx, invoice.id, prepared.derived);
+        derivedAmounts = prepared.derived.map((line) => line.amountMinor);
       }
 
       const keptIds = new Set([
         ...draftLines.flatMap((line) => (line.id ? [line.id] : [])),
         ...preservedIds,
       ]);
-      const existing = new Map(invoice.lines.map((line) => [line.id, line]));
       for (const id of keptIds) {
         if (!existing.has(id) && !preservedIds.includes(id)) return fail(invoiceCopy.notDraft);
       }
@@ -357,15 +429,12 @@ export async function saveDraft(input: {
         if (line.id) {
           const prior = existing.get(line.id);
           if (!prior) return fail(invoiceCopy.notDraft);
+          const kind = prior.kind === "time" ? "time" : "custom";
           await tx.invoiceLine.update({
             where: { id: line.id },
             data: {
               position,
-              title: line.title,
-              detail: line.detail,
-              quantitySeconds: line.quantitySeconds,
-              unitPriceMinor: line.unitPriceMinor,
-              amountMinor: line.amountMinor,
+              ...lineColumns(line, kind),
             },
           });
         } else {
@@ -374,11 +443,7 @@ export async function saveDraft(input: {
               invoiceId: invoice.id,
               position,
               kind: "custom",
-              title: line.title,
-              detail: line.detail,
-              quantitySeconds: line.quantitySeconds,
-              unitPriceMinor: line.unitPriceMinor,
-              amountMinor: line.amountMinor,
+              ...lineColumns(line, "custom"),
             },
           });
         }
@@ -390,6 +455,9 @@ export async function saveDraft(input: {
           issueDate: dateColumn(input.draft.issueDate),
           dueDate: dateColumn(input.draft.dueDate),
           poNumber: input.draft.poNumber,
+          periodStart: dateColumn(period.periodStart),
+          periodEnd: dateColumn(period.periodEnd),
+          grouping: period.grouping,
           notes: input.draft.notes,
           bankDetails: input.draft.bankDetails,
           discountKind: input.draft.discountKind,
@@ -402,7 +470,9 @@ export async function saveDraft(input: {
           discountMinor: totals.discountMinor,
           taxMinor: totals.taxMinor,
           totalMinor: totals.totalMinor,
-          ...(input.issue ? { status: "open", issuedAt: new Date() } : {}),
+          ...(input.issue
+            ? { status: totals.totalMinor === 0 ? "paid" : "open", issuedAt: new Date() }
+            : {}),
         },
       });
       if (preservedIds.length > 0) await renumberLines(tx, invoice.id);
@@ -417,6 +487,17 @@ export async function saveDraft(input: {
             reason: reason || "Marked as issued",
           },
         });
+        if (totals.totalMinor === 0) {
+          await tx.invoiceStatusEvent.create({
+            data: {
+              invoiceId: invoice.id,
+              actorId: input.actor.id,
+              fromStatus: "open",
+              toStatus: "paid",
+              reason: invoiceCopy.autoPaid,
+            },
+          });
+        }
       }
       return { ok: true as const, issued: input.issue };
     });
@@ -430,6 +511,7 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
   if (!canManageWorkspace(input.actor.role)) return denied();
   try {
     return await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "Invoice" WHERE "id" = ${input.id} FOR UPDATE`;
       const invoice = await tx.invoice.findUnique({
         where: { id: input.id },
         include: { lines: true },
@@ -438,8 +520,9 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
       if (invoice.status !== "draft") return fail(invoiceCopy.notDraft);
       const settings = await ensureWorkspace(tx);
       const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
-      const periodStart = utcDateKey(invoice.periodStart);
-      const periodEnd = utcDateKey(invoice.periodEnd);
+      const period = draftPeriod(invoice, input.draft);
+      const periodStart = period.periodStart;
+      const periodEnd = period.periodEnd;
       const rangeStart = zonedDayStart(periodStart, timeZone);
       const rangeEnd = zonedDayEnd(periodEnd, timeZone);
       const lockedIds = await lockIssueTimeEntries(tx, {
@@ -452,7 +535,7 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
         (row) => row.billable && row.project.billable && row.project.clientId === invoice.clientId,
       );
       const derived = buildInvoiceLines({
-        grouping: groupingOf(invoice.grouping),
+        grouping: period.grouping,
         periodStart,
         periodEnd,
         slices: rowsToSlices(
@@ -477,29 +560,25 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
       if (removed.length > 0) {
         await tx.invoiceLine.deleteMany({ where: { id: { in: removed.map((line) => line.id) } } });
       }
-      for (const line of customLines) {
+      for (let index = 0; index < customLines.length; index += 1) {
+        const line = customLines[index];
+        if (!line) continue;
+        const position = preservedIds.length + index;
         if (line.id) {
           await tx.invoiceLine.update({
             where: { id: line.id },
             data: {
-              title: line.title,
-              detail: line.detail,
-              quantitySeconds: line.quantitySeconds,
-              unitPriceMinor: line.unitPriceMinor,
-              amountMinor: line.amountMinor,
+              position,
+              ...lineColumns(line, "custom"),
             },
           });
         } else {
           await tx.invoiceLine.create({
             data: {
               invoiceId: invoice.id,
-              position: preservedIds.length,
+              position,
               kind: "custom",
-              title: line.title,
-              detail: line.detail,
-              quantitySeconds: line.quantitySeconds,
-              unitPriceMinor: line.unitPriceMinor,
-              amountMinor: line.amountMinor,
+              ...lineColumns(line, "custom"),
             },
           });
         }
@@ -519,6 +598,9 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
           issueDate: dateColumn(input.draft.issueDate),
           dueDate: dateColumn(input.draft.dueDate),
           poNumber: input.draft.poNumber,
+          periodStart: dateColumn(period.periodStart),
+          periodEnd: dateColumn(period.periodEnd),
+          grouping: period.grouping,
           notes: input.draft.notes,
           bankDetails: input.draft.bankDetails,
           discountKind: input.draft.discountKind,
@@ -548,6 +630,9 @@ export function storedDraft(invoice: {
   issueDate: Date;
   dueDate: Date;
   poNumber: string | null;
+  periodStart: Date;
+  periodEnd: Date;
+  grouping: string;
   notes: string;
   bankDetails: string;
   discountKind: string;
@@ -561,6 +646,9 @@ export function storedDraft(invoice: {
     title: string;
     detail: string;
     quantitySeconds: number;
+    quantityMs?: bigint | null;
+    rangeStart?: Date | null;
+    rangeEnd?: Date | null;
     unitPriceMinor: number;
     amountMinor: number;
   }>;
@@ -571,6 +659,9 @@ export function storedDraft(invoice: {
     issueDate: invoiceDateKey(invoice.issueDate),
     dueDate: invoiceDateKey(invoice.dueDate),
     poNumber: invoice.poNumber,
+    periodStart: invoiceDateKey(invoice.periodStart),
+    periodEnd: invoiceDateKey(invoice.periodEnd),
+    grouping: groupingOf(invoice.grouping),
     notes: invoice.notes,
     bankDetails: invoice.bankDetails,
     discountKind,
@@ -584,8 +675,11 @@ export function storedDraft(invoice: {
       title: line.title,
       detail: line.detail,
       quantitySeconds: line.quantitySeconds,
+      quantityMs: resolveQuantityMs(line),
       unitPriceMinor: line.unitPriceMinor,
       amountMinor: line.amountMinor,
+      rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : null,
+      rangeEnd: line.rangeEnd ? invoiceDateKey(line.rangeEnd) : null,
     })),
   };
 }
@@ -661,14 +755,29 @@ export function parseDraftFromForm(formData: FormData, currency: string) {
   const details = formData.getAll("lineDetail").map(String);
   const quantities = formData.getAll("lineQuantity").map(String);
   const prices = formData.getAll("lineUnitPrice").map(String);
-  const count = Math.max(ids.length, titles.length, quantities.length, prices.length);
+  const rangeStarts = formData.getAll("lineRangeStart").map(String);
+  const rangeEnds = formData.getAll("lineRangeEnd").map(String);
+  const count = Math.max(ids.length, titles.length, quantities.length, prices.length, rangeStarts.length);
   const lines = Array.from({ length: count }, (_, index) => ({
     id: ids[index] ?? "",
     title: titles[index] ?? "",
     detail: details[index] ?? "",
     quantity: quantities[index] ?? "",
     unitPrice: prices[index] ?? "",
-  })).filter((line) => line.title.trim() || line.quantity.trim() || line.unitPrice.trim() || line.id.trim());
+    rangeStart: rangeStarts[index] ?? "",
+    rangeEnd: rangeEnds[index] ?? "",
+  })).filter(
+    (line) =>
+      line.title.trim() ||
+      line.quantity.trim() ||
+      line.unitPrice.trim() ||
+      line.id.trim() ||
+      line.rangeStart.trim() ||
+      line.rangeEnd.trim(),
+  );
+  const periodStart = String(formData.get("periodStart") ?? "").trim();
+  const periodEnd = String(formData.get("periodEnd") ?? "").trim();
+  const grouping = String(formData.get("grouping") ?? "").trim();
   return parseDraftInvoice(
     {
       issueDate: String(formData.get("issueDate") ?? ""),
@@ -682,6 +791,7 @@ export function parseDraftFromForm(formData: FormData, currency: string) {
       taxLabel: String(formData.get("taxLabel") ?? ""),
       taxRate: String(formData.get("taxRate") ?? ""),
       lines,
+      ...(periodStart || periodEnd || grouping ? { periodStart, periodEnd, grouping } : {}),
     },
     currency,
   );
@@ -766,11 +876,15 @@ async function prepareIssue(
     periodEnd: Date;
     lines: Array<{ kind: string; title: string; detail: string; quantitySeconds: number; unitPriceMinor: number; amountMinor: number }>;
   },
+  period: { periodStart: string; periodEnd: string; grouping: InvoiceGrouping },
 ) {
+  if (!invoice.lines.some((line) => line.kind === "time")) {
+    return { derived: [] as BuiltInvoiceLine[], diffs: [] as string[] };
+  }
   const settings = await tx.workspaceSettings.findUnique({ where: { id: WORKSPACE_ID } });
   const timeZone = settings?.timeZone || DEFAULT_TIME_ZONE;
-  const periodStart = utcDateKey(invoice.periodStart);
-  const periodEnd = utcDateKey(invoice.periodEnd);
+  const periodStart = period.periodStart;
+  const periodEnd = period.periodEnd;
   const rangeStart = zonedDayStart(periodStart, timeZone);
   const rangeEnd = zonedDayEnd(periodEnd, timeZone);
   const lockedIds = await lockIssueTimeEntries(tx, {
@@ -781,7 +895,7 @@ async function prepareIssue(
   });
   const rows = await lockedEntries(tx, lockedIds);
   const derived = buildInvoiceLines({
-    grouping: groupingOf(invoice.grouping),
+    grouping: period.grouping,
     periodStart,
     periodEnd,
     slices: rowsToSlices(
@@ -955,6 +1069,7 @@ async function insertTimeLines(tx: Tx, invoiceId: string, lines: BuiltInvoiceLin
         title: line.title.slice(0, 200),
         detail: line.detail.slice(0, 200),
         quantitySeconds: line.quantitySeconds,
+        quantityMs: quantityMsFromSeconds(line.quantitySeconds),
         unitPriceMinor: line.unitPriceMinor,
         amountMinor: line.amountMinor,
       },
@@ -1007,6 +1122,66 @@ async function renumberLines(tx: Tx, invoiceId: string) {
     if (!line || line.position === position) continue;
     await tx.invoiceLine.update({ where: { id: line.id }, data: { position } });
   }
+}
+
+function draftPeriod(
+  invoice: { periodStart: Date; periodEnd: Date; grouping: string },
+  draft: DraftWrite,
+) {
+  return {
+    periodStart: draft.periodStart ?? utcDateKey(invoice.periodStart),
+    periodEnd: draft.periodEnd ?? utcDateKey(invoice.periodEnd),
+    grouping: draft.grouping ?? groupingOf(invoice.grouping),
+  };
+}
+
+type StoredLine = {
+  id: string;
+  kind: string;
+  quantitySeconds: number;
+  quantityMs: bigint;
+};
+
+/** A time line's quantity comes from its slices. A submitted change is refused. */
+function timeQuantityChanged(existing: ReadonlyMap<string, StoredLine>, lines: DraftWrite["lines"]) {
+  return lines.some((line) => {
+    if (!line.id) return false;
+    const prior = existing.get(line.id);
+    if (!prior || prior.kind !== "time") return false;
+    const next = line.quantityMs ?? quantityMsFromSeconds(line.quantitySeconds);
+    return resolveQuantityMs(prior) !== next;
+  });
+}
+
+/** Price edits keep the stored duration. The amount is that duration times the new price. */
+function lockTimeLineAmount(existing: ReadonlyMap<string, StoredLine>, line: DraftWrite["lines"][number]) {
+  if (!line.id) return line;
+  const prior = existing.get(line.id);
+  if (!prior || prior.kind !== "time") return line;
+  const quantityMs = resolveQuantityMs(prior);
+  return {
+    ...line,
+    quantityMs,
+    quantitySeconds: wholeSecondsFromQuantityMs(quantityMs),
+    amountMinor: lineAmountFromMs(line.unitPriceMinor, quantityMs),
+  };
+}
+
+function lineColumns(line: DraftWrite["lines"][number], kind: "time" | "custom") {
+  const quantityMs = line.quantityMs ?? quantityMsFromSeconds(line.quantitySeconds);
+  const quantitySeconds = line.quantityMs === undefined ? line.quantitySeconds : wholeSecondsFromQuantityMs(quantityMs);
+  const rangeStart = kind === "custom" ? line.rangeStart : null;
+  const rangeEnd = kind === "custom" ? line.rangeEnd : null;
+  return {
+    title: line.title,
+    detail: line.detail,
+    quantitySeconds,
+    quantityMs,
+    unitPriceMinor: line.unitPriceMinor,
+    amountMinor: line.amountMinor,
+    rangeStart: rangeStart && rangeEnd ? dateColumn(rangeStart) : null,
+    rangeEnd: rangeStart && rangeEnd ? dateColumn(rangeEnd) : null,
+  };
 }
 
 function groupingOf(value: string): InvoiceGrouping {

@@ -14,7 +14,13 @@ import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
 import { clientLinkKeyMessage, clientLinkUrl, readClientLink } from "@/lib/invoice-link";
 import { unratedLineLabel } from "@/lib/invoice-lines";
 import { invoiceMailConfigured, invoiceMessageDefaults } from "@/lib/invoice-mail";
-import { amountDueMinor, formatDurationHms, formatInvoiceDate, formatPercentBps } from "@/lib/invoice-money";
+import {
+  amountDueMinor,
+  formatInvoiceDate,
+  formatPercentBps,
+  invoiceLineDetail,
+  invoiceLineQuantity,
+} from "@/lib/invoice-money";
 import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { getInvoice, invoiceDateKey, unratedForInvoice } from "@/lib/invoices";
 import { formatMoney, formatMoneyNumber } from "@/lib/money";
@@ -54,6 +60,8 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
   const today = todayInTimeZone(settings.timeZone);
   const dueMinor = amountDueMinor(invoice.totalMinor, invoice.paidMinor);
   const overdue = isOverdue({ dueDate, today, dueMinor });
+  const zeroPaid =
+    invoice.status === "paid" && invoice.totalMinor === 0 && invoice.paidMinor === 0 && invoice.payments.length === 0;
   const canRecord = (invoice.status === "open" || invoice.status === "partially_paid") && dueMinor > 0;
   const showPayments = invoice.status === "open" || invoice.status === "paid" || invoice.status === "partially_paid";
   const link = await readClientLink(user.role, invoice.id);
@@ -153,8 +161,8 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
             defaultBody={defaults.body}
           />
         )}
-        {invoice.status === "open" || invoice.status === "void" ? (
-          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
+        {invoice.status === "open" || invoice.status === "void" || zeroPaid ? (
+          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} zeroPaid={zeroPaid} />
         ) : null}
         {canRecord ? (
           <RecordPaymentForm
@@ -217,12 +225,18 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
               taxEnabled={invoice.taxEnabled}
               taxLabel={invoice.taxLabel}
               taxRate={formatPercentBps(invoice.taxRateBps).replace("%", "")}
+              periodStart={invoiceDateKey(invoice.periodStart)}
+              periodEnd={invoiceDateKey(invoice.periodEnd)}
+              grouping={invoice.grouping}
               lines={invoice.lines.map((line) => ({
                 key: line.id,
                 id: line.id,
+                kind: line.kind === "time" ? ("time" as const) : ("custom" as const),
                 title: line.title,
                 detail: line.detail,
-                quantity: formatDurationHms(line.quantitySeconds),
+                rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : "",
+                rangeEnd: line.rangeEnd ? invoiceDateKey(line.rangeEnd) : "",
+                quantity: invoiceLineQuantity(line),
                 unitPrice: formatMoneyNumber(line.unitPriceMinor, invoice.currency),
               }))}
             />
@@ -232,8 +246,20 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
       ) : (
         <IssuedInvoice
           status={invoice.status}
+          zeroPaid={zeroPaid}
           currency={invoice.currency}
-          lines={invoice.lines}
+          lines={invoice.lines.map((line) => ({
+            id: line.id,
+            title: line.title,
+            detail: invoiceLineDetail({
+              detail: line.detail,
+              rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : null,
+              rangeEnd: line.rangeEnd ? invoiceDateKey(line.rangeEnd) : null,
+            }),
+            quantityLabel: invoiceLineQuantity(line),
+            unitPriceMinor: line.unitPriceMinor,
+            amountMinor: line.amountMinor,
+          }))}
           subtotalMinor={invoice.subtotalMinor}
           discountMinor={invoice.discountMinor}
           taxEnabled={invoice.taxEnabled}
@@ -253,6 +279,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
 
 function IssuedInvoice({
   status,
+  zeroPaid = false,
   currency,
   lines,
   subtotalMinor,
@@ -268,12 +295,13 @@ function IssuedInvoice({
   poNumber,
 }: {
   status: string;
+  zeroPaid?: boolean;
   currency: string;
   lines: Array<{
     id: string;
     title: string;
     detail: string;
-    quantitySeconds: number;
+    quantityLabel: string;
     unitPriceMinor: number;
     amountMinor: number;
   }>;
@@ -300,7 +328,13 @@ function IssuedInvoice({
   return (
     <div className="mt-6 space-y-6">
       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-        {status === "void" ? invoiceCopy.voidBanner : status === "paid" ? invoiceCopy.paidBanner : invoiceCopy.readOnly}
+        {status === "void"
+          ? invoiceCopy.voidBanner
+          : zeroPaid
+            ? invoiceCopy.autoPaidBanner
+            : status === "paid"
+              ? invoiceCopy.paidBanner
+              : invoiceCopy.readOnly}
       </p>
       {poNumber ? <p className="text-sm text-slate-700">PO {poNumber}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
@@ -320,7 +354,7 @@ function IssuedInvoice({
                   <p className="font-medium text-ink">{line.title}</p>
                   {line.detail ? <p className="text-slate-500">{line.detail}</p> : null}
                 </td>
-                <td className="px-4 py-3">{formatDurationHms(line.quantitySeconds)}</td>
+                <td className="px-4 py-3">{line.quantityLabel}</td>
                 <td className="px-4 py-3">{formatMoney(line.unitPriceMinor, currency)}</td>
                 <td className="px-4 py-3">{formatMoney(line.amountMinor, currency)}</td>
               </tr>
