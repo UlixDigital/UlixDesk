@@ -91,6 +91,8 @@ test("owners see amounts and members see only their own time", async ({ browser 
     await expect(filters.getByLabel("Date range")).toBeVisible();
     await expect(filters.getByLabel("Member")).toBeVisible();
     await expect(filters.getByLabel("Client")).toBeVisible();
+    // The fixture is 2026-10-14. The default preset is this week, which moves on.
+    await ownerPage.goto("/reports/time-activity?preset=custom&from=2026-10-01&to=2026-10-31");
     await expect(ownerPage.getByText("USD 50.00").first()).toBeVisible();
     await expect(ownerPage.getByText("JPY 1,500").first()).toBeVisible();
     await expect(ownerPage.getByText("Owner only note")).toHaveCount(0);
