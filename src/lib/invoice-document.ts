@@ -33,6 +33,7 @@ export function toInvoicePdfInput(input: {
   totalMinor: number;
   paidMinor: number;
   overdue?: boolean;
+  paid?: boolean;
   lines: Array<{
     title: string;
     detail: string;
@@ -78,6 +79,7 @@ export function toInvoicePdfInput(input: {
     dueDate: formatInvoiceDate(input.dueDate),
     poNumber: input.poNumber,
     overdue: input.overdue,
+    paid: input.paid,
     notes: input.notes,
     bankDetails: input.bankDetails,
     lines: input.lines.map((line) => ({

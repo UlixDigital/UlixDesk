@@ -167,13 +167,30 @@ export function InvoiceDraftForm({
                   )}
                 </td>
                 <td className="px-3 py-2">
-                  <input
-                    aria-label={`${invoiceCopy.hours} ${index + 1}`}
-                    name="lineQuantity"
-                    value={row.quantity}
-                    onChange={(event) => update(setRows, index, { quantity: event.target.value })}
-                    className={`${ui.input} w-28`}
-                  />
+                  {row.kind === "time" ? (
+                    <>
+                      <input
+                        key={`${row.key}-qty`}
+                        aria-label={`${invoiceCopy.hours} ${index + 1}`}
+                        aria-describedby={`time-qty-hint-${index}`}
+                        name="lineQuantity"
+                        defaultValue={row.quantity}
+                        readOnly
+                        className={`${ui.input} w-28 bg-slate-50`}
+                      />
+                      <p id={`time-qty-hint-${index}`} className="mt-1 w-44 text-xs leading-4 text-slate-500">
+                        {invoiceCopy.timeQuantityLocked}
+                      </p>
+                    </>
+                  ) : (
+                    <input
+                      aria-label={`${invoiceCopy.hours} ${index + 1}`}
+                      name="lineQuantity"
+                      value={row.quantity}
+                      onChange={(event) => update(setRows, index, { quantity: event.target.value })}
+                      className={`${ui.input} w-28`}
+                    />
+                  )}
                 </td>
                 <td className="px-3 py-2">
                   <input

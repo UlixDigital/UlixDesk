@@ -18,7 +18,13 @@ import {
   type InvoiceGrouping,
   type InvoiceSlice,
 } from "@/lib/invoice-lines";
-import { invoiceTotals, quantityMsFromSeconds, resolveQuantityMs, wholeSecondsFromQuantityMs } from "@/lib/invoice-money";
+import {
+  invoiceTotals,
+  lineAmountFromMs,
+  quantityMsFromSeconds,
+  resolveQuantityMs,
+  wholeSecondsFromQuantityMs,
+} from "@/lib/invoice-money";
 import { pickRate, utcDateKey, type BillRateRecord } from "@/lib/rates";
 import { slicesForEntry, type SourceEntry } from "@/lib/reports";
 import { addCalendarDays, startOfWeekDate, todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
@@ -367,27 +373,34 @@ export async function saveDraft(input: {
 
       const period = draftPeriod(invoice, input.draft);
       let draftLines = input.draft.lines;
-      let preservedIds: string[] = [];
-      let derivedAmounts: number[] = [];
+      let prepared: Awaited<ReturnType<typeof prepareIssue>> | null = null;
       if (input.issue) {
-        const prepared = await prepareIssue(tx, invoice, period);
+        prepared = await prepareIssue(tx, invoice, period);
         if (prepared.diffs.length > 0 && !input.confirm) {
           return { ok: false as const, confirm: true as const, diffs: prepared.diffs };
         }
-        if (prepared.diffs.length > 0 && input.confirm) {
-          const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
-          draftLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
-          await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
-          preservedIds = await insertTimeLines(tx, invoice.id, prepared.derived);
-          derivedAmounts = prepared.derived.map((line) => line.amountMinor);
-        }
+      }
+      const replacingTime = Boolean(prepared && prepared.diffs.length > 0 && input.confirm);
+      if (replacingTime) {
+        const oldTimeIds = new Set(invoice.lines.filter((line) => line.kind === "time").map((line) => line.id));
+        draftLines = input.draft.lines.filter((line) => !line.id || !oldTimeIds.has(line.id));
+      }
+      const existing = new Map(invoice.lines.map((line) => [line.id, line]));
+      if (timeQuantityChanged(existing, draftLines)) return fail(invoiceCopy.timeQuantityLocked);
+      draftLines = draftLines.map((line) => lockTimeLineAmount(existing, line));
+
+      let preservedIds: string[] = [];
+      let derivedAmounts: number[] = [];
+      if (replacingTime && prepared) {
+        await tx.invoiceLine.deleteMany({ where: { invoiceId: invoice.id, kind: "time" } });
+        preservedIds = await insertTimeLines(tx, invoice.id, prepared.derived);
+        derivedAmounts = prepared.derived.map((line) => line.amountMinor);
       }
 
       const keptIds = new Set([
         ...draftLines.flatMap((line) => (line.id ? [line.id] : [])),
         ...preservedIds,
       ]);
-      const existing = new Map(invoice.lines.map((line) => [line.id, line]));
       for (const id of keptIds) {
         if (!existing.has(id) && !preservedIds.includes(id)) return fail(invoiceCopy.notDraft);
       }
@@ -457,7 +470,9 @@ export async function saveDraft(input: {
           discountMinor: totals.discountMinor,
           taxMinor: totals.taxMinor,
           totalMinor: totals.totalMinor,
-          ...(input.issue ? { status: "open", issuedAt: new Date() } : {}),
+          ...(input.issue
+            ? { status: totals.totalMinor === 0 ? "paid" : "open", issuedAt: new Date() }
+            : {}),
         },
       });
       if (preservedIds.length > 0) await renumberLines(tx, invoice.id);
@@ -472,6 +487,17 @@ export async function saveDraft(input: {
             reason: reason || "Marked as issued",
           },
         });
+        if (totals.totalMinor === 0) {
+          await tx.invoiceStatusEvent.create({
+            data: {
+              invoiceId: invoice.id,
+              actorId: input.actor.id,
+              fromStatus: "open",
+              toStatus: "paid",
+              reason: invoiceCopy.autoPaid,
+            },
+          });
+        }
       }
       return { ok: true as const, issued: input.issue };
     });
@@ -1106,6 +1132,38 @@ function draftPeriod(
     periodStart: draft.periodStart ?? utcDateKey(invoice.periodStart),
     periodEnd: draft.periodEnd ?? utcDateKey(invoice.periodEnd),
     grouping: draft.grouping ?? groupingOf(invoice.grouping),
+  };
+}
+
+type StoredLine = {
+  id: string;
+  kind: string;
+  quantitySeconds: number;
+  quantityMs: bigint;
+};
+
+/** A time line's quantity comes from its slices. A submitted change is refused. */
+function timeQuantityChanged(existing: ReadonlyMap<string, StoredLine>, lines: DraftWrite["lines"]) {
+  return lines.some((line) => {
+    if (!line.id) return false;
+    const prior = existing.get(line.id);
+    if (!prior || prior.kind !== "time") return false;
+    const next = line.quantityMs ?? quantityMsFromSeconds(line.quantitySeconds);
+    return resolveQuantityMs(prior) !== next;
+  });
+}
+
+/** Price edits keep the stored duration. The amount is that duration times the new price. */
+function lockTimeLineAmount(existing: ReadonlyMap<string, StoredLine>, line: DraftWrite["lines"][number]) {
+  if (!line.id) return line;
+  const prior = existing.get(line.id);
+  if (!prior || prior.kind !== "time") return line;
+  const quantityMs = resolveQuantityMs(prior);
+  return {
+    ...line,
+    quantityMs,
+    quantitySeconds: wholeSecondsFromQuantityMs(quantityMs),
+    amountMinor: lineAmountFromMs(line.unitPriceMinor, quantityMs),
   };
 }
 

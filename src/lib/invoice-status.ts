@@ -26,10 +26,13 @@ export function parseTransitionReason(raw: string) {
 
 /**
  * Safety rules, also written up in docs/INVOICES.md:
- * - Void is open → void only. A payment (a row, or paidMinor above zero) blocks it.
+ * - Void is open → void, and also paid → void when the total is zero and no
+ *   payment was recorded (an auto-paid issue). A payment row, or paidMinor
+ *   above zero, blocks it.
  * - Void sets InvoiceTime.active = false. The edit lock ignores void, and the
  *   overlap constraint ignores inactive windows, so the time can be billed again.
- * - Reopen is open → draft or void → draft, and only with no payment recorded.
+ * - Reopen is open → draft, void → draft, or paid → draft for that same
+ *   zero-total invoice with no payment recorded.
  * - open → draft keeps the windows reserved (they stay active) and releases the
  *   edit lock because drafts are not an issued status.
  * - void → draft sets active back to true. That re-checks InvoiceTime_no_overlap.
@@ -51,7 +54,8 @@ export async function voidInvoice(input: { actor: Actor; id: string; reason: str
       include: { payments: { select: { id: true } }, timeLinks: { select: { timeEntryId: true } } },
     });
     if (!invoice) return fail(invoiceCopy.notFound);
-    if (invoice.status !== "open") return fail(invoiceCopy.voidStatus);
+    const autoPaid = isAutoPaidZero(invoice);
+    if (invoice.status !== "open" && !autoPaid) return fail(invoiceCopy.voidStatus);
     if (invoice.payments.length > 0 || invoice.paidMinor > 0) return fail(invoiceCopy.voidPayments);
     await lockEntries(tx, invoice.timeLinks.map((link) => link.timeEntryId));
     await tx.invoiceTime.updateMany({ where: { invoiceId: invoice.id }, data: { active: false } });
@@ -63,7 +67,7 @@ export async function voidInvoice(input: { actor: Actor; id: string; reason: str
       data: {
         invoiceId: invoice.id,
         actorId: input.actor.id,
-        fromStatus: "open",
+        fromStatus: invoice.status,
         toStatus: "void",
         reason: reason.reason,
       },
@@ -104,7 +108,8 @@ export async function reopenInvoice(input: { actor: Actor; id: string; reason: s
         },
       });
       if (!invoice) return fail(invoiceCopy.notFound);
-      if (invoice.status !== "open" && invoice.status !== "void") return fail(invoiceCopy.reopenStatus);
+      const autoPaid = isAutoPaidZero(invoice);
+      if (invoice.status !== "open" && invoice.status !== "void" && !autoPaid) return fail(invoiceCopy.reopenStatus);
       if (invoice.payments.length > 0 || invoice.paidMinor > 0) return fail(invoiceCopy.reopenPayments);
       const fromStatus = invoice.status;
       await lockEntries(
@@ -200,6 +205,11 @@ async function restoreVoidSlices(
  * stays. A time line with no windows left, or windows that no longer add up
  * to that quantity, means some billed time is gone.
  */
+/** Issued at a zero total, with no payment row and nothing recorded as paid. */
+function isAutoPaidZero(invoice: { status: string; totalMinor: number; paidMinor: number; payments: unknown[] }) {
+  return invoice.status === "paid" && invoice.totalMinor === 0 && invoice.paidMinor === 0 && invoice.payments.length === 0;
+}
+
 function voidTimeWasRemoved(lines: VoidLine[]) {
   return lines.some((line) => {
     if (line.kind !== "time") return false;

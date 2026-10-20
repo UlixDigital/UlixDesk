@@ -13,7 +13,14 @@ vi.mock("next/navigation", () => ({
 import { createBlankInvoiceAction } from "@/app/invoices/actions";
 import { prisma } from "@/lib/db";
 import { invoiceCopy } from "@/lib/invoice-copy";
+import { toInvoicePdfInput } from "@/lib/invoice-document";
 import { dateColumn } from "@/lib/invoice-form";
+import { rotateClientLink } from "@/lib/invoice-link";
+import { setInvoiceMailTransportForTests } from "@/lib/invoice-mail";
+import { renderInvoicePdf } from "@/lib/invoice-pdf";
+import { findPublicInvoice } from "@/lib/invoice-public";
+import { loadAgingReport, loadClientInvoiceReport } from "@/lib/invoice-reports";
+import { sendInvoice } from "@/lib/invoice-send";
 import {
   createBlankInvoice,
   createInvoice,
@@ -120,7 +127,7 @@ describe("blank invoices", () => {
     ]);
   });
 
-  it("refuses members and does not issue an empty draft", async () => {
+  it("refuses members, and an empty issue is paid with an auto-paid audit row", async () => {
     const { owner, member, client } = await workspace();
     expect((await createBlankInvoice({ actor: actor(member), clientId: client.id })).error).toBe(invoiceCopy.denied);
     expect(await getInvoice(member.role, "missing")).toBeNull();
@@ -132,11 +139,21 @@ describe("blank invoices", () => {
     const issued = await saveDraft({ actor: actor(owner), id: created.id, draft: storedDraft(invoice!), issue: true });
     expect(issued.ok).toBe(true);
     const open = await getInvoice(owner.role, created.id);
-    expect(open?.status).toBe("open");
+    expect(open?.status).toBe("paid");
+    expect(open?.paidMinor).toBe(0);
     expect(open?.lines).toEqual([]);
     expect(open?.totalMinor).toBe(0);
+    const issuedEvents = await prisma.invoiceStatusEvent.findMany({
+      where: { invoiceId: created.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(issuedEvents.map((event) => [event.fromStatus, event.toStatus, event.reason])).toEqual([
+      ["draft", "open", "Marked as issued"],
+      ["open", "paid", invoiceCopy.autoPaid],
+    ]);
     expect((await voidInvoice({ actor: actor(owner), id: created.id, reason: "Empty" })).ok).toBe(true);
     expect((await reopenInvoice({ actor: actor(owner), id: created.id, reason: "Edit it" })).ok).toBe(true);
+    expect((await getInvoice(owner.role, created.id))?.status).toBe("draft");
 
     await signInAs("member", "manual-action-member@ulix.test");
     expect((await createBlankInvoiceAction({ error: null, notice: null }, new FormData())).error).toBe(invoiceCopy.denied);
@@ -304,5 +321,175 @@ describe("blank invoices", () => {
       grouping: "period",
     });
     expect(again).toMatchObject({ ok: false, error: invoiceCopy.noEligible });
+  });
+
+  it("rejects a time-line quantity change and still saves the description and price", async () => {
+    const { owner, member, client, project } = await workspace();
+    const who = actor(owner);
+    await addTime({ projectId: project.id, userId: member.id, day: "2026-10-06", seconds: 3600 });
+    const created = await createInvoice({
+      actor: who,
+      clientId: client.id,
+      periodStart: "2026-10-05",
+      periodEnd: "2026-10-11",
+      grouping: "period",
+    });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const invoice = await getInvoice(owner.role, created.id);
+    const draft = storedDraft(invoice!);
+    const line = draft.lines[0];
+    expect(line?.quantitySeconds).toBe(3600);
+    if (!line) return;
+    const rejected = await saveDraft({
+      actor: who,
+      id: created.id,
+      issue: false,
+      draft: {
+        ...draft,
+        lines: [{ ...line, quantitySeconds: 7200, quantityMs: 7_200_000n, amountMinor: line.unitPriceMinor * 2 }],
+      },
+    });
+    expect(rejected).toEqual({ ok: false, error: invoiceCopy.timeQuantityLocked });
+    expect((await getInvoice(owner.role, created.id))?.lines[0]?.quantitySeconds).toBe(3600);
+
+    const priced = await saveDraft({
+      actor: who,
+      id: created.id,
+      issue: false,
+      draft: {
+        ...draft,
+        lines: [{ ...line, title: "Adjusted week", unitPriceMinor: 4000, amountMinor: 1 }],
+      },
+    });
+    expect(priced.ok).toBe(true);
+    const saved = await getInvoice(owner.role, created.id);
+    expect(saved?.lines[0]?.title).toBe("Adjusted week");
+    expect(saved?.lines[0]?.unitPriceMinor).toBe(4000);
+    expect(saved?.lines[0]?.quantitySeconds).toBe(3600);
+    expect(saved?.lines[0]?.quantityMs).toBe(3_600_000n);
+    expect(saved?.lines[0]?.amountMinor).toBe(4000);
+    expect(saved?.totalMinor).toBe(4000);
+  });
+
+  it("marks a zero-total send as paid, shows that on the report and client page, and can be reopened", async () => {
+    const { owner, client } = await workspace();
+    const who = actor(owner);
+    const created = await createBlankInvoice({ actor: who, clientId: client.id });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const draft = await getInvoice(owner.role, created.id);
+    const discounted = await saveDraft({
+      actor: who,
+      id: created.id,
+      issue: false,
+      draft: {
+        ...storedDraft(draft!),
+        discountKind: "percent",
+        discountBps: 10_000,
+        lines: [
+          {
+            id: null,
+            title: "Courtesy",
+            detail: "",
+            quantitySeconds: 3600,
+            quantityMs: 3_600_000n,
+            unitPriceMinor: 4000,
+            amountMinor: 4000,
+          },
+        ],
+      },
+    });
+    expect(discounted.ok).toBe(true);
+    setInvoiceMailTransportForTests({
+      async send() {
+        return undefined;
+      },
+    });
+    try {
+      const sent = await sendInvoice({
+        actor: who,
+        id: created.id,
+        to: "billing@northwind.test",
+        cc: "",
+        subject: "Invoice",
+        body: "Nothing is due.",
+        confirmIssue: true,
+        confirmTime: false,
+      });
+      expect(sent.ok).toBe(true);
+    } finally {
+      setInvoiceMailTransportForTests(null);
+    }
+    const paid = await getInvoice(owner.role, created.id);
+    expect(paid?.status).toBe("paid");
+    expect(paid?.totalMinor).toBe(0);
+    expect(paid?.paidMinor).toBe(0);
+    expect(await prisma.invoicePayment.count({ where: { invoiceId: created.id } })).toBe(0);
+    const events = await prisma.invoiceStatusEvent.findMany({
+      where: { invoiceId: created.id },
+      orderBy: { createdAt: "asc" },
+    });
+    expect(events.map((event) => [event.fromStatus, event.toStatus, event.reason])).toEqual([
+      ["draft", "open", "Issued when the invoice was sent"],
+      ["open", "paid", invoiceCopy.autoPaid],
+    ]);
+
+    const today = todayInTimeZone("Asia/Colombo");
+    const report = await loadClientInvoiceReport({
+      actor: who,
+      today,
+      params: { preset: "custom", from: "2026-01-01", to: "2026-12-31", status: "paid" },
+    });
+    expect(report.ok).toBe(true);
+    if (!report.ok) return;
+    expect(report.rows.some((row) => row.number === paid?.number && row.status === "paid" && row.dueMinor === 0)).toBe(true);
+    const aging = await loadAgingReport({
+      actor: who,
+      today,
+      params: { preset: "custom", from: "2026-01-01", to: today },
+    });
+    expect(aging.ok).toBe(true);
+    if (!aging.ok) return;
+    expect(aging.rows.some((row) => row.clientName === client.name)).toBe(false);
+
+    const link = await rotateClientLink({ actor: who, id: created.id });
+    expect(link.ok).toBe(true);
+    if (!link.ok) return;
+    expect((await findPublicInvoice(link.token))?.status).toBe("paid");
+    const trace: Array<{ text: string }> = [];
+    await renderInvoicePdf(
+      toInvoicePdfInput({
+        companyName: "Ulix Digital",
+        companyAddress: "30 North Gould Street",
+        number: paid!.number,
+        clientName: client.name,
+        clientAddress: "",
+        currency: paid!.currency,
+        issueDate: paid!.issueDate.toISOString().slice(0, 10),
+        dueDate: paid!.dueDate.toISOString().slice(0, 10),
+        poNumber: null,
+        notes: "",
+        bankDetails: paid!.bankDetails,
+        discountMinor: paid!.discountMinor,
+        discountKind: paid!.discountKind,
+        discountBps: paid!.discountBps,
+        taxEnabled: paid!.taxEnabled,
+        taxLabel: paid!.taxLabel,
+        taxRateBps: paid!.taxRateBps,
+        subtotalMinor: paid!.subtotalMinor,
+        taxMinor: paid!.taxMinor,
+        totalMinor: paid!.totalMinor,
+        paidMinor: paid!.paidMinor,
+        paid: true,
+        lines: paid!.lines,
+      }),
+      { compress: false, trace },
+    );
+    expect(trace.some((item) => item.text === "Status:")).toBe(true);
+    expect(trace.some((item) => item.text === "Paid")).toBe(true);
+
+    expect((await reopenInvoice({ actor: who, id: created.id, reason: "Add a charge" })).ok).toBe(true);
+    expect((await getInvoice(owner.role, created.id))?.status).toBe("draft");
   });
 });

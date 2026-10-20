@@ -72,6 +72,7 @@ export const invoiceCopy = {
   trackedTime: "Tracked time",
   trackedTimeHint:
     "Adds or refreshes tracked-time lines for this period. Manual lines are kept and listed after the tracked-time lines. A manual line does not lock time.",
+  timeQuantityLocked: "Edit the time entries, then Refresh from time",
   discountNone: "No discount",
   discountPercent: "Percent",
   discountAmount: "Amount",
@@ -246,6 +247,9 @@ export const invoiceCopy = {
   publicOverdue: "This invoice is overdue.",
   paidBanner:
     "This invoice is paid. The amount due is zero. Correct or delete a payment if that should change. Time on it stays locked.",
+  autoPaid: "Auto-paid because the total is zero",
+  autoPaidBanner:
+    "This invoice is paid because the total is zero. No payment was recorded. It can be reopened or voided.",
   paymentAmountInvalid: "Enter the payment in the invoice currency.",
   paymentAmountGrouped: "Use a comma only to separate thousands, as in 1,000.00.",
   paymentAmountZero: "Enter a payment greater than zero.",

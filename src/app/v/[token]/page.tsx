@@ -58,7 +58,9 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     <main id="public-invoice" className="mx-auto w-full max-w-3xl px-4 py-10">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">{invoiceStatusLabel(invoice.status)}</p>
+          <p id="public-invoice-status" className="text-sm font-medium text-slate-500">
+            {invoiceStatusLabel(invoice.status)}
+          </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Invoice {invoice.number}</h1>
           <p className="mt-1 text-sm text-slate-600">{invoice.clientName}</p>
         </div>

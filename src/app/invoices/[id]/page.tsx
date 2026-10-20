@@ -60,6 +60,8 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
   const today = todayInTimeZone(settings.timeZone);
   const dueMinor = amountDueMinor(invoice.totalMinor, invoice.paidMinor);
   const overdue = isOverdue({ dueDate, today, dueMinor });
+  const zeroPaid =
+    invoice.status === "paid" && invoice.totalMinor === 0 && invoice.paidMinor === 0 && invoice.payments.length === 0;
   const canRecord = (invoice.status === "open" || invoice.status === "partially_paid") && dueMinor > 0;
   const showPayments = invoice.status === "open" || invoice.status === "paid" || invoice.status === "partially_paid";
   const link = await readClientLink(user.role, invoice.id);
@@ -159,8 +161,8 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
             defaultBody={defaults.body}
           />
         )}
-        {invoice.status === "open" || invoice.status === "void" ? (
-          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} />
+        {invoice.status === "open" || invoice.status === "void" || zeroPaid ? (
+          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} zeroPaid={zeroPaid} />
         ) : null}
         {canRecord ? (
           <RecordPaymentForm
@@ -244,6 +246,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
       ) : (
         <IssuedInvoice
           status={invoice.status}
+          zeroPaid={zeroPaid}
           currency={invoice.currency}
           lines={invoice.lines.map((line) => ({
             id: line.id,
@@ -276,6 +279,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
 
 function IssuedInvoice({
   status,
+  zeroPaid = false,
   currency,
   lines,
   subtotalMinor,
@@ -291,6 +295,7 @@ function IssuedInvoice({
   poNumber,
 }: {
   status: string;
+  zeroPaid?: boolean;
   currency: string;
   lines: Array<{
     id: string;
@@ -323,7 +328,13 @@ function IssuedInvoice({
   return (
     <div className="mt-6 space-y-6">
       <p className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
-        {status === "void" ? invoiceCopy.voidBanner : status === "paid" ? invoiceCopy.paidBanner : invoiceCopy.readOnly}
+        {status === "void"
+          ? invoiceCopy.voidBanner
+          : zeroPaid
+            ? invoiceCopy.autoPaidBanner
+            : status === "paid"
+              ? invoiceCopy.paidBanner
+              : invoiceCopy.readOnly}
       </p>
       {poNumber ? <p className="text-sm text-slate-700">PO {poNumber}</p> : null}
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
