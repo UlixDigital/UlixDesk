@@ -127,6 +127,9 @@ test("an owner adds a manual line to a time draft and reorders it", async ({ bro
   test.setTimeout(180_000);
   const prisma = new PrismaClient();
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
+  const member = await prisma.user.create({
+    data: { email: "mixed-manual@ulix.test", name: "Mixed Manual", role: "member", passwordHash: "unused" },
+  });
   await prisma.workspaceSettings.upsert({
     where: { id: "workspace" },
     update: { timeZone: "Asia/Colombo", defaultCurrency: "USD" },
@@ -152,7 +155,7 @@ test("an owner adds a manual line to a time draft and reorders it", async ({ bro
   await createManualEntry(
     { projectId: project.id, startedAt, endedAt: new Date(startedAt.getTime() + 3600 * 1000), billable: true, note: null },
     new Date("2026-10-15T12:00:00.000Z"),
-    owner.id,
+    member.id,
   );
 
   const shots = artifactDir(testInfo);
