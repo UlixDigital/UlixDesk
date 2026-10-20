@@ -195,6 +195,49 @@ describe("invoice pdf layout", () => {
     expect(trace.some((item) => item.text === "Thu, Oct 1, 2026 - Sat, Oct 3, 2026")).toBe(true);
   });
 
+  it("prints an item quantity as a plain count", async () => {
+    const input = toInvoicePdfInput({
+      companyName: "Ulix Digital",
+      companyAddress: "30 North Gould Street, Sheridan, WY 82801",
+      number: "LE2002",
+      clientName: "WSI Web Enhancers",
+      clientAddress: "4801 Lang Ave NE",
+      currency: "USD",
+      issueDate: "2026-10-12",
+      dueDate: "2026-10-19",
+      poNumber: null,
+      notes: "",
+      bankDetails: placeholderBank,
+      discountMinor: 0,
+      discountKind: "none",
+      discountBps: 0,
+      taxEnabled: false,
+      taxLabel: "Tax",
+      taxRateBps: 0,
+      subtotalMinor: 50_000,
+      taxMinor: 0,
+      totalMinor: 50_000,
+      paidMinor: 0,
+      lines: [
+        {
+          title: "Website design",
+          detail: "",
+          quantityKind: "item",
+          quantitySeconds: 0,
+          quantityMs: 100_000n,
+          unitPriceMinor: 50_000,
+          amountMinor: 50_000,
+        },
+      ],
+    });
+    expect(input.lines[0]?.quantity).toBe("1");
+    const trace: Array<{ text: string }> = [];
+    await renderInvoicePdf(input, { compress: false, trace });
+    expect(trace.some((item) => item.text === "1")).toBe(true);
+    expect(trace.some((item) => item.text === "1:00:00")).toBe(false);
+    expect(trace.some((item) => item.text === "$500.00")).toBe(true);
+  });
+
   it("gives the notes column enough room for Ulix Digital", () => {
     const doc = new PDFDocument({ size: "LETTER", margin: 0 });
     doc.registerFont("DejaVu", "assets/fonts/DejaVuSans.ttf");

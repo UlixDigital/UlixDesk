@@ -44,6 +44,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     today: todayInTimeZone(await getWorkspaceTimeZone()),
     dueMinor,
   });
+  const quantityHeader = invoice.lines.some((line) => line.quantityKind === "item") ? invoiceCopy.qty : invoiceCopy.hours;
   const rows = [
     [invoiceCopy.subtotal, formatMoney(invoice.subtotalMinor, invoice.currency)],
     ...(invoice.discountMinor > 0 ? [[invoiceCopy.discount, formatMoney(-invoice.discountMinor, invoice.currency)]] : []),
@@ -94,7 +95,7 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
           <thead className="bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-4 py-3 font-medium">{invoiceCopy.description}</th>
-              <th className="px-4 py-3 font-medium">{invoiceCopy.hours}</th>
+              <th className="px-4 py-3 font-medium">{quantityHeader}</th>
               <th className="px-4 py-3 font-medium">{invoiceCopy.unitPrice}</th>
               <th className="px-4 py-3 font-medium">{invoiceCopy.amount}</th>
             </tr>

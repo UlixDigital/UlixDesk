@@ -76,7 +76,9 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
     dueDate: formatInvoiceDate(dueDate),
     clientUrl,
   });
-  const unrated = invoice.status === "draft" ? await unratedForInvoice(invoice) : [];
+  const hasTime = invoice.lines.some((line) => line.kind === "time");
+  const unrated = invoice.status === "draft" && hasTime ? await unratedForInvoice(invoice) : [];
+  const quantityHeader = invoice.lines.some((line) => line.quantityKind === "item") ? invoiceCopy.qty : invoiceCopy.hours;
   const discountValue =
     invoice.discountKind === "percent"
       ? formatPercentBps(invoice.discountBps).replace("%", "")
@@ -103,8 +105,12 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
                 {invoiceCopy.overdue}
               </span>
             ) : null}
-            <span className="text-slate-400"> · </span>
-            {formatInvoiceDate(invoiceDateKey(invoice.periodStart))} – {formatInvoiceDate(invoiceDateKey(invoice.periodEnd))}
+            {hasTime ? (
+              <>
+                <span className="text-slate-400"> · </span>
+                {formatInvoiceDate(invoiceDateKey(invoice.periodStart))} – {formatInvoiceDate(invoiceDateKey(invoice.periodEnd))}
+              </>
+            ) : null}
           </p>
         </div>
         <a href={`/invoices/${invoice.id}/pdf`} className={ui.secondaryButton}>
@@ -141,41 +147,23 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
         </p>
       ) : null}
 
-      <div className="mt-6 space-y-4">
-        <InvoiceClientLink
-          invoiceId={invoice.id}
-          url={clientUrl}
-          keyMessage={keyMessage}
-          draft={invoice.status === "draft"}
-        />
-        {invoice.status === "void" ? null : (
-          <InvoiceSendDialog
-            key={`${clientUrl ?? "none"}-${defaults.subject}`}
+      {invoice.status === "draft" ? (
+        <div className="mt-6">
+          <InvoiceFollowUp
             invoiceId={invoice.id}
-            draft={invoice.status === "draft"}
-            mailConfigured={invoiceMailConfigured()}
-            clientUrl={clientUrl}
-            defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
-            defaultCc=""
-            defaultSubject={defaults.subject}
-            defaultBody={defaults.body}
-          />
-        )}
-        {invoice.status === "open" || invoice.status === "void" || zeroPaid ? (
-          <InvoiceStatusActions invoiceId={invoice.id} status={invoice.status} zeroPaid={zeroPaid} />
-        ) : null}
-        {canRecord ? (
-          <RecordPaymentForm
-            invoiceId={invoice.id}
+            status={invoice.status}
+            zeroPaid={zeroPaid}
+            canRecord={canRecord}
+            showPayments={showPayments}
             currency={invoice.currency}
             today={today}
             dueLabel={formatMoney(dueMinor, invoice.currency)}
-          />
-        ) : null}
-        {showPayments ? (
-          <PaymentHistory
-            invoiceId={invoice.id}
-            currency={invoice.currency}
+            clientUrl={clientUrl}
+            keyMessage={keyMessage}
+            mailConfigured={invoiceMailConfigured()}
+            defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
+            defaultSubject={defaults.subject}
+            defaultBody={defaults.body}
             payments={invoice.payments.map((payment) => ({
               id: payment.id,
               amountLabel: formatMoney(payment.amountMinor, invoice.currency),
@@ -186,10 +174,12 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
               note: payment.note,
               recordedBy: payment.recordedBy.name,
             }))}
+            events={invoice.statusEvents}
+            emails={invoice.emailsSent}
+            timeZone={settings.timeZone}
           />
-        ) : null}
-        <InvoiceHistory events={invoice.statusEvents} emails={invoice.emailsSent} timeZone={settings.timeZone} />
-      </div>
+        </div>
+      ) : null}
 
       {!invoice.bankDetails.trim() ? (
         <p role="status" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
@@ -228,10 +218,12 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
               periodStart={invoiceDateKey(invoice.periodStart)}
               periodEnd={invoiceDateKey(invoice.periodEnd)}
               grouping={invoice.grouping}
+              hasTimeLines={hasTime}
               lines={invoice.lines.map((line) => ({
                 key: line.id,
                 id: line.id,
                 kind: line.kind === "time" ? ("time" as const) : ("custom" as const),
+                quantityKind: line.quantityKind === "item" ? ("item" as const) : ("hours" as const),
                 title: line.title,
                 detail: line.detail,
                 rangeStart: line.rangeStart ? invoiceDateKey(line.rangeStart) : "",
@@ -244,7 +236,10 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
           <InvoiceDeleteForm invoiceId={invoice.id} />
         </div>
       ) : (
+        <>
+        <div id="invoice-issued-lines">
         <IssuedInvoice
+          quantityHeader={quantityHeader}
           status={invoice.status}
           zeroPaid={zeroPaid}
           currency={invoice.currency}
@@ -272,12 +267,131 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
           bankDetails={invoice.bankDetails}
           poNumber={invoice.poNumber}
         />
+        </div>
+        <div className="mt-8">
+          <InvoiceFollowUp
+            invoiceId={invoice.id}
+            status={invoice.status}
+            zeroPaid={zeroPaid}
+            canRecord={canRecord}
+            showPayments={showPayments}
+            currency={invoice.currency}
+            today={today}
+            dueLabel={formatMoney(dueMinor, invoice.currency)}
+            clientUrl={clientUrl}
+            keyMessage={keyMessage}
+            mailConfigured={invoiceMailConfigured()}
+            defaultTo={invoice.client.emails.map((email) => email.email).join(", ")}
+            defaultSubject={defaults.subject}
+            defaultBody={defaults.body}
+            payments={invoice.payments.map((payment) => ({
+              id: payment.id,
+              amountLabel: formatMoney(payment.amountMinor, invoice.currency),
+              amountValue: formatMoneyNumber(payment.amountMinor, invoice.currency),
+              paidOn: invoiceDateKey(payment.paidOn),
+              paidOnLabel: formatInvoiceDate(invoiceDateKey(payment.paidOn)),
+              method: payment.method,
+              note: payment.note,
+              recordedBy: payment.recordedBy.name,
+            }))}
+            events={invoice.statusEvents}
+            emails={invoice.emailsSent}
+            timeZone={settings.timeZone}
+          />
+        </div>
+        </>
       )}
     </div>
   );
 }
 
+function InvoiceFollowUp({
+  invoiceId,
+  status,
+  zeroPaid,
+  canRecord,
+  showPayments,
+  currency,
+  today,
+  dueLabel,
+  clientUrl,
+  keyMessage,
+  mailConfigured,
+  defaultTo,
+  defaultSubject,
+  defaultBody,
+  payments,
+  events,
+  emails,
+  timeZone,
+}: {
+  invoiceId: string;
+  status: string;
+  zeroPaid: boolean;
+  canRecord: boolean;
+  showPayments: boolean;
+  currency: string;
+  today: string;
+  dueLabel: string;
+  clientUrl: string | null;
+  keyMessage: string | null;
+  mailConfigured: boolean;
+  defaultTo: string;
+  defaultSubject: string;
+  defaultBody: string;
+  payments: Array<{
+    id: string;
+    amountLabel: string;
+    amountValue: string;
+    paidOn: string;
+    paidOnLabel: string;
+    method: string | null;
+    note: string | null;
+    recordedBy: string;
+  }>;
+  events: Array<{ id: string; fromStatus: string; toStatus: string; reason: string; createdAt: Date; actor: { name: string } }>;
+  emails: Array<{
+    id: string;
+    toAddresses: string[];
+    ccAddresses: string[];
+    subject: string;
+    success: boolean;
+    error: string | null;
+    createdAt: Date;
+    sentBy: { name: string };
+  }>;
+  timeZone: string;
+}) {
+  return (
+    <div className="space-y-4" id="invoice-followup">
+      {canRecord ? <RecordPaymentForm invoiceId={invoiceId} currency={currency} today={today} dueLabel={dueLabel} /> : null}
+      {showPayments ? <PaymentHistory invoiceId={invoiceId} currency={currency} payments={payments} /> : null}
+      <div id="invoice-client-link-section">
+        <InvoiceClientLink invoiceId={invoiceId} url={clientUrl} keyMessage={keyMessage} draft={status === "draft"} />
+      </div>
+      {status === "void" ? null : (
+        <InvoiceSendDialog
+          key={`${clientUrl ?? "none"}-${defaultSubject}`}
+          invoiceId={invoiceId}
+          draft={status === "draft"}
+          mailConfigured={mailConfigured}
+          clientUrl={clientUrl}
+          defaultTo={defaultTo}
+          defaultCc=""
+          defaultSubject={defaultSubject}
+          defaultBody={defaultBody}
+        />
+      )}
+      <InvoiceHistory events={events} emails={emails} timeZone={timeZone} />
+      {status === "open" || status === "void" || zeroPaid ? (
+        <InvoiceStatusActions invoiceId={invoiceId} status={status} zeroPaid={zeroPaid} />
+      ) : null}
+    </div>
+  );
+}
+
 function IssuedInvoice({
+  quantityHeader,
   status,
   zeroPaid = false,
   currency,
@@ -294,6 +408,7 @@ function IssuedInvoice({
   bankDetails,
   poNumber,
 }: {
+  quantityHeader: string;
   status: string;
   zeroPaid?: boolean;
   currency: string;
@@ -342,7 +457,7 @@ function IssuedInvoice({
           <thead className="bg-slate-50 text-left text-slate-600">
             <tr>
               <th className="px-4 py-3 font-medium">{invoiceCopy.description}</th>
-              <th className="px-4 py-3 font-medium">{invoiceCopy.hours}</th>
+              <th className="px-4 py-3 font-medium">{quantityHeader}</th>
               <th className="px-4 py-3 font-medium">{invoiceCopy.unitPrice}</th>
               <th className="px-4 py-3 font-medium">{invoiceCopy.amount}</th>
             </tr>

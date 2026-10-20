@@ -37,7 +37,7 @@ async function shot(page: Page, dir: string, name: string) {
 }
 
 async function createDraft(page: Page, clientId: string, start: string, end: string) {
-  await page.goto("/invoices/new");
+  await page.goto("/invoices/new?time=1");
   await waitForHydration(page);
   await page.locator("#invoice-client").selectOption(clientId);
   await page.locator("#invoice-period-start").fill(start);

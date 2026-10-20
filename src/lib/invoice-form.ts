@@ -2,7 +2,9 @@ import { isCurrencyCode } from "@/lib/currencies";
 import type { InvoiceGrouping } from "@/lib/invoice-lines";
 import { invoiceCopy } from "@/lib/invoice-copy";
 import {
+  lineAmountFromCount,
   lineAmountFromMs,
+  parseItemQuantity,
   parsePercentBps,
   parseQuantityInput,
   type DiscountKind,
@@ -146,12 +148,16 @@ export function parseInvoiceSettings(input: {
   };
 }
 
+export type QuantityKind = "hours" | "item";
+
 export type DraftLineWrite = {
   id: string | null;
   title: string;
   detail: string;
+  /** Omitted means hours, so existing custom lines stay hours. */
+  quantityKind?: QuantityKind;
   quantitySeconds: number;
-  /** Precise duration. Omitted on older callers; the save path then uses quantitySeconds × 1000. */
+  /** Hours: duration in milliseconds. Items: count scaled by 100000. */
   quantityMs?: bigint;
   unitPriceMinor: number;
   amountMinor: number;
@@ -196,6 +202,7 @@ export function parseDraftInvoice(
       detail: string;
       quantity: string;
       unitPrice: string;
+      quantityKind?: string;
       rangeStart?: string;
       rangeEnd?: string;
     }>;
@@ -275,13 +282,29 @@ export function parseDraftInvoice(
       }
       if (rangeEnd < rangeStart) return { ok: false, error: invoiceCopy.rangeOrder };
     }
-    const quantity = parseQuantityInput(line.quantity);
-    if (!quantity.ok) return { ok: false, error: invoiceCopy.quantityInvalid };
-    const price = parseRateInput(line.unitPrice.trim() || "0", currency);
+    const quantityKind: QuantityKind = line.quantityKind === "item" ? "item" : "hours";
+    const priceRaw = line.unitPrice.trim();
+    if (priceRaw.startsWith("-") || priceRaw.startsWith("−")) {
+      return { ok: false, error: invoiceCopy.priceNonNegative };
+    }
+    const price = parseRateInput(priceRaw || "0", currency);
     if (!price.ok) return { ok: false, error: price.error };
+    let quantitySeconds = 0;
+    let quantityMs = BigInt(0);
     let amountMinor = 0;
     try {
-      amountMinor = lineAmountFromMs(price.amountMinor, quantity.ms);
+      if (quantityKind === "item") {
+        const quantity = parseItemQuantity(line.quantity);
+        if (!quantity.ok) return { ok: false, error: invoiceCopy.itemQuantityInvalid };
+        quantityMs = quantity.scaled;
+        amountMinor = lineAmountFromCount(price.amountMinor, quantityMs);
+      } else {
+        const quantity = parseQuantityInput(line.quantity);
+        if (!quantity.ok) return { ok: false, error: invoiceCopy.quantityInvalid };
+        quantitySeconds = quantity.seconds;
+        quantityMs = quantity.ms;
+        amountMinor = lineAmountFromMs(price.amountMinor, quantityMs);
+      }
     } catch {
       return { ok: false, error: invoiceCopy.amountTooLarge };
     }
@@ -289,13 +312,20 @@ export function parseDraftInvoice(
       id: line.id.trim() || null,
       title,
       detail: line.detail.trim(),
-      quantitySeconds: quantity.seconds,
-      quantityMs: quantity.ms,
+      quantityKind,
+      quantitySeconds,
+      quantityMs,
       unitPriceMinor: price.amountMinor,
       amountMinor,
       rangeStart: rangeStart || null,
       rangeEnd: rangeEnd || null,
     });
+  }
+
+  if (discountKind === "amount") {
+    const subtotal = lines.reduce((sum, line) => sum + line.amountMinor, 0);
+    if (!Number.isSafeInteger(subtotal)) return { ok: false, error: invoiceCopy.amountTooLarge };
+    if (discountAmountMinor > subtotal) return { ok: false, error: invoiceCopy.discountExceeds };
   }
 
   return {

@@ -16,6 +16,7 @@ import { invoiceCopy } from "@/lib/invoice-copy";
 import { toInvoicePdfInput } from "@/lib/invoice-document";
 import { dateColumn } from "@/lib/invoice-form";
 import { rotateClientLink } from "@/lib/invoice-link";
+import { recordPayment } from "@/lib/invoice-payments";
 import { setInvoiceMailTransportForTests } from "@/lib/invoice-mail";
 import { renderInvoicePdf } from "@/lib/invoice-pdf";
 import { findPublicInvoice } from "@/lib/invoice-public";
@@ -127,7 +128,7 @@ describe("blank invoices", () => {
     ]);
   });
 
-  it("refuses members, and an empty issue is paid with an auto-paid audit row", async () => {
+  it("refuses members, refuses an empty issue, and auto-pays a zero total", async () => {
     const { owner, member, client } = await workspace();
     expect((await createBlankInvoice({ actor: actor(member), clientId: client.id })).error).toBe(invoiceCopy.denied);
     expect(await getInvoice(member.role, "missing")).toBeNull();
@@ -136,13 +137,55 @@ describe("blank invoices", () => {
     expect(created.ok).toBe(true);
     if (!created.ok) return;
     const invoice = await getInvoice(owner.role, created.id);
-    const issued = await saveDraft({ actor: actor(owner), id: created.id, draft: storedDraft(invoice!), issue: true });
+    const empty = await saveDraft({ actor: actor(owner), id: created.id, draft: storedDraft(invoice!), issue: true });
+    expect(empty).toEqual({ ok: false, error: invoiceCopy.issueNeedsLines });
+    expect((await getInvoice(owner.role, created.id))?.status).toBe("draft");
+
+    const priced = await saveDraft({
+      actor: actor(owner),
+      id: created.id,
+      issue: false,
+      draft: {
+        ...storedDraft(invoice!),
+        lines: [
+          {
+            id: null,
+            title: "Courtesy",
+            detail: "",
+            quantityKind: "item",
+            quantitySeconds: 0,
+            quantityMs: 100_000n,
+            unitPriceMinor: 0,
+            amountMinor: 0,
+          },
+        ],
+      },
+    });
+    expect(priced.ok).toBe(true);
+    const issued = await saveDraft({
+      actor: actor(owner),
+      id: created.id,
+      draft: storedDraft((await getInvoice(owner.role, created.id))!),
+      issue: true,
+    });
     expect(issued.ok).toBe(true);
     const open = await getInvoice(owner.role, created.id);
     expect(open?.status).toBe("paid");
     expect(open?.paidMinor).toBe(0);
-    expect(open?.lines).toEqual([]);
+    expect(open?.lines).toHaveLength(1);
     expect(open?.totalMinor).toBe(0);
+    expect(
+      (
+        await recordPayment({
+          actor: actor(owner),
+          invoiceId: created.id,
+          amount: "1.00",
+          paidOn: "2026-10-20",
+          method: "cash",
+          note: "",
+        })
+      ).error,
+    ).toBe(invoiceCopy.paymentAlreadyPaid);
     const issuedEvents = await prisma.invoiceStatusEvent.findMany({
       where: { invoiceId: created.id },
       orderBy: { createdAt: "asc" },
@@ -491,5 +534,157 @@ describe("blank invoices", () => {
 
     expect((await reopenInvoice({ actor: who, id: created.id, reason: "Add a charge" })).ok).toBe(true);
     expect((await getInvoice(owner.role, created.id))?.status).toBe("draft");
+  });
+
+  it("saves an item line as a plain quantity and leaves an older custom line as hours", async () => {
+    const { owner, client } = await workspace();
+    const who = actor(owner);
+    const created = await createBlankInvoice({ actor: who, clientId: client.id });
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    const invoice = await getInvoice(owner.role, created.id);
+    const saved = await saveDraft({
+      actor: who,
+      id: created.id,
+      issue: false,
+      draft: {
+        ...storedDraft(invoice!),
+        lines: [
+          {
+            id: null,
+            title: "Website design",
+            detail: "",
+            quantityKind: "item",
+            quantitySeconds: 0,
+            quantityMs: 100_000n,
+            unitPriceMinor: 50_000,
+            amountMinor: 50_000,
+          },
+          {
+            id: null,
+            title: "Legacy hours",
+            detail: "",
+            quantitySeconds: 3600,
+            quantityMs: 3_600_000n,
+            unitPriceMinor: 2500,
+            amountMinor: 2500,
+          },
+        ],
+      },
+    });
+    expect(saved.ok).toBe(true);
+    const draft = await getInvoice(owner.role, created.id);
+    expect(draft?.lines.map((line) => [line.title, line.quantityKind, line.quantityMs.toString()])).toEqual([
+      ["Website design", "item", "100000"],
+      ["Legacy hours", "hours", "3600000"],
+    ]);
+    expect((await saveDraft({ actor: who, id: created.id, issue: true, draft: storedDraft(draft!) })).ok).toBe(true);
+    const open = await getInvoice(owner.role, created.id);
+    const link = await rotateClientLink({ actor: who, id: created.id });
+    expect(link.ok).toBe(true);
+    if (!link.ok || !open) return;
+    const trace: Array<{ text: string }> = [];
+    await renderInvoicePdf(
+      toInvoicePdfInput({
+        companyName: "Ulix Digital",
+        companyAddress: "30 North Gould Street",
+        number: open.number,
+        clientName: client.name,
+        clientAddress: "",
+        currency: open.currency,
+        issueDate: open.issueDate.toISOString().slice(0, 10),
+        dueDate: open.dueDate.toISOString().slice(0, 10),
+        poNumber: null,
+        notes: "",
+        bankDetails: open.bankDetails,
+        discountMinor: open.discountMinor,
+        discountKind: open.discountKind,
+        discountBps: open.discountBps,
+        taxEnabled: open.taxEnabled,
+        taxLabel: open.taxLabel,
+        taxRateBps: open.taxRateBps,
+        subtotalMinor: open.subtotalMinor,
+        taxMinor: open.taxMinor,
+        totalMinor: open.totalMinor,
+        paidMinor: open.paidMinor,
+        lines: open.lines,
+      }),
+      { compress: false, trace },
+    );
+    expect(trace.some((item) => item.text === "1")).toBe(true);
+    expect(trace.some((item) => item.text === "1:00:00")).toBe(true);
+    const publicInvoice = await findPublicInvoice(link.token);
+    expect(publicInvoice?.lines.map((line) => [line.title, line.quantityKind])).toEqual([
+      ["Website design", "item"],
+      ["Legacy hours", "hours"],
+    ]);
+  });
+
+  it("refuses a line from another invoice and a discount above the subtotal", async () => {
+    const { owner, client } = await workspace();
+    const who = actor(owner);
+    const first = await createBlankInvoice({ actor: who, clientId: client.id });
+    const second = await createBlankInvoice({ actor: who, clientId: client.id });
+    expect(first.ok && second.ok).toBe(true);
+    if (!first.ok || !second.ok) return;
+    const source = await getInvoice(owner.role, first.id);
+    const saved = await saveDraft({
+      actor: who,
+      id: first.id,
+      issue: false,
+      draft: {
+        ...storedDraft(source!),
+        lines: [
+          {
+            id: null,
+            title: "Design",
+            detail: "",
+            quantityKind: "item",
+            quantitySeconds: 0,
+            quantityMs: 100_000n,
+            unitPriceMinor: 5_000,
+            amountMinor: 5_000,
+          },
+        ],
+      },
+    });
+    expect(saved.ok).toBe(true);
+    const lineId = (await getInvoice(owner.role, first.id))?.lines[0]?.id;
+    const target = await getInvoice(owner.role, second.id);
+    const foreign = await saveDraft({
+      actor: who,
+      id: second.id,
+      issue: false,
+      draft: {
+        ...storedDraft(target!),
+        lines: [
+          {
+            id: lineId ?? "missing",
+            title: "Stolen",
+            detail: "",
+            quantityKind: "item",
+            quantitySeconds: 0,
+            quantityMs: 100_000n,
+            unitPriceMinor: 5_000,
+            amountMinor: 5_000,
+          },
+        ],
+      },
+    });
+    expect(foreign).toEqual({ ok: false, error: invoiceCopy.lineNotOnInvoice });
+    expect((await getInvoice(owner.role, first.id))?.lines[0]?.title).toBe("Design");
+
+    const tooMuch = await saveDraft({
+      actor: who,
+      id: first.id,
+      issue: false,
+      draft: {
+        ...storedDraft((await getInvoice(owner.role, first.id))!),
+        discountKind: "amount",
+        discountAmountMinor: 5_001,
+      },
+    });
+    expect(tooMuch).toEqual({ ok: false, error: invoiceCopy.discountExceeds });
+    expect((await getInvoice(owner.role, first.id))?.discountMinor).toBe(0);
   });
 });

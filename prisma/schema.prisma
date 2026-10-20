@@ -395,10 +395,14 @@ model Invoice {
 }
 
 /// One invoice row.
-/// `quantityMs` is the duration in whole milliseconds and is the source of truth
-/// for `amountMinor` (see docs/INVOICES.md). `quantitySeconds` is that duration
-/// rounded to the nearest second, half away from zero, and is what H:MM:SS shows
-/// when the quantity is a whole number of seconds.
+/// `quantityKind` is `hours` or `item`. Hours keep `quantityMs` as the duration
+/// in whole milliseconds, which is the source of truth for that line's amount
+/// (see docs/INVOICES.md). `quantitySeconds` is that duration rounded to the
+/// nearest second, half away from zero, and is what H:MM:SS shows when the
+/// quantity is a whole number of seconds.
+/// An item stores a plain count in `quantityMs`, scaled by 100000, so 1 is
+/// 100000. The amount is that count times the unit price. `quantitySeconds` is 0.
+/// Existing rows stay hours.
 /// `kind` is `time` (tracked slices) or `custom` (a manual line, no InvoiceTime).
 /// `rangeStart` and `rangeEnd` are the optional date range on a manual line.
 model InvoiceLine {
@@ -408,10 +412,12 @@ model InvoiceLine {
   position        Int
   /// time or custom.
   kind            String
+  /// hours or item. Existing rows stay hours.
+  quantityKind    String    @default("hours")
   title           String
   detail          String    @default("")
   quantitySeconds Int
-  /// Precise duration in milliseconds. See docs/INVOICES.md.
+  /// Hours: duration in milliseconds. Items: count scaled by 100000.
   quantityMs      BigInt    @default(0)
   rangeStart      DateTime? @db.Date
   rangeEnd        DateTime? @db.Date

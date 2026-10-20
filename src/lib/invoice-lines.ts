@@ -4,7 +4,6 @@ import {
   formatInvoiceMoney,
   formatInvoiceRange,
   lineAmountMinor,
-  periodLineTitle,
   secondsFromMs,
 } from "@/lib/invoice-money";
 
@@ -70,10 +69,12 @@ export function buildInvoiceLines(input: {
     string,
     {
       sort: string;
-      title: string;
       detail: string;
       unitPriceMinor: number;
       durationMs: number;
+      projectNames: string[];
+      userName: string;
+      day: string;
       timeEntryIds: string[];
       windows: InvoiceWindow[];
     }
@@ -102,7 +103,6 @@ export function buildInvoiceLines(input: {
       });
       continue;
     }
-    const title = lineTitle(input.grouping, input.periodStart, input.periodEnd, slice);
     const detail =
       input.grouping === "day" ? "" : formatInvoiceRange(input.periodStart, input.periodEnd);
     const sort = sortKey(input.grouping, slice);
@@ -110,6 +110,7 @@ export function buildInvoiceLines(input: {
     const existing = groups.get(key);
     if (existing) {
       existing.durationMs += slice.durationMs;
+      if (!existing.projectNames.includes(slice.projectName)) existing.projectNames.push(slice.projectName);
       if (!existing.timeEntryIds.includes(slice.timeEntryId)) {
         existing.timeEntryIds.push(slice.timeEntryId);
       }
@@ -122,10 +123,12 @@ export function buildInvoiceLines(input: {
     }
     groups.set(key, {
       sort,
-      title,
       detail,
       unitPriceMinor: slice.rateMinor,
       durationMs: slice.durationMs,
+      projectNames: [slice.projectName],
+      userName: slice.userName,
+      day: slice.day,
       timeEntryIds: [slice.timeEntryId],
       windows: [
         {
@@ -149,7 +152,7 @@ export function buildInvoiceLines(input: {
       return [
         {
           kind: "time" as const,
-          title: group.title,
+          title: groupTitle(input.grouping, group.projectNames, group.userName, group.day),
           detail: group.detail,
           quantitySeconds,
           unitPriceMinor: group.unitPriceMinor,
@@ -213,16 +216,13 @@ export function unratedLineLabel(item: UnratedTime) {
   return `${item.userName} · ${item.projectName} · ${formatInvoiceDate(item.day)} · ${formatDurationHms(item.durationSeconds)}${reason}`;
 }
 
-function lineTitle(
-  grouping: InvoiceGrouping,
-  periodStart: string,
-  periodEnd: string,
-  slice: InvoiceSlice,
-) {
-  if (grouping === "project") return slice.projectName;
-  if (grouping === "member") return slice.userName;
-  if (grouping === "day") return formatInvoiceDate(slice.day);
-  return periodLineTitle(periodStart, periodEnd);
+/** Project name, with the member name when the line is split by member. */
+function groupTitle(grouping: InvoiceGrouping, projectNames: string[], userName: string, day: string) {
+  const projects = [...new Set(projectNames)].sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
+  const projectLabel = projects.join(", ");
+  if (grouping === "member") return projectLabel ? `${projectLabel} · ${userName}` : userName;
+  if (grouping === "day") return formatInvoiceDate(day);
+  return projectLabel;
 }
 
 function sortKey(grouping: InvoiceGrouping, slice: InvoiceSlice) {

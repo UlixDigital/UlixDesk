@@ -26,8 +26,8 @@ export function InvoiceStatusActions({
   return (
     <section id="invoice-status-actions" className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <h2 className="text-sm font-semibold text-ink">{invoiceCopy.status}</h2>
-      {canVoid ? <p className="mt-1 text-sm text-slate-600">{invoiceCopy.voidRules}</p> : null}
-      {canReopen ? <p className="mt-1 text-sm text-slate-600">{invoiceCopy.reopenRules}</p> : null}
+      {canVoid ? <p className="mt-1 text-xs leading-5 text-slate-500">{invoiceCopy.voidRules}</p> : null}
+      {canReopen ? <p className="mt-1 text-xs leading-5 text-slate-500">{invoiceCopy.reopenRules}</p> : null}
       {error ? (
         <p role="alert" className="mt-3 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800">
           {error}
@@ -41,7 +41,7 @@ export function InvoiceStatusActions({
               {invoiceCopy.reason}
               <input id="invoice-void-reason" name="reason" className={`${ui.input} mt-1.5`} required />
             </label>
-            <button type="submit" className={ui.dangerButton} disabled={voidPending || reopenPending}>
+            <button id="invoice-void" type="submit" className={ui.quietDangerButton} disabled={voidPending || reopenPending}>
               {voidPending ? invoiceCopy.voiding : invoiceCopy.void}
             </button>
           </form>

@@ -4,11 +4,15 @@ import { buildInvoiceLines, type InvoiceSlice } from "@/lib/invoice-lines";
 import {
   formatDurationHms,
   formatInvoiceMoney,
+  formatItemQuantity,
   formatQuantityMs,
+  invoiceLineQuantity,
   invoiceTotals,
+  lineAmountFromCount,
   lineAmountFromMs,
   lineAmountMinor,
   parseDurationInput,
+  parseItemQuantity,
   parseQuantityInput,
   percentOfMinor,
   periodLineTitle,
@@ -100,6 +104,33 @@ describe("invoice money", () => {
     });
     expect(totals).toEqual({ subtotalMinor: 11_000, discountMinor: 1_100, taxMinor: 842, totalMinor: 10_742 });
   });
+
+  it("bills an item as a plain count times the unit price", () => {
+    expect(parseItemQuantity("1")).toEqual({ ok: true, scaled: 100_000n });
+    expect(parseItemQuantity("1.5")).toEqual({ ok: true, scaled: 150_000n });
+    expect(parseItemQuantity("1:00:00").ok).toBe(false);
+    expect(formatItemQuantity(100_000n)).toBe("1");
+    expect(formatItemQuantity(150_000n)).toBe("1.5");
+    expect(lineAmountFromCount(50_000, 100_000n)).toBe(50_000);
+    expect(lineAmountFromCount(2_000, 150_000n)).toBe(3_000);
+    expect(
+      invoiceLineQuantity({ quantitySeconds: 0, quantityMs: 100_000n, quantityKind: "item" }),
+    ).toBe("1");
+    expect(invoiceLineQuantity({ quantitySeconds: 3600, quantityMs: 3_600_000n, quantityKind: "hours" })).toBe("1:00:00");
+  });
+
+  it("refuses a discount larger than the subtotal", () => {
+    expect(() =>
+      invoiceTotals({
+        lineAmounts: [5_000],
+        discountKind: "amount",
+        discountAmountMinor: 5_001,
+        discountBps: 0,
+        taxEnabled: false,
+        taxRateBps: 0,
+      }),
+    ).toThrow(/subtotal/);
+  });
 });
 
 describe("invoice line grouping", () => {
@@ -117,6 +148,7 @@ describe("invoice line grouping", () => {
     });
     expect(billAmountMinor(1, quarter) + billAmountMinor(1, quarter)).toBe(0);
     const combined = built.lines.find((line) => line.unitPriceMinor === 1);
+    expect(combined?.title).toBe("Website");
     expect(combined?.quantitySeconds).toBe(1800);
     expect(combined?.amountMinor).toBe(1);
     expect(combined?.timeEntryIds).toEqual(["a", "b"]);
@@ -168,7 +200,7 @@ describe("invoice line grouping", () => {
       periodEnd: "2026-10-11",
       slices,
     });
-    expect(members.lines.map((line) => line.title)).toEqual(["Mia", "Noa"]);
+    expect(members.lines.map((line) => line.title)).toEqual(["Website · Mia", "Website · Noa"]);
     const days = buildInvoiceLines({
       grouping: "day",
       periodStart: "2026-10-05",

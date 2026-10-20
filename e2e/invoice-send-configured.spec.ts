@@ -87,7 +87,7 @@ test("a configured send dialog records history through the capture transport", a
   try {
     await signIn(ownerContext, prisma, owner.email);
     const page = await ownerContext.newPage();
-    await page.goto("/invoices/new");
+    await page.goto("/invoices/new?time=1");
     await waitForHydration(page);
     await page.locator("#invoice-client").selectOption(client.id);
     await page.locator("#invoice-period-start").fill("2026-10-05");

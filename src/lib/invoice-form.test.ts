@@ -101,6 +101,40 @@ describe("invoice form errors", () => {
     ).toMatchObject({ ok: false, error: invoiceCopy.rangeIncomplete });
   });
 
+  it("bills a new item as a count and keeps an hours line in H:MM:SS", () => {
+    const item = parseDraftInvoice(
+      {
+        ...draft,
+        lines: [{ id: "", title: "Website design", detail: "", quantity: "1", unitPrice: "500", quantityKind: "item" }],
+      },
+      "USD",
+    );
+    expect(item.ok).toBe(true);
+    if (!item.ok) return;
+    expect(item.data.lines[0]).toMatchObject({
+      quantityKind: "item",
+      quantityMs: 100_000n,
+      quantitySeconds: 0,
+      amountMinor: 50_000,
+    });
+    const hours = parseDraftInvoice(draft, "USD");
+    expect(hours.ok).toBe(true);
+    if (!hours.ok) return;
+    expect(hours.data.lines[0]?.quantityKind).toBe("hours");
+    expect(hours.data.lines[0]?.quantityMs).toBe(3_600_000n);
+  });
+
+  it("rejects a negative price, a foreign-looking discount, and an over-large discount", () => {
+    expect(parseDraftInvoice({ ...draft, lines: [{ ...draft.lines[0]!, unitPrice: "-5" }] }, "USD")).toEqual({
+      ok: false,
+      error: invoiceCopy.priceNonNegative,
+    });
+    expect(parseDraftInvoice({ ...draft, discountKind: "amount", discountValue: "11" }, "USD")).toEqual({
+      ok: false,
+      error: invoiceCopy.discountExceeds,
+    });
+  });
+
   it("rejects a negative discount with a clear message", () => {
     expect(parseDraftInvoice({ ...draft, discountKind: "amount", discountValue: "-5" }, "USD")).toEqual({
       ok: false,
