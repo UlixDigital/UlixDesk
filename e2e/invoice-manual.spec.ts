@@ -306,7 +306,9 @@ test("a zero-total invoice is paid when issued, and it can be reopened", async (
     await page.getByRole("button", { name: "Create invoice" }).click();
     await expect(page.getByRole("heading", { name: /^Invoice LE2200/ })).toBeVisible();
     await page.getByRole("button", { name: "Mark as issued" }).click();
-    await expect(page.getByRole("alert")).toContainText("Add at least one line before issuing this invoice.");
+    await expect(page.locator("#invoice-draft").getByRole("alert")).toContainText(
+      "Add at least one line before issuing this invoice.",
+    );
     await expect(page.locator("#invoice-status")).toHaveText("Draft");
     await page.getByRole("button", { name: "Add line" }).click();
     await page.getByLabel("Description 1").fill("Courtesy");
