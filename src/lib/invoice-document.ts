@@ -72,6 +72,7 @@ export function toInvoicePdfInput(input: {
   );
   return {
     number: input.number,
+    quantityHeader: pdfQuantityHeader(input.lines),
     companyName: input.companyName,
     companyAddress: input.companyAddress,
     clientName: input.clientName,
@@ -96,6 +97,14 @@ export function toInvoicePdfInput(input: {
     })),
     totals,
   };
+}
+
+/**
+ * Qty when any line is an item, matching the invoice page.
+ * An hours-only invoice keeps the hours header.
+ */
+export function pdfQuantityHeader(lines: Array<{ quantityKind?: string | null }>): "hours" | "item" {
+  return lines.some((line) => line.quantityKind === "item") ? "item" : "hours";
 }
 
 function dateKey(value: Date | string | null | undefined) {

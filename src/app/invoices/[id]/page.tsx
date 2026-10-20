@@ -10,7 +10,7 @@ import { InvoiceSendDialog } from "@/components/invoice-send-dialog";
 import { InvoiceStatusActions } from "@/components/invoice-status-actions";
 import { publicOrigin } from "@/lib/auth";
 import { isOverdue } from "@/lib/invoice-balance";
-import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
+import { invoiceCopy, invoiceStatusLabel, showInvoiceHistoryPanels } from "@/lib/invoice-copy";
 import { clientLinkKeyMessage, clientLinkUrl, readClientLink } from "@/lib/invoice-link";
 import { unratedLineLabel } from "@/lib/invoice-lines";
 import { invoiceMailConfigured, invoiceMessageDefaults } from "@/lib/invoice-mail";
@@ -382,7 +382,9 @@ function InvoiceFollowUp({
           defaultBody={defaultBody}
         />
       )}
-      <InvoiceHistory events={events} emails={emails} timeZone={timeZone} />
+      {showInvoiceHistoryPanels(status, events.length, emails.length) ? (
+        <InvoiceHistory events={events} emails={emails} timeZone={timeZone} />
+      ) : null}
       {status === "open" || status === "void" || zeroPaid ? (
         <InvoiceStatusActions invoiceId={invoiceId} status={status} zeroPaid={zeroPaid} />
       ) : null}

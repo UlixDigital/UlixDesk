@@ -219,6 +219,7 @@ export async function createInvoice(input: {
         grouping: input.grouping,
         periodStart: input.periodStart,
         periodEnd: input.periodEnd,
+        currency: client.currency,
         slices: rowsToSlices(
           rows,
           rates,
@@ -544,6 +545,7 @@ export async function refreshDraftFromTime(input: { actor: InvoiceActor; id: str
         grouping: period.grouping,
         periodStart,
         periodEnd,
+        currency: invoice.currency,
         slices: rowsToSlices(
           rows,
           await loadRates(tx),
@@ -760,7 +762,13 @@ export async function unratedForInvoice(invoice: {
     rangeEnd,
     await takenSlices(prisma, rows.map((row) => row.id), null),
   );
-  return buildInvoiceLines({ grouping: "period", periodStart: start, periodEnd: end, slices }).unrated;
+  return buildInvoiceLines({
+    grouping: "period",
+    periodStart: start,
+    periodEnd: end,
+    currency: invoice.currency,
+    slices,
+  }).unrated;
 }
 
 export function parseDraftFromForm(formData: FormData, currency: string) {
@@ -914,6 +922,7 @@ async function prepareIssue(
     grouping: period.grouping,
     periodStart,
     periodEnd,
+    currency: invoice.currency,
     slices: rowsToSlices(
       rows.filter((row) => row.billable && row.project.billable && row.project.clientId === invoice.clientId),
       await loadRates(tx),

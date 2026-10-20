@@ -2,7 +2,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import PDFDocument from "pdfkit";
 import { describe, expect, it } from "vitest";
 import { parseInvoiceBankFile } from "../../scripts/invoice-bank-file.mjs";
-import { toInvoicePdfInput } from "@/lib/invoice-document";
+import { pdfQuantityHeader, toInvoicePdfInput } from "@/lib/invoice-document";
 import {
   INVOICE_NOTES_LINE_GAP,
   INVOICE_NOTES_WIDTH,
@@ -189,7 +189,11 @@ describe("invoice pdf layout", () => {
       quantity: "1:30:00",
       detail: "Thu, Oct 1, 2026 - Sat, Oct 3, 2026",
     });
+    expect(input.quantityHeader).toBe("hours");
     await renderInvoicePdf(input, { compress: false, trace });
+    expect(trace.some((item) => item.text === "Total hours")).toBe(true);
+    expect(trace.some((item) => item.text === "(qty)")).toBe(true);
+    expect(trace.some((item) => item.text === "Qty")).toBe(false);
     expect(trace.some((item) => item.text === "Design review")).toBe(true);
     expect(trace.some((item) => item.text === "1:30:00")).toBe(true);
     expect(trace.some((item) => item.text === "Thu, Oct 1, 2026 - Sat, Oct 3, 2026")).toBe(true);
@@ -231,11 +235,20 @@ describe("invoice pdf layout", () => {
       ],
     });
     expect(input.lines[0]?.quantity).toBe("1");
-    const trace: Array<{ text: string }> = [];
+    expect(input.quantityHeader).toBe("item");
+    const trace: Array<{ text: string; x: number; y: number }> = [];
     await renderInvoicePdf(input, { compress: false, trace });
+    const qty = trace.find((item) => item.text === "Qty");
+    const description = trace.find((item) => item.text === "Description");
+    expect(qty).toMatchObject({ x: 374 });
+    expect(qty?.y).toBe(description?.y);
+    expect(trace.some((item) => item.text === "Total hours")).toBe(false);
+    expect(trace.some((item) => item.text === "(qty)")).toBe(false);
     expect(trace.some((item) => item.text === "1")).toBe(true);
     expect(trace.some((item) => item.text === "1:00:00")).toBe(false);
     expect(trace.some((item) => item.text === "$500.00")).toBe(true);
+    expect(pdfQuantityHeader([{ quantityKind: "hours" }, { quantityKind: "item" }])).toBe("item");
+    expect(pdfQuantityHeader([{ quantityKind: "hours" }])).toBe("hours");
   });
 
   it("gives the notes column enough room for Ulix Digital", () => {

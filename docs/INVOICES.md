@@ -18,11 +18,11 @@ Hours quantity is stored as `quantityMs`, an integer number of milliseconds. `qu
 - A plain number is a number of hours, such as `1.5` or `2`. It is parsed with integer arithmetic, not a binary float. At most five decimal places are accepted. Five places is the limit that still converts to an integer number of milliseconds: one hour is 3,600,000 ms, and 3,600,000 is divisible by 100,000, so `0.00001` hour is exactly 36 ms. `1.5` is exactly `1:30:00`. `1.25` is exactly `1:15:00`.
 - The line amount is `round(unitPriceMinor × quantityMs / 3_600_000)`, half away from zero. That is `billAmountMinor` for a duration in milliseconds. When the quantity is a whole number of seconds it matches `lineAmountMinor(unitPriceMinor, quantitySeconds)`. A fractional second is billed from the milliseconds, not from the rounded second.
 
-A blank draft hides the period in the header, the unrated-time warning, and the Tracked time section until the draft has a time line. Add tracked time opens that section.
+A blank draft hides the period in the header, the unrated-time warning, and the Tracked time section until the draft has a time line. Add tracked time opens that section. Status history and email history stay hidden on a draft until a status change or an email is recorded. A reopened draft still shows them.
 
 Tracked time on a draft uses the existing slice logic. The draft's period and grouping choose the window. Windows already on another active invoice are left out, so the same time is not billed twice. Those lines stay `kind = time` and keep their `InvoiceTime` rows. Adding tracked time is the Refresh from time action.
 
-A time line's title is the project name. When the lines are split by member, the title is the project name and the member name. A day line keeps the date.
+A time line's title is the project name. When the lines are split by member, the title is the project name and the member name. A day line keeps the date. When the same project is split by rate, each line adds the member name. If that name would still match, the line adds the rate instead, so the titles are not the same.
 
 A tracked-time line's quantity is read-only. The form shows "Edit the time entries, then Refresh from time". Saving a different quantity is refused, including a request that does not use the form. The description and the unit price can still be edited. The amount is the stored quantity times the new unit price. A different amount is a manual line. Refresh from time still replaces time lines from the slices, so it does not keep a quantity typed over a time line.
 
@@ -32,7 +32,7 @@ Issuing a draft that already has time lines still compares those lines with a fr
 
 Void and reopen of an invoice with only manual lines follow the same payment rules as any other invoice. The checks for a deleted entry, a moved client, an edited slice, and an overlapping window apply only to time lines. With no `InvoiceTime` rows there is nothing to restore, and reopen does not fail for missing time. An auto-paid zero-total invoice is the same: void and reopen are allowed while `paidMinor` is 0 and there is no payment row.
 
-The optional tax line and notes are unchanged. After the draft exists, the PDF, send, client link, void, reopen, and payments are the same path as a time invoice. On an issued invoice the lines come first. Payments, the client link, and the history follow. Void is a secondary danger action. On the PDF, a manual line's date range is the detail under the description, in the same format as a tracked-time line. An hours quantity is `H:MM:SS` when the stored milliseconds are a whole number of seconds. An item quantity is the plain count.
+The optional tax line and notes are unchanged. After the draft exists, the PDF, send, client link, void, reopen, and payments are the same path as a time invoice. On an issued invoice the lines come first. Payments, the client link, and the history follow. Void is a secondary danger action. On the PDF, a manual line's date range is the detail under the description, in the same format as a tracked-time line. An hours quantity is `H:MM:SS` when the stored milliseconds are a whole number of seconds. An item quantity is the plain count. The PDF quantity column says Qty when the invoice has an item line. An hours-only invoice keeps the Total hours (qty) header.
 
 ## Status
 

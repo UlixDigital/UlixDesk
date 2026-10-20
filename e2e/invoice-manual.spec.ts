@@ -102,6 +102,8 @@ test("an owner creates a blank invoice, issues it, downloads the PDF, and record
     expect(text).toContain("Thu, Oct 1, 2026 - Sat, Oct 3, 2026");
     expect(text).toContain("1:30:00");
     expect(text).toContain("2:00:00");
+    expect(text).toContain("Total hours");
+    expect(text).toContain("(qty)");
     expect(text).toContain("$110.00");
     execFileSync("pdftoppm", ["-png", "-f", "1", "-l", "1", "-r", "120", pdfPath, path.join(shots, "manual-invoice-pdf")]);
 
@@ -411,6 +413,10 @@ test("new invoice offers equal choices, a blank draft stays quiet, and an item l
     await expect(page.getByRole("group", { name: "Tracked time" })).toHaveCount(0);
     await expect(page.locator("h1 + p")).not.toContainText("–");
     await expect(page.getByRole("button", { name: "Add tracked time" })).toBeVisible();
+    await expect(page.locator("#invoice-status-history")).toHaveCount(0);
+    await expect(page.locator("#invoice-email-history")).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Status history" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Email history" })).toHaveCount(0);
     await shot(page, shots, "blank-draft");
 
     await page.getByRole("button", { name: "Add line" }).click();
@@ -449,6 +455,8 @@ test("new invoice offers equal choices, a blank draft stays quiet, and an item l
     await writeFile(pdfPath, await pdf.body());
     const text = execFileSync("pdftotext", ["-layout", pdfPath, "-"], { encoding: "utf8" });
     expect(text).toContain("Website design");
+    expect(text).toContain("Qty");
+    expect(text).not.toContain("Total hours");
     expect(text).toContain("$500.00");
     expect(text).not.toContain("1:00:00");
     expect(text).toMatch(/Website design[\s\S]{0,400}\b1\b/);

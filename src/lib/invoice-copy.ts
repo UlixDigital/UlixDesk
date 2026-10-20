@@ -116,7 +116,7 @@ export const invoiceCopy = {
   voidRules:
     "Void is available for an open invoice with no payment recorded. A paid invoice cannot be voided until every payment is deleted, which returns it to open. Void releases the time so it can be billed again.",
   reopenRules:
-    "Reopen is available for an open or void invoice with no payment recorded. A paid invoice cannot be reopened until every payment is deleted, which returns it to open. A void invoice can be reopened only when its time entries still exist, still belong to this client, still fit the billed slices, and have not been billed elsewhere.",
+    "Reopen is available for an open or void invoice with no payment recorded. A paid invoice cannot be reopened until every payment is deleted, which returns it to open. A void invoice can be reopened only when its time entries still exist, still belong to this client, the billed time still matches those entries, and that time has not been billed on another invoice.",
   reason: "Reason",
   reasonRequired: "Enter a reason.",
   reasonTooLong: "Keep the reason to 500 characters.",
@@ -136,7 +136,7 @@ export const invoiceCopy = {
   reopenMoved: "The time no longer belongs to this client, so this invoice cannot be reopened.",
   clientLink: "Client link",
   clientLinkHint:
-    "Anyone with this link can view this invoice and download the PDF. No sign-in is required. The link does not open a draft. Revoking it makes the old address a not-found page.",
+    "Anyone with this link can view this invoice and download the PDF. No sign-in is required. The link does not open a draft. Revoking it makes the old link stop working.",
   clientLinkCreate: "Create client link",
   clientLinkRegenerate: "Regenerate link",
   clientLinkRevoke: "Revoke link",
@@ -147,12 +147,13 @@ export const invoiceCopy = {
   clientLinkRevoked: "Client link revoked.",
   clientLinkDraft: "Clients can open the link after the invoice is issued. Until then the address does not load.",
   linkKeyMissing:
-    "INVOICE_LINK_KEY is not set. Generate one with openssl rand -base64 32, then create the link again.",
-  linkKeyInvalid: "INVOICE_LINK_KEY must be 32 bytes encoded as base64 or hex.",
+    "The secret for client links is not set. Add INVOICE_LINK_KEY in the server settings, then create the link again.",
+  linkKeyInvalid:
+    "The secret for client links is not valid. Check INVOICE_LINK_KEY in the server settings, then create the link again.",
   linkKeyMissingShow:
-    "The client link is saved, but INVOICE_LINK_KEY is not set, so it cannot be shown again. Anyone who already has the link can still open it.",
+    "The client link is saved, but the secret for client links is not set, so it cannot be shown again. Anyone who already has the link can still open it.",
   linkKeyInvalidShow:
-    "The client link is saved, but INVOICE_LINK_KEY is not valid, so it cannot be shown again. Anyone who already has the link can still open it.",
+    "The client link is saved, but the secret for client links is not valid, so it cannot be shown again. Anyone who already has the link can still open it.",
   linkUnreadable:
     "The client link is saved, but this key does not open it, so it cannot be shown again.",
   send: "Send",
@@ -170,7 +171,7 @@ export const invoiceCopy = {
   sendConfirmLabel: "Sending marks this draft as issued and locks the time.",
   sendUpdated: "Send with updated time",
   mailUnconfigured:
-    "Email is not set up. Add the invoice SMTP settings to send. Copy link still works.",
+    "Email is not set up. Add the email settings to send. Copy link still works.",
   toRequired: "Enter at least one recipient.",
   toInvalid: "Check the To addresses. Each one must be a valid email.",
   ccInvalid: "Check the Cc addresses. Each one must be a valid email.",
@@ -282,6 +283,12 @@ export const invoiceCopy = {
   methodCheck: "Check",
   methodOther: "Other",
 } as const;
+
+/** A new draft has nothing to list. Issued and reopened invoices keep both panels. */
+export function showInvoiceHistoryPanels(status: string, eventCount: number, emailCount: number) {
+  if (status !== "draft") return true;
+  return eventCount > 0 || emailCount > 0;
+}
 
 export function invoiceStatusLabel(status: string) {
   switch (status) {

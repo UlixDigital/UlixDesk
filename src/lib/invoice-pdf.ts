@@ -61,6 +61,8 @@ export type InvoicePdfInput = {
   paid?: boolean;
   poNumber: string | null;
   lines: InvoicePdfLine[];
+  /** Item lines use Qty. Hours lines keep Total hours / (qty). */
+  quantityHeader?: "hours" | "item";
   totals: InvoicePdfTotal[];
   notes: string;
   bankDetails: string;
@@ -178,13 +180,14 @@ function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
   y += 38;
 
   const columns = columnLayout();
-  y = drawTableHeader(doc, trace, columns, y);
+  const quantityHeader = input.quantityHeader === "item" ? "item" : "hours";
+  y = drawTableHeader(doc, trace, quantityHeader, y);
   for (const line of input.lines) {
     const block = measureLine(doc, line, columns);
     if (y + block > PAGE_HEIGHT - 180) {
       doc.addPage();
       y = 84;
-      y = drawTableHeader(doc, trace, columns, y);
+      y = drawTableHeader(doc, trace, quantityHeader, y);
     }
     y = drawLine(doc, trace, line, columns, y);
   }
@@ -226,7 +229,7 @@ function columnLayout() {
 function drawTableHeader(
   doc: Doc,
   trace: PdfTrace[] | undefined,
-  _columns: ReturnType<typeof columnLayout>,
+  quantityHeader: "hours" | "item",
   y: number,
 ) {
   doc.save();
@@ -234,10 +237,15 @@ function drawTableHeader(
   doc.restore();
   doc.rect(LEFT, y + 27, RIGHT - LEFT, 1).fill(RULE);
   doc.font(FONT_BOLD).fontSize(SMALL_SIZE).fillColor(INK);
-  doc.text("Total hours", HOURS_X, y + 4, { lineBreak: false });
-  traceText(trace, "Total hours", HOURS_X, y + 4);
-  doc.text("(qty)", HOURS_X, y + 15, { lineBreak: false });
-  traceText(trace, "(qty)", HOURS_X, y + 15);
+  if (quantityHeader === "item") {
+    doc.text("Qty", HOURS_X, y + 15, { lineBreak: false });
+    traceText(trace, "Qty", HOURS_X, y + 15);
+  } else {
+    doc.text("Total hours", HOURS_X, y + 4, { lineBreak: false });
+    traceText(trace, "Total hours", HOURS_X, y + 4);
+    doc.text("(qty)", HOURS_X, y + 15, { lineBreak: false });
+    traceText(trace, "(qty)", HOURS_X, y + 15);
+  }
   doc.text("Description", LEFT + PAD, y + 15, { lineBreak: false });
   traceText(trace, "Description", LEFT + PAD, y + 15);
   drawRight(doc, trace, "Unit price", PRICE_RIGHT, y + 15, FONT_BOLD, SMALL_SIZE, INK);
