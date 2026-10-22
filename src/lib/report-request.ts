@@ -1,7 +1,9 @@
+import { scopeActivityView } from "@/lib/activity-grouping";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { listClientsForFilter } from "@/lib/projects";
 import {
   defaultGroupBy,
+  isDefaultActivitySort,
   parseReportSearchParams,
   resolveColumns,
   type ReportKind,
@@ -24,6 +26,8 @@ export type PreparedReport = {
   /** Columns exactly as resolved for the screen and the CSV. */
   columns: string[];
   columnsInUrl: boolean;
+  /** The URL named a group, a second group, or a sort. */
+  viewInUrl: boolean;
   filtered: boolean;
   projects: Array<{ id: string; name: string; archivedAt: Date | null }>;
   todos: Array<{ id: string; projectId: string; name: string }>;
@@ -43,11 +47,18 @@ export async function prepareReport(input: {
 }): Promise<PreparedReport> {
   const timeZone = await getWorkspaceTimeZone();
   const today = todayInTimeZone(timeZone);
-  const { query, rangeError } = parseReportSearchParams(input.params, today, input.kind);
+  const { query, rangeError, viewInUrl } = parseReportSearchParams(input.params, today, input.kind);
   const manager = canManageWorkspace(input.actor.role);
   const showMoney = canSeeMoney(input.actor.role);
-  const groupBy =
-    !manager && query.groupBy === "member" ? defaultGroupBy(input.kind) : query.groupBy;
+  const view = scopeActivityView({
+    kind: input.kind,
+    manager,
+    showMoney,
+    groupBy: query.groupBy,
+    groupBy2: query.groupBy2,
+    sort: query.sort,
+  });
+  const groupBy = view.groupBy;
   const [projects, clients, people, todoOptions] = await Promise.all([
     listProjectsForTimesheetFilter(),
     listClientsForFilter(),
@@ -67,6 +78,8 @@ export async function prepareReport(input: {
     clientId: client?.id ?? "",
     memberId: member?.id ?? "",
     groupBy,
+    groupBy2: view.groupBy2,
+    sort: view.sort,
     columns,
   };
   const filtered = Boolean(
@@ -77,6 +90,8 @@ export async function prepareReport(input: {
       resolved.todoId ||
       resolved.billable !== "all" ||
       resolved.groupBy !== defaultGroupBy(input.kind) ||
+      resolved.groupBy2 ||
+      (input.kind === "time-activity" && !isDefaultActivitySort(resolved.groupBy, resolved.sort)) ||
       query.columns,
   );
   const base = {
@@ -86,6 +101,7 @@ export async function prepareReport(input: {
     query: resolved,
     columns,
     columnsInUrl: query.columns !== null,
+    viewInUrl,
     filtered,
     projects,
     todos,
@@ -120,6 +136,8 @@ export async function prepareReport(input: {
       rangeEnd: to,
       timeZone,
       groupBy: resolved.groupBy,
+      groupBy2: resolved.groupBy2,
+      sort: resolved.sort,
       columns,
       showMoney: loaded.showMoney,
       manager: loaded.manager,

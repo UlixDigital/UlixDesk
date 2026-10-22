@@ -26,6 +26,8 @@ describe("saved report params", () => {
         billable: "billable",
         group: "client",
         columns: "hours,not-a-column,amount",
+        then: "project",
+        sort: "time-desc",
         evil: "1",
       },
       today,
@@ -39,6 +41,8 @@ describe("saved report params", () => {
       member: "sam_1",
       billable: "billable",
       group: "client",
+      then: "project",
+      sort: "time-desc",
       columns: "hours,amount",
     });
   });
@@ -89,6 +93,18 @@ describe("saved report params", () => {
       { member: "owner", group: "member", columns: "hours,amount,billableHours" },
     );
     expect(scoped).toEqual({ columns: "hours,billableHours" });
+    expect(
+      scopeStoredParams(
+        { id: "mia", role: "member" },
+        "time-activity",
+        {
+          group: "client",
+          then: "member",
+          sort: "amount-USD-desc",
+          columns: "hours,billableHours",
+        },
+      ),
+    ).toEqual({ group: "client", columns: "hours,billableHours" });
     expect(parseSavedVisibility("shared", "member")).toEqual({
       ok: false,
       code: "SAVED_REPORT_SHARE",

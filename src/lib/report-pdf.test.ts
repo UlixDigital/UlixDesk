@@ -62,7 +62,7 @@ describe("report pdf", () => {
     expect(text).toContain("Time & Activity");
     expect(text).toContain("Timezone: UTC");
     expect(text).toContain("USD 50.00");
-    expect(text).toContain(reportCopy.total);
+    expect(text).toContain(reportCopy.grandTotal);
     expect(text).toContain("Page 1 of 1");
     expect(pdfPageCount(pdf)).toBe(1);
     expect(pdf.toString("latin1")).toMatch(/\/MediaBox\s*\[\s*0\s+0\s+612(?:\.0+)?\s+792(?:\.0+)?\s*\]/);

@@ -4,8 +4,14 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { reportCopy } from "@/lib/report-copy";
 import {
+  activitySortChoices,
+  activitySortLabel,
+  activitySortToken,
+  defaultActivitySort,
+  defaultGroupBy,
   reportHref,
   reportPath,
+  type ActivitySort,
   type BillableFilter,
   type GroupBy,
   type ReportKind,
@@ -26,6 +32,9 @@ export function ReportFilters({
   todoId,
   billable,
   groupBy,
+  groupBy2 = null,
+  sort = null,
+  showMoney = false,
   columns,
   projects,
   todos = [],
@@ -43,6 +52,9 @@ export function ReportFilters({
   todoId: string;
   billable: BillableFilter;
   groupBy: GroupBy;
+  groupBy2?: GroupBy | null;
+  sort?: ActivitySort | null;
+  showMoney?: boolean;
   columns: string[] | null;
   projects: Option[];
   todos?: Option[];
@@ -50,6 +62,19 @@ export function ReportFilters({
   people?: Option[];
   filtered: boolean;
 }) {
+  const groupChoices = [
+    ...(people.length > 0 ? [{ value: "member", label: reportCopy.groupMember }] : []),
+    { value: "client", label: reportCopy.groupClient },
+    { value: "project", label: reportCopy.groupProject },
+    { value: "todo", label: reportCopy.groupTodo },
+    { value: "date", label: reportCopy.groupDate },
+  ];
+  const sortToken = sort ? activitySortToken(sort) : "";
+  const baseSortChoices = activitySortChoices(showMoney);
+  const sortChoices =
+    sort && !baseSortChoices.some((choice) => choice.value === sortToken)
+      ? [...baseSortChoices, { value: sortToken, label: activitySortLabel(sort) }]
+      : baseSortChoices;
   return (
     <form
       action={reportPath(kind)}
@@ -152,19 +177,67 @@ export function ReportFilters({
       </Field>
       <Field label={reportCopy.groupLabel} id="report-group">
         <select id="report-group" name="group" key={groupBy} defaultValue={groupBy} className={ui.input}>
-          {people.length > 0 ? <option value="member">{reportCopy.groupMember}</option> : null}
-          <option value="client">{reportCopy.groupClient}</option>
-          <option value="project">{reportCopy.groupProject}</option>
-          <option value="todo">{reportCopy.groupTodo}</option>
-          <option value="date">{reportCopy.groupDate}</option>
+          {groupChoices.map((choice) => (
+            <option key={choice.value} value={choice.value}>
+              {choice.label}
+            </option>
+          ))}
         </select>
       </Field>
+      {kind === "time-activity" ? (
+        <Field label={reportCopy.thenLabel} id="report-then">
+          <select
+            id="report-then"
+            name="then"
+            key={`${groupBy}:${groupBy2 ?? ""}`}
+            defaultValue={groupBy2 ?? ""}
+            className={ui.input}
+          >
+            <option value="">{reportCopy.thenNone}</option>
+            {groupChoices
+              .filter((choice) => choice.value !== groupBy)
+              .map((choice) => (
+                <option key={choice.value} value={choice.value}>
+                  {choice.label}
+                </option>
+              ))}
+          </select>
+        </Field>
+      ) : null}
+      {kind === "time-activity" && sort ? (
+        <Field label={reportCopy.sortLabel} id="report-sort">
+          <select
+            id="report-sort"
+            name="sort"
+            key={sortToken}
+            defaultValue={sortToken}
+            className={ui.input}
+          >
+            {sortChoices.map((choice) => (
+              <option key={choice.value} value={choice.value}>
+                {choice.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
       <div className="flex items-end gap-2 sm:col-span-2 lg:col-span-3">
         <button type="submit" className={ui.secondaryButton}>
           {reportCopy.filter}
         </button>
         {filtered ? (
-          <Link href={reportHref(kind, {})} className={ui.secondaryButton}>
+          <Link
+            href={
+              kind === "time-activity"
+                ? reportHref(kind, {
+                    groupBy: defaultGroupBy(kind),
+                    groupBy2: null,
+                    sort: defaultActivitySort(defaultGroupBy(kind)),
+                  })
+                : reportHref(kind, {})
+            }
+            className={ui.secondaryButton}
+          >
             {reportCopy.clearFilters}
           </Link>
         ) : null}

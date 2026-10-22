@@ -25,17 +25,9 @@ export function ReportColumns({
   const saved = columns.join(",");
 
   useEffect(() => {
-    const key = storageKey(kind);
-    if (!columnsInUrl) {
-      const remembered = window.localStorage.getItem(key);
-      if (!remembered || remembered === saved) return;
-      const url = new URL(baseHref, window.location.origin);
-      url.searchParams.set("columns", remembered);
-      window.location.replace(`${url.pathname}${url.search}`);
-      return;
-    }
-    window.localStorage.setItem(key, saved);
-  }, [kind, columnsInUrl, saved, baseHref]);
+    if (!columnsInUrl) return;
+    window.localStorage.setItem(storageKey(kind), saved);
+  }, [kind, columnsInUrl, saved]);
 
   return (
     <div className="mt-4">

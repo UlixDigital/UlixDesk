@@ -33,11 +33,15 @@ Filters live in the URL.
 | `client` | A client id. |
 | `project` | A project id. |
 | `billable` | `all` (default), `billable`, or `non-billable`. Billable means the project is billable and the entry is billable. |
-| `group` | `member`, `client`, `project`, or `date`. Daily totals default to `date` (one row per day). The other reports default to `project`. `group=project` on Daily totals is the project breakdown. Weekly totals grouped by date use the week as the row. Members cannot group by member: that value is treated as the report's default. |
+| `group` | `member`, `client`, `project`, `todo`, or `date`. Daily totals default to `date` (one row per day). The other reports default to `project`. `group=project` on Daily totals is the project breakdown. Weekly totals grouped by date use the week as the row. Members cannot group by member: that value is treated as the report's default. Time & Activity links keep `group` in the URL, including the default, so a shared link does not pick up someone else's last choice. |
+| `then` | Time & Activity only. A second group, same values as `group`. Omitted when there is no second group. The same value as `group` is ignored. Members cannot use `member`. |
+| `sort` | Time & Activity only. `name-asc`, `name-desc`, `time-desc`, `time-asc`, `billable-desc`, `billable-asc`, `amount-desc`, `amount-asc`, `amount-USD-desc` (any billing currency, and `asc` as well), `date-desc`, `date-asc`. Name is A-Z or Z-A. Time and billable time are high to low or low to high. Amount is high to low or low to high, and only for an owner or admin. A currency code sorts that column. With no currency code, currencies are compared one at a time in code order and are never added together. Date is newest (`date-desc`) or oldest (`date-asc`). The default is name A-Z, or date oldest when the first group is Date. Members who ask for an amount sort get the default instead. |
 | `columns` | Comma-separated column ids, remembered in the browser per report (`localStorage` key `ulixdesk.report-columns.<report>`). |
 | `page` | Work sessions only. 50 rows per page. |
 
 An unknown member, client, or project id is ignored. A repeated query key such as `group=client&group=date` uses the first value.
+
+Time & Activity can group twice, for example Member, then Project. Each first group is a subtotal row, the rows under it are the second group, and the footer is the grand total. One group is a row per group plus the grand total. Clicking a column header sorts by that column and shows an arrow. Hours sorts by total time, billable hours by billable time, an amount column by that currency, the group name by name, and a date group by date. The browser remembers the last group, second group, and sort for Time & Activity (`localStorage` key `ulixdesk.report-view.time-activity`). A URL that already has `group`, `then`, or `sort` wins.
 
 ## Amounts
 
@@ -45,7 +49,7 @@ Amounts use the bill rate that covers the entry: project, then member, then clie
 
 Billable time with no rate shows **No amount** in its own column. It is not treated as zero.
 
-Owners and admins see everyone's rows and the amount columns. Members see only their own rows. The member page, the member CSV, and the member PDF have no amount columns and no currency codes. That limit is applied on the server. Asking for `columns=amount` does not add the column for a member. The member Time & Activity page does not say that owners and admins see amounts, and it does not offer Group by Member.
+Owners and admins see everyone's rows and the amount columns. Members see only their own rows. The member page, the member CSV, and the member PDF have no amount columns and no currency codes. That limit is applied on the server. Asking for `columns=amount` does not add the column for a member. The member Time & Activity page does not say that owners and admins see amounts, and it does not offer Group by Member, Then by Member, or an amount sort.
 
 Amount columns are right-aligned on the screen. The screen still formats money (`USD 400.00`) and durations (`5h`).
 
@@ -63,7 +67,7 @@ Hours and amounts are numbers. The screen formatting stays on the screen.
 | Amount (USD) | `Amount (USD)` | `400.00` |
 | Amount (JPY) | `Amount (JPY)` | `1500` |
 
-The currency is in the header, not in the cell. There are no thousands separators. Summary reports drop the `No amount` column and add `Status`. For someone who can see money, a row with any unrated billable time is `No rate`; otherwise it is `Billable` or `Non-billable`. A member CSV has no money, so Status is `Billable` or `Non-billable` from the billable flag alone, never `No rate`. The total row leaves Status blank. Work sessions keep their Billable column.
+The currency is in the header, not in the cell. There are no thousands separators. Summary reports drop the `No amount` column and add `Status`. For someone who can see money, a row with any unrated billable time is `No rate`; otherwise it is `Billable` or `Non-billable`. A member CSV has no money, so Status is `Billable` or `Non-billable` from the billable flag alone, never `No rate`. The total row leaves Status blank. A Time & Activity subtotal row leaves Status blank too. With a second group, the CSV has both group columns: the subtotal row names the first group and leaves the second blank, then one row per group inside it. Work sessions keep their Billable column.
 
 Notes are written exactly as typed, including leading and trailing spaces. An empty note is an empty cell. The screen shows an em dash only when the note is an empty string. Cells that start with `=`, `+`, `-`, `@`, tab, or carriage return are prefixed with a single quote so a spreadsheet does not treat them as formulas.
 
@@ -75,17 +79,15 @@ The export stops at 5,000 time entries and returns `REPORT_TOO_LARGE`. Narrow th
 
 The file is drawn on the server with pdfkit (pure JavaScript, standard Helvetica). It does not use headless Chromium. A character Helvetica cannot draw is replaced so the export still completes. Every PDF is US Letter. DejaVu Sans is free to embed, and it was left out: Helvetica is a base PDF font, so the image and the file do not carry a font, and Helvetica already draws the characters these reports use.
 
-**Time & Activity** is US Letter landscape. It keeps one layout: client sections, then a date and member row, then a project row. It does not follow Group by or the column chooser. It does apply the date, member, client, project, and billable filters, in the workspace timezone. Members still get no amounts. The screen says: "The PDF uses the standard Time & Activity layout and applies your filters."
+**Time & Activity** matches the screen. The PDF uses the same grouping, second group, sort, subtotals, and grand total as the table, and the same columns. It is US Letter, portrait unless the table has seven or more columns. The filter lines include Group by, Then by when a second group is set, and Sort. Members still get no amounts. A subtotal row is bold. The grand total is the last row.
 
-Every page has the Ulix logo, a thin rule, and the date range at the top right. Under the date range is a short line of the filters that narrow the report, and the timezone, so a filtered file is recognizable. The first page title is "Time & Activity Report", then the organization name "Ulix Digital", then a grand total of Time, Billed Amount, and Billable Time. The grand total table is the full content width. There is no organization field on the workspace, so the name is the product name. Each client is a section, sorted A to Z, with a small bold heading about the size of the column header. Inside it, one bold group row per date and member, then one detail row per project. The date group row and its detail rows are shaded together. The client total row is not shaded. When an entry has a to-do, the To-dos column is that title. Otherwise it is the project name, and a blank project name is "(No to-do)" in italics. Notes are "Manually added" or "Edited", plus the entry note. A note longer than 300 characters is cut and ends with an ellipsis. Durations are `H:MM:SS`. Money uses that rate's currency and symbol (`$723.22`, `¥1,500`), one line per currency, including an explicit zero. Billable time with no rate is an em dash, the same no-amount mark as the timesheet. Non-billable time leaves the billed amount blank. A member PDF drops the billed columns. The footer is "Generated with", the Ulix logo, the app URL, and `Page X of Y`. A group row is not left at the bottom of a page without its first detail row. When a date group continues on the next page, that page repeats the date and member row with `(continued)`. The first time a group is drawn, including when the whole group moves to the next page, does not say continued. A client section that continues on the next page repeats `<Client> (continued)` and the column header.
-
-Daily, weekly, and work session PDFs still match the screen: the Ulix logo and gradient, the filter summary, the workspace timezone, and a total row per currency. Amount headers include the currency (`Amount (USD)`). A table with seven or more columns is US Letter landscape, and amount columns are wide enough for the header and the total on one line. Fewer columns are US Letter portrait. The footer is `Page N of M`, drawn inside the bottom margin so it does not add a blank page.
+Time & Activity, daily, weekly, and work session PDFs match the screen: the Ulix logo and gradient, the filter summary, the workspace timezone, and a total row. Amount headers include the currency (`Amount (USD)`). A table with seven or more columns is US Letter landscape, and amount columns are wide enough for the header and the total on one line. Fewer columns are US Letter portrait. The footer is `Page N of M`, drawn inside the bottom margin so it does not add a blank page. Durations and money use the same words as the screen (`5h`, `USD 400.00`). There is no activity percentage and no screenshots.
 
 Time edits are blocks (who, when, action, source, and the fields), with the same header and page numbers. The export stops at 5,000 changes and returns `TIME_CHANGE_TOO_LARGE`.
 
 ## Saved reports
 
-**Save report** stores the report type, the current filters, the grouping, and the columns under a name. The name is required and at most 80 characters. Default ignorable characters and other controls are removed, and whitespace is collapsed. A name is rejected when nothing visible remains after also stripping separators, marks, and U+2800 BRAILLE PATTERN BLANK. A name that also has letters keeps those letters, including combining marks (`Octóber`). The name is unique for that person regardless of case (`October` and `october` are the same name). The database enforces that with an index on `lower(name)`. If rows that differ only by case already exist, the migration keeps the earliest and renames the rest `Name (2)`, `Name (3)`, in created order, before it creates the index.
+**Save report** stores the report type, the current filters, the grouping, the Time & Activity second group and sort, and the columns under a name. The name is required and at most 80 characters. Default ignorable characters and other controls are removed, and whitespace is collapsed. A name is rejected when nothing visible remains after also stripping separators, marks, and U+2800 BRAILLE PATTERN BLANK. A name that also has letters keeps those letters, including combining marks (`Octóber`). The name is unique for that person regardless of case (`October` and `october` are the same name). The database enforces that with an index on `lower(name)`. If rows that differ only by case already exist, the migration keeps the earliest and renames the rest `Name (2)`, `Name (3)`, in created order, before it creates the index.
 
 | Visibility | Who can save it | Who can open it |
 | --- | --- | --- |
@@ -136,4 +138,4 @@ Aging uses the end date of the same date control as the as-of date. The default 
 
 ## Not in this slice
 
-Emailing a report, schedules, and activity percentage wait for a later slice. Work sessions are sorted by start time. There is no separate sort control to save.
+Emailing a report, schedules, and activity percentage wait for a later slice. Work sessions are sorted by start time. Time & Activity is the report with a saved sort.

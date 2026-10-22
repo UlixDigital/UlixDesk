@@ -49,8 +49,11 @@ describe("report table", () => {
             memberId: "",
             clientId: "",
             projectId: "",
+            todoId: "",
             billable: "all",
             groupBy: "project",
+            groupBy2: null,
+            sort: { key: "name", direction: "asc", currency: null },
             columns: ["hours", "amount"],
             page: 1,
           },
@@ -67,6 +70,12 @@ describe("report table", () => {
       cell.textContent?.includes("USD 50.00"),
     );
     expect(amountCell?.className).toContain("text-right");
+    const sorted = container.querySelector('[aria-sort="ascending"]');
+    expect(sorted?.textContent).toContain("Project");
+    expect(sorted?.textContent).toContain("↑");
+    const hoursLink = [...container.querySelectorAll("a")].find((link) => link.textContent?.includes("Hours"));
+    expect(hoursLink?.getAttribute("href")).toContain("sort=time-desc");
+    expect(hoursLink?.getAttribute("href")).toContain("group=project");
     container.remove();
   });
 });
