@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { installGuideText } from "../../src/lib/extension-install-guide.mjs";
 import { buildExtension } from "../build.mjs";
+import { defaultServerDocument } from "../default-server.mjs";
 import { zipEntries } from "../zip.mjs";
 
 const tempDirs: string[] = [];
@@ -48,5 +49,8 @@ describe("extension zip", () => {
     expect(install?.data.toString("utf8")).toBe(installGuideText());
     const packedManifest = entries.find((entry) => entry.name === "manifest.json");
     expect(JSON.parse(packedManifest?.data.toString("utf8") ?? "{}").version).toBe("0.1.0.42");
+    const baked = entries.find((entry) => entry.name === "default-server.json");
+    expect(baked?.data.toString("utf8")).toBe(defaultServerDocument(""));
+    expect(baked?.data.toString("utf8")).not.toContain("desk.ulixdigital.com");
   }, 60_000);
 });

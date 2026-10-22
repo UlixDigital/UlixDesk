@@ -78,6 +78,8 @@ COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=build --chown=nextjs:nodejs /app/extension/ulixdesk-extension.zip ./extension/ulixdesk-extension.zip
 COPY --from=build --chown=nextjs:nodejs /app/extension/extension-build.json ./extension/extension-build.json
+COPY --from=build --chown=nextjs:nodejs /app/extension/zip.mjs ./extension/zip.mjs
+COPY --from=build --chown=nextjs:nodejs /app/extension/dos-date.mjs ./extension/dos-date.mjs
 COPY --from=build --chown=nextjs:nodejs /app/assets/fonts ./assets/fonts
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
@@ -104,7 +106,9 @@ RUN test -s /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.
   && test -s /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
   && test ! -e /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node \
   && test -s /app/extension/ulixdesk-extension.zip \
-  && test -s /app/extension/extension-build.json
+  && test -s /app/extension/extension-build.json \
+  && test -s /app/extension/zip.mjs \
+  && test -s /app/extension/dos-date.mjs
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=12 \

@@ -19,11 +19,22 @@ function crc32(buffer) {
 export function zipDirectory(directory, builtAt = new Date()) {
   const files = [];
   collect(directory, directory, files);
-  files.sort((left, right) => left.name.localeCompare(right.name));
+  return zipFiles(files, builtAt);
+}
+
+/** Replaces one entry and rewrites the archive. Names stay uncompressed. */
+export function replaceZipEntry(buffer, name, data, builtAt = new Date()) {
+  const files = zipEntries(buffer).filter((entry) => entry.name !== name);
+  files.push({ name, data: Buffer.isBuffer(data) ? data : Buffer.from(String(data)) });
+  return zipFiles(files, builtAt);
+}
+
+export function zipFiles(files, builtAt = new Date()) {
+  const sorted = [...files].sort((left, right) => left.name.localeCompare(right.name));
   const parts = [];
   const central = [];
   let offset = 0;
-  for (const file of files) {
+  for (const file of sorted) {
     const name = Buffer.from(file.name);
     const data = file.data;
     const compressed = deflateRawSync(data);
@@ -58,8 +69,8 @@ export function zipDirectory(directory, builtAt = new Date()) {
   const centralDirectory = Buffer.concat(central);
   const end = Buffer.alloc(22);
   end.writeUInt32LE(0x06054b50, 0);
-  end.writeUInt16LE(files.length, 8);
-  end.writeUInt16LE(files.length, 10);
+  end.writeUInt16LE(sorted.length, 8);
+  end.writeUInt16LE(sorted.length, 10);
   end.writeUInt32LE(centralDirectory.length, 12);
   end.writeUInt32LE(offset, 16);
   return Buffer.concat([...parts, centralDirectory, end]);

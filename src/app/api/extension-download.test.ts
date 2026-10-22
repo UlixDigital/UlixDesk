@@ -1,28 +1,40 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
+import { zipDirectory, zipEntries } from "../../../extension/zip.mjs";
 import { GET as downloadExtension } from "@/app/api/extension/download/route";
 import { GET as extensionVersion, OPTIONS as extensionVersionOptions } from "@/app/api/extension/version/route";
 import { apiCodes } from "@/lib/api-errors";
 import { authCopy } from "@/lib/auth-copy";
 import { prisma } from "@/lib/db";
+import { clearExtensionDownloadCache } from "@/lib/extension-download-zip";
 import { resetTestDatabase } from "@/lib/reset-test-db";
 import { SESSION_COOKIE, signSessionCookie } from "@/lib/session-cookie";
 import { signInAs } from "@/lib/test-actor";
 
 const EXTENSION_ID = "abcdefghijklmnopabcdefghijklmnop";
+const STAGING_ORIGIN = "https://staging.desk.ulixdigital.com";
+const PRODUCTION_ORIGIN = "https://desk.ulixdigital.com";
 const dirs: string[] = [];
+const savedOrigin = process.env.ULIXDESK_PUBLIC_ORIGIN;
 
 beforeEach(async () => {
   await resetTestDatabase();
-  delete process.env.ULIXDESK_EXTENSION_ZIP;
-  delete process.env.ULIXDESK_EXTENSION_BUILD;
+  clearExtensionDownloadCache();
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ulixdesk-extension-missing-"));
+  dirs.push(dir);
+  process.env.ULIXDESK_EXTENSION_ZIP = path.join(dir, "missing-ulixdesk-extension.zip");
+  process.env.ULIXDESK_EXTENSION_BUILD = path.join(dir, "missing-extension-build.json");
+  delete process.env.ULIXDESK_PUBLIC_ORIGIN;
 });
 
 afterEach(async () => {
   delete process.env.ULIXDESK_EXTENSION_ZIP;
   delete process.env.ULIXDESK_EXTENSION_BUILD;
+  if (savedOrigin === undefined) delete process.env.ULIXDESK_PUBLIC_ORIGIN;
+  else process.env.ULIXDESK_PUBLIC_ORIGIN = savedOrigin;
+  clearExtensionDownloadCache();
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
 });
 
@@ -34,6 +46,26 @@ function downloadRequest(cookie?: string, host = "127.0.0.1:3000") {
   const headers = new Headers({ host });
   if (cookie) headers.set("cookie", `${SESSION_COOKIE}=${cookie}`);
   return new Request("http://127.0.0.1:3000/api/extension/download", { headers });
+}
+
+async function writeBaseZip() {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "ulixdesk-download-"));
+  dirs.push(dir);
+  const source = path.join(dir, "src");
+  await mkdir(source);
+  await writeFile(path.join(source, "manifest.json"), "{}\n");
+  await writeFile(path.join(source, "INSTALL.txt"), "install\n");
+  await writeFile(path.join(source, "default-server.json"), '{"serverUrl":""}\n');
+  const zipPath = path.join(dir, "ulixdesk-extension.zip");
+  await writeFile(zipPath, zipDirectory(source, new Date("2026-10-22T08:13:00.000Z")));
+  process.env.ULIXDESK_EXTENSION_ZIP = zipPath;
+  return zipPath;
+}
+
+function bakedServerUrl(bytes: Buffer) {
+  const entry = zipEntries(bytes).find((item) => item.name === "default-server.json");
+  expect(entry).toBeTruthy();
+  return JSON.parse(entry?.data.toString("utf8") ?? "{}").serverUrl as string;
 }
 
 describe("extension download", () => {
@@ -61,23 +93,57 @@ describe("extension download", () => {
       code: apiCodes.EXTENSION_NOT_BUILT,
     });
 
-    const dir = await mkdtemp(path.join(os.tmpdir(), "ulixdesk-download-"));
-    dirs.push(dir);
-    const bytes = Buffer.from("PK\u0003\u0004ulixdesk-extension-fixture");
-    const zipPath = path.join(dir, "ulixdesk-extension.zip");
-    await writeFile(zipPath, bytes);
-    process.env.ULIXDESK_EXTENSION_ZIP = zipPath;
+    await writeBaseZip();
 
     const response = await downloadExtension(downloadRequest(member.cookie));
     expect(response.status).toBe(200);
     expect(response.headers.get("content-type")).toContain("application/zip");
     expect(response.headers.get("content-disposition")).toContain("ulixdesk-extension.zip");
     expect(response.headers.get("cache-control")).toBe("no-store");
-    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    const body = Buffer.from(await response.arrayBuffer());
+    expect(response.headers.get("content-length")).toBe(String(body.length));
+    expect(bakedServerUrl(body)).toBe("http://127.0.0.1:3000");
+    expect(zipEntries(body).some((entry) => entry.name === "INSTALL.txt")).toBe(true);
 
     const admin = await signInAs("admin", "extension-admin@ulix.test");
     const adminResponse = await downloadExtension(downloadRequest(admin.cookie));
     expect(adminResponse.status).toBe(200);
+    expect(Buffer.from(await adminResponse.arrayBuffer())).toEqual(body);
+  });
+
+  it("bakes the staging and production public origins into the zip", async () => {
+    const member = await signInAs("member", "extension-origin@ulix.test");
+    const zipPath = await writeBaseZip();
+
+    process.env.ULIXDESK_PUBLIC_ORIGIN = `${STAGING_ORIGIN}/`;
+    const stagingResponse = await downloadExtension(downloadRequest(member.cookie, "evil.test"));
+    expect(stagingResponse.status).toBe(403);
+
+    const staging = await downloadExtension(downloadRequest(member.cookie));
+    expect(staging.status).toBe(200);
+    const stagingZip = Buffer.from(await staging.arrayBuffer());
+    expect(bakedServerUrl(stagingZip)).toBe(STAGING_ORIGIN);
+    expect(bakedServerUrl(stagingZip)).not.toBe(PRODUCTION_ORIGIN);
+
+    process.env.ULIXDESK_PUBLIC_ORIGIN = PRODUCTION_ORIGIN;
+    const production = await downloadExtension(downloadRequest(member.cookie));
+    expect(production.status).toBe(200);
+    const productionZip = Buffer.from(await production.arrayBuffer());
+    expect(bakedServerUrl(productionZip)).toBe(PRODUCTION_ORIGIN);
+    expect(bakedServerUrl(productionZip)).not.toBe(STAGING_ORIGIN);
+    expect(productionZip.equals(stagingZip)).toBe(false);
+
+    const again = await downloadExtension(downloadRequest(member.cookie));
+    expect(Buffer.from(await again.arrayBuffer())).toEqual(productionZip);
+
+    const source = path.join(path.dirname(zipPath), "src");
+    await writeFile(path.join(source, "extra.txt"), "fresh\n");
+    await writeFile(zipPath, zipDirectory(source, new Date("2026-10-22T09:00:00.000Z")));
+    const fresh = await downloadExtension(downloadRequest(member.cookie));
+    const freshZip = Buffer.from(await fresh.arrayBuffer());
+    expect(freshZip.equals(productionZip)).toBe(false);
+    expect(zipEntries(freshZip).some((entry) => entry.name === "extra.txt")).toBe(true);
+    expect(bakedServerUrl(freshZip)).toBe(PRODUCTION_ORIGIN);
   });
 
   it("publishes the version and build date without a session", async () => {
