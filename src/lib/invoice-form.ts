@@ -10,6 +10,7 @@ import {
   type DiscountKind,
 } from "@/lib/invoice-money";
 import { parseRateInput } from "@/lib/money";
+import { normalizeInvoiceText } from "@/lib/invoice-text";
 import { hasVisibleCharacters } from "@/lib/saved-reports";
 import { isRealCalendarDate } from "@/lib/time-zone";
 
@@ -124,7 +125,9 @@ export function parseInvoiceSettings(input: {
   }
   const invoiceNetTermsDays = Number(input.invoiceNetTermsDays.trim());
   if (invoiceNetTermsDays > 365) return { ok: false, error: invoiceCopy.termsInvalid };
-  if (input.invoiceNotes.length > TEXT_MAX || input.invoiceBankDetails.length > TEXT_MAX) {
+  const invoiceNotes = normalizeInvoiceText(input.invoiceNotes);
+  const invoiceBankDetails = normalizeInvoiceText(input.invoiceBankDetails);
+  if (invoiceNotes.length > TEXT_MAX || invoiceBankDetails.length > TEXT_MAX) {
     return { ok: false, error: invoiceCopy.tooLong };
   }
   const invoiceTaxLabel = input.invoiceTaxLabel.trim() || "Tax";
@@ -139,8 +142,8 @@ export function parseInvoiceSettings(input: {
       invoicePrefix,
       nextInvoiceNumber,
       invoiceNetTermsDays,
-      invoiceNotes: input.invoiceNotes.trim(),
-      invoiceBankDetails: input.invoiceBankDetails.trim(),
+      invoiceNotes: invoiceNotes.trim(),
+      invoiceBankDetails: invoiceBankDetails.trim(),
       invoiceTaxEnabled: input.invoiceTaxEnabled,
       invoiceTaxLabel,
       invoiceTaxRateBps: rate.bps,
@@ -219,7 +222,9 @@ export function parseDraftInvoice(
   if (input.dueDate < input.issueDate) return { ok: false, error: invoiceCopy.dueBeforeIssue };
   const po = input.poNumber.trim();
   if (po.length > PO_MAX) return { ok: false, error: invoiceCopy.tooLong };
-  if (input.notes.length > TEXT_MAX || input.bankDetails.length > TEXT_MAX) {
+  const notes = normalizeInvoiceText(input.notes);
+  const bankDetails = normalizeInvoiceText(input.bankDetails);
+  if (notes.length > TEXT_MAX || bankDetails.length > TEXT_MAX) {
     return { ok: false, error: invoiceCopy.tooLong };
   }
   if (input.lines.length > 100) return { ok: false, error: invoiceCopy.tooLong };
@@ -334,8 +339,8 @@ export function parseDraftInvoice(
       issueDate: input.issueDate,
       dueDate: input.dueDate,
       poNumber: po || null,
-      notes: input.notes.trim(),
-      bankDetails: input.bankDetails.trim(),
+      notes: notes.trim(),
+      bankDetails: bankDetails.trim(),
       discountKind,
       discountAmountMinor,
       discountBps,

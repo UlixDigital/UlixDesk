@@ -251,6 +251,18 @@ describe("invoice pdf layout", () => {
     expect(pdfQuantityHeader([{ quantityKind: "hours" }])).toBe("hours");
   });
 
+  it("prints CRLF and lone CR in notes and bank details as line breaks, not question marks", async () => {
+    const trace: Array<{ text: string; x: number; y: number }> = [];
+    const input = referenceInvoicePdfInput("Beneficiary Name: Example Studio\rAccount: 0000");
+    input.notes = "Thanks.\r\nSee you next month.";
+    await renderInvoicePdf(input, { compress: false, trace });
+    expect(trace.some((item) => item.text === "Thanks.")).toBe(true);
+    expect(trace.some((item) => item.text === "See you next month.")).toBe(true);
+    expect(trace.some((item) => item.text === "Beneficiary Name: Example Studio")).toBe(true);
+    expect(trace.some((item) => item.text === "Account: 0000")).toBe(true);
+    expect(trace.some((item) => item.text.includes("?") || item.text.includes("\r"))).toBe(false);
+  });
+
   it("gives the notes column enough room for Ulix Digital", () => {
     const doc = new PDFDocument({ size: "LETTER", margin: 0 });
     doc.registerFont("DejaVu", "assets/fonts/DejaVuSans.ttf");

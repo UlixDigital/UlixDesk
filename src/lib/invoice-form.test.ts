@@ -54,6 +54,28 @@ describe("invoice form errors", () => {
     });
   });
 
+  it("stores invoice notes and bank details with LF line endings", () => {
+    const notes = "Thanks.\r\nSee you next month.";
+    const bank = "Beneficiary Name: Example Studio\rAccount: 0000";
+    const settingsParsed = parseInvoiceSettings({
+      ...settings,
+      invoiceNotes: notes,
+      invoiceBankDetails: bank,
+    });
+    expect(settingsParsed.ok).toBe(true);
+    if (!settingsParsed.ok) return;
+    expect(settingsParsed.data.invoiceNotes).toBe("Thanks.\nSee you next month.");
+    expect(settingsParsed.data.invoiceBankDetails).toBe("Beneficiary Name: Example Studio\nAccount: 0000");
+    expect(settingsParsed.data.invoiceNotes.includes("\r")).toBe(false);
+    expect(settingsParsed.data.invoiceBankDetails.includes("?")).toBe(false);
+
+    const draftParsed = parseDraftInvoice({ ...draft, notes, bankDetails: bank }, "USD");
+    expect(draftParsed.ok).toBe(true);
+    if (!draftParsed.ok) return;
+    expect(draftParsed.data.notes).toBe("Thanks.\nSee you next month.");
+    expect(draftParsed.data.bankDetails).toBe("Beneficiary Name: Example Studio\nAccount: 0000");
+  });
+
   it("keeps a hash line when settings are saved", () => {
     const bank = "# Account note\nBeneficiary Name: Ulix Digital";
     const parsed = parseInvoiceSettings({ ...settings, invoiceBankDetails: bank, invoiceNotes: "# keep this note" });
