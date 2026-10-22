@@ -6,8 +6,6 @@ import { expect, test, type Page, type TestInfo } from "@playwright/test";
 import { createManualEntry } from "../src/lib/time-entries";
 import { signIn } from "./auth";
 
-const artifacts = "/opt/cursor/artifacts";
-
 function artifactDir(testInfo: TestInfo) {
   return process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
 }
@@ -22,15 +20,12 @@ async function waitForHydration(page: Page) {
 
 async function saveShot(page: Page, dir: string, selector: string | null, name: string) {
   await mkdir(dir, { recursive: true });
-  await mkdir(artifacts, { recursive: true });
-  const file = `${name}.png`;
+  const file = path.join(dir, `${name}.png`);
   if (selector) {
-    await page.locator(selector).screenshot({ path: path.join(dir, file) });
-    await page.locator(selector).screenshot({ path: path.join(artifacts, file) });
+    await page.locator(selector).screenshot({ path: file });
     return;
   }
-  await page.screenshot({ path: path.join(dir, file), fullPage: true });
-  await page.screenshot({ path: path.join(artifacts, file), fullPage: true });
+  await page.screenshot({ path: file, fullPage: true });
 }
 
 test("an owner manages to-dos and the timer can add one for reuse", async ({ browser }, testInfo) => {
@@ -50,6 +45,7 @@ test("an owner manages to-dos and the timer can add one for reuse", async ({ bro
   });
   const shots = artifactDir(testInfo);
   const context = await browser.newContext();
+  const memberContext = await browser.newContext();
   try {
     await signIn(context, prisma, owner.email);
     const page = await context.newPage();
@@ -62,6 +58,20 @@ test("an owner manages to-dos and the timer can add one for reuse", async ({ bro
     await page.getByRole("button", { name: "Add to-do" }).click();
     await expect(page.getByRole("heading", { name: "Write the brief" })).toBeVisible();
     await saveShot(page, shots, null, "todos-tab");
+
+    await signIn(memberContext, prisma, noah.email);
+    const memberPage = await memberContext.newPage();
+    await memberPage.goto(`/projects/${website.id}/todos`);
+    await waitForHydration(memberPage);
+    const assigned = memberPage.locator("li").filter({
+      has: memberPage.getByRole("heading", { name: "Write the brief" }),
+    });
+    await expect(assigned.getByRole("button", { name: "Mark done" })).toBeVisible();
+    await expect(assigned.locator("input[name=title]")).toHaveCount(0);
+    await expect(assigned.getByRole("button", { name: "Save" })).toHaveCount(0);
+    await expect(assigned.getByRole("button", { name: "Archive" })).toHaveCount(0);
+    await expect(assigned.getByRole("button", { name: "Delete" })).toHaveCount(0);
+    await expect(memberPage.locator("#todo-title")).toBeVisible();
 
     const brief = page.locator("li").filter({ has: page.getByRole("heading", { name: "Write the brief" }) });
     await brief.locator("input[name=title]").fill("Write the homepage brief");
@@ -76,6 +86,9 @@ test("an owner manages to-dos and the timer can add one for reuse", async ({ bro
       "aria-selected",
       "true",
     );
+    await page.locator("#timer-todo-search").fill("Another header");
+    await expect(page.getByRole("button", { name: "Add “Another header”" })).toBeVisible();
+    await page.locator("#timer-todo-search").fill("");
     await saveShot(page, shots, "[data-testid=timer-todo-picker]", "todo-picker");
 
     const edited = page
@@ -123,6 +136,7 @@ test("an owner manages to-dos and the timer can add one for reuse", async ({ bro
     expect(noah.role).toBe("member");
   } finally {
     await context.close();
+    await memberContext.close();
     await prisma.$disconnect();
   }
 });

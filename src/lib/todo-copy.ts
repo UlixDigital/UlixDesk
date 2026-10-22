@@ -16,7 +16,7 @@ export const todoCopy = {
   assignedToYou: "Assigned to you.",
   assigneeRequired: "Choose at least one person.",
   assigneeInvalid: "Choose people who can still sign in.",
-  assignDenied: "Only an owner or an admin can assign someone else.",
+  editDenied: "You can only change to-dos you created.",
   titleRequired: "Enter a title.",
   titleTooLong: "Title must be 200 characters or fewer.",
   descriptionTooLong: "Description must be 2000 characters or fewer.",

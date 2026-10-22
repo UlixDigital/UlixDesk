@@ -743,7 +743,7 @@ function todoField(currentProjectId: string) {
     empty.textContent = popupCopy.todoEmpty;
     list.append(empty);
   }
-  if (needle && !exact && !todoId) {
+  if (needle && !exact) {
     const item = document.createElement("li");
     const add = document.createElement("button");
     add.type = "button";

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canAssignTodos, exactTodoMatch, pickerMatches, todoVisibilityWhere } from "@/lib/todos";
+import { canAssignTodos, canEditTodo, exactTodoMatch, pickerMatches, todoVisibilityWhere } from "@/lib/todos";
 
 describe("to-do visibility", () => {
   it("lets owners and admins see every to-do", () => {
@@ -21,6 +21,14 @@ describe("to-do visibility", () => {
       OR: [{ createdById: "pat" }, { assignees: { some: { userId: "pat" } } }],
     });
     expect(canAssignTodos("manager")).toBe(false);
+    expect(canEditTodo({ id: "pat", role: "manager" }, "owner")).toBe(false);
+  });
+
+  it("lets a member edit only to-dos they created", () => {
+    expect(canEditTodo({ id: "sam", role: "member" }, "sam")).toBe(true);
+    expect(canEditTodo({ id: "sam", role: "member" }, "admin")).toBe(false);
+    expect(canEditTodo({ id: "ada", role: "admin" }, "sam")).toBe(true);
+    expect(canEditTodo({ id: "own", role: "owner" }, "sam")).toBe(true);
   });
 });
 

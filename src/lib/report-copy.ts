@@ -59,7 +59,6 @@ export const reportCopy = {
   billedAmountColumn: "Billed amount",
   billableTime: "Billable Time",
   billableTimeColumn: "Billable time",
-  todoId: "To-do ID",
   todos: "To-dos",
   noTodo: "(No to-do)",
   manuallyAdded: "Manually added",

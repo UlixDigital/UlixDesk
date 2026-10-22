@@ -14,6 +14,7 @@ type TodoView = {
   archivedAt: string | null;
   assignees: Array<{ id: string; name: string }>;
   timeCount: number;
+  canEdit: boolean;
 };
 
 const idle: TodoActionState = { error: null, notice: null };
@@ -84,6 +85,7 @@ function TodoEditor({
   submitLabel: string;
 }) {
   const [state, action, pending] = useActionState(todoAction, idle);
+  const editable = !todo || todo.canEdit;
   const selected = new Set(todo ? todo.assignees.map((person) => person.id) : [actorId]);
   const status = todo?.archivedAt ? todoCopy.archived : todo?.status === "done" ? todoCopy.done : todoCopy.open;
   const titleId = todo ? `todo-title-${todo.id}` : "todo-title";
@@ -117,30 +119,36 @@ function TodoEditor({
         ) : null}
       </div>
       <div className="mt-4 grid gap-4">
-        <label className="block text-sm font-medium text-slate-800" htmlFor={titleId}>
-          {todoCopy.titleLabel}
-          <input
-            id={titleId}
-            name="title"
-            required
-            maxLength={200}
-            defaultValue={todo?.title ?? ""}
-            className={cn(ui.input, "mt-1.5")}
-          />
-        </label>
-        <label className="block text-sm font-medium text-slate-800" htmlFor={descriptionId}>
-          {todoCopy.descriptionLabel}
-          <span className="ml-2 text-xs font-normal text-slate-500">{todoCopy.descriptionHint}</span>
-          <textarea
-            id={descriptionId}
-            name="description"
-            rows={2}
-            maxLength={2000}
-            defaultValue={todo?.description ?? ""}
-            className={cn(ui.input, "mt-1.5 min-h-16 resize-y")}
-          />
-        </label>
-        {canAssign ? (
+        {editable ? (
+          <>
+            <label className="block text-sm font-medium text-slate-800" htmlFor={titleId}>
+              {todoCopy.titleLabel}
+              <input
+                id={titleId}
+                name="title"
+                required
+                maxLength={200}
+                defaultValue={todo?.title ?? ""}
+                className={cn(ui.input, "mt-1.5")}
+              />
+            </label>
+            <label className="block text-sm font-medium text-slate-800" htmlFor={descriptionId}>
+              {todoCopy.descriptionLabel}
+              <span className="ml-2 text-xs font-normal text-slate-500">{todoCopy.descriptionHint}</span>
+              <textarea
+                id={descriptionId}
+                name="description"
+                rows={2}
+                maxLength={2000}
+                defaultValue={todo?.description ?? ""}
+                className={cn(ui.input, "mt-1.5 min-h-16 resize-y")}
+              />
+            </label>
+          </>
+        ) : todo?.description ? (
+          <p className="text-sm text-slate-700">{todo.description}</p>
+        ) : null}
+        {editable && canAssign ? (
           <fieldset>
             <legend className="text-sm font-medium text-slate-800">{todoCopy.assigneesLabel}</legend>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -167,26 +175,30 @@ function TodoEditor({
         )}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button
-          type="submit"
-          className={ui.primaryButton}
-          disabled={pending}
-          onClick={(event) => setTodoIntent(event.currentTarget.form, intent)}
-        >
-          {pending ? todoCopy.saving : submitLabel}
-        </button>
+        {editable ? (
+          <button
+            type="submit"
+            className={ui.primaryButton}
+            disabled={pending}
+            onClick={(event) => setTodoIntent(event.currentTarget.form, intent)}
+          >
+            {pending ? todoCopy.saving : submitLabel}
+          </button>
+        ) : null}
         {todo ? (
+          <button
+            type="submit"
+            className={ui.secondaryButton}
+            disabled={pending}
+            onClick={(event) =>
+              setTodoIntent(event.currentTarget.form, todo.status === "done" ? "reopen" : "done")
+            }
+          >
+            {todo.status === "done" ? todoCopy.reopen : todoCopy.markDone}
+          </button>
+        ) : null}
+        {todo && editable ? (
           <>
-            <button
-              type="submit"
-              className={ui.secondaryButton}
-              disabled={pending}
-              onClick={(event) =>
-                setTodoIntent(event.currentTarget.form, todo.status === "done" ? "reopen" : "done")
-              }
-            >
-              {todo.status === "done" ? todoCopy.reopen : todoCopy.markDone}
-            </button>
             <button
               type="submit"
               className={ui.secondaryButton}
@@ -209,7 +221,7 @@ function TodoEditor({
           </>
         ) : null}
       </div>
-      {todo && todo.timeCount > 0 ? (
+      {todo && editable && todo.timeCount > 0 ? (
         <p className="mt-3 text-xs text-slate-500">{todoCopy.deleteBlocked}</p>
       ) : null}
     </form>

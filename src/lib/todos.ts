@@ -26,6 +26,14 @@ export function canAssignTodos(role: string) {
   return canManageWorkspace(role);
 }
 
+/**
+ * Owners and admins can change any to-do. A member can change a to-do only
+ * when they created it. An assigned member can still mark it done or reopen it.
+ */
+export function canEditTodo(actor: { id: string; role: string }, createdById: string) {
+  return canAssignTodos(actor.role) || actor.id === createdById;
+}
+
 export type TodoPerson = { id: string; name: string };
 
 export type TodoRecord = {
@@ -120,12 +128,6 @@ async function resolveAssignees(
   actor: { id: string; role: string },
   requested: string[] | null,
 ) {
-  if (!canAssignTodos(actor.role)) {
-    if (requested?.some((id) => id.trim() && id.trim() !== actor.id)) {
-      return { ok: false as const, error: todoCopy.assignDenied };
-    }
-    return { ok: true as const, ids: [actor.id] };
-  }
   const ids = [
     ...new Set((requested && requested.length > 0 ? requested : [actor.id]).map((id) => id.trim()).filter(Boolean)),
   ];
@@ -154,7 +156,9 @@ export async function createTodo(input: {
     select: { id: true },
   });
   if (!project) return { ok: false as const, error: todoCopy.projectMissing };
-  const assignees = await resolveAssignees(input.actor, input.assigneeIds ?? null);
+  const assignees = canAssignTodos(input.actor.role)
+    ? await resolveAssignees(input.actor, input.assigneeIds ?? null)
+    : { ok: true as const, ids: [input.actor.id] };
   if (!assignees.ok) return assignees;
   const row = await prisma.todo.create({
     data: {
@@ -184,16 +188,19 @@ export async function updateTodo(input: {
   description?: string | null;
   assigneeIds?: string[] | null;
 }) {
+  const existing = await visibleTodo(input.actor, input.id);
+  if (!existing) return { ok: false as const, error: todoCopy.notFound };
+  if (!canEditTodo(input.actor, existing.createdById)) {
+    return { ok: false as const, error: todoCopy.editDenied };
+  }
   const title = cleanTodoTitle(input.title);
   if (!title.ok) return title;
   const description = cleanTodoDescription(input.description);
   if (!description.ok) return description;
-  const existing = await visibleTodo(input.actor, input.id);
-  if (!existing) return { ok: false as const, error: todoCopy.notFound };
-  const assignees =
-    input.assigneeIds === undefined || input.assigneeIds === null
-      ? { ok: true as const, ids: existing.assignees.map((assignee) => assignee.userId) }
-      : await resolveAssignees(input.actor, input.assigneeIds);
+  const keepAssignees = !canAssignTodos(input.actor.role) || input.assigneeIds == null;
+  const assignees = keepAssignees
+    ? { ok: true as const, ids: existing.assignees.map((assignee) => assignee.userId) }
+    : await resolveAssignees(input.actor, input.assigneeIds ?? null);
   if (!assignees.ok) return assignees;
   const row = await prisma.$transaction(async (tx) => {
     await tx.todoAssignee.deleteMany({ where: { todoId: existing.id } });
@@ -232,6 +239,9 @@ export async function setTodoArchived(input: {
 }) {
   const existing = await visibleTodo(input.actor, input.id);
   if (!existing) return { ok: false as const, error: todoCopy.notFound };
+  if (!canEditTodo(input.actor, existing.createdById)) {
+    return { ok: false as const, error: todoCopy.editDenied };
+  }
   const row = await prisma.todo.update({
     where: { id: existing.id },
     data: { archivedAt: input.archived ? new Date() : null },
@@ -243,6 +253,9 @@ export async function setTodoArchived(input: {
 export async function deleteTodo(actor: { id: string; role: string }, id: string) {
   const existing = await visibleTodo(actor, id);
   if (!existing) return { ok: false as const, error: todoCopy.notFound };
+  if (!canEditTodo(actor, existing.createdById)) {
+    return { ok: false as const, error: todoCopy.editDenied };
+  }
   if (existing._count.timeEntries > 0) return { ok: false as const, error: todoCopy.deleteBlocked };
   await prisma.todo.delete({ where: { id: existing.id } });
   return { ok: true as const, projectId: existing.projectId };

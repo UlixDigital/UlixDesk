@@ -38,7 +38,8 @@ export function TodoPicker({
   );
   const matches = pickerMatches(mine, query);
   const exact = exactTodoMatch(mine, query);
-  const draft = !todoId && query.trim() && !exact ? query.trim() : "";
+  const typed = query.trim();
+  const draft = !todoId && typed && !exact ? typed : "";
   const showPinned = Boolean(
     pinned &&
       pinned.projectId === projectId &&
@@ -124,7 +125,7 @@ export function TodoPicker({
         {matches.length === 0 && !showPinned ? (
           <li className="px-3 py-2 text-sm text-slate-500">{todoCopy.pickerEmpty}</li>
         ) : null}
-        {draft ? (
+        {typed && !exact ? (
           <li>
             <button
               type="button"
@@ -132,7 +133,7 @@ export function TodoPicker({
               onClick={() => void addTodo()}
               disabled={pending}
             >
-              <span>{todoAddLabel(draft)}</span>
+              <span>{todoAddLabel(typed)}</span>
               <span>{pending ? todoCopy.adding : todoCopy.pickerAdd}</span>
             </button>
           </li>

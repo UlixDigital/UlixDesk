@@ -8,7 +8,7 @@ import { authCopy } from "@/lib/auth-copy";
 import { getProject } from "@/lib/projects";
 import { getCurrentUser } from "@/lib/session";
 import { todoCopy } from "@/lib/todo-copy";
-import { canAssignTodos, listProjectTodos } from "@/lib/todos";
+import { canAssignTodos, canEditTodo, listProjectTodos } from "@/lib/todos";
 import { listActiveUsers } from "@/lib/users";
 
 type TodosPageProps = {
@@ -54,6 +54,7 @@ export default async function ProjectTodosPage({ params }: TodosPageProps) {
             archivedAt: todo.archivedAt ? todo.archivedAt.toISOString() : null,
             assignees: todo.assignees,
             timeCount: todo.timeCount,
+            canEdit: canEditTodo(user, todo.createdById),
           }))}
           people={people.map((person) => ({ id: person.id, name: person.name }))}
           canAssign={canAssign}

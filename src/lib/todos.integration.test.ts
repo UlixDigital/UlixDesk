@@ -148,30 +148,131 @@ describe("to-do permissions", () => {
     expect((await listPickerTodos(admin)).map((todo) => todo.id)).toContain(byOwner.todo.id);
   });
 
-  it("rejects a member who tries to assign someone else and does not save the to-do", async () => {
+  it("keeps the creator as the only assignee when a member sends other people", async () => {
     const site = await project();
     const member = await createTestUser("member", "assign-member@ulix.test");
     const other = await createTestUser("member", "assign-other@ulix.test");
-    const denied = await createTodo({
+    const created = await createTodo({
       actor: member,
       projectId: site.id,
       title: "Not theirs",
       assigneeIds: [other.id],
     });
-    expect(denied).toEqual({ ok: false, error: todoCopy.assignDenied });
-    expect(await prisma.todo.count()).toBe(0);
+    expect(created.ok).toBe(true);
+    if (!created.ok) return;
+    expect(created.todo.assignees.map((person) => person.id)).toEqual([member.id]);
+    expect(await listProjectTodos(other, site.id)).toEqual([]);
 
-    const own = await createTodo({ actor: member, projectId: site.id, title: "Mine" });
-    expect(own.ok).toBe(true);
-    if (!own.ok) return;
     const edited = await updateTodo({
       actor: member,
-      id: own.todo.id,
-      title: "Mine",
+      id: created.todo.id,
+      title: "Still mine",
       assigneeIds: [member.id, other.id],
     });
-    expect(edited).toEqual({ ok: false, error: todoCopy.assignDenied });
-    expect((await listProjectTodos(other, site.id))).toEqual([]);
+    expect(edited.ok).toBe(true);
+    if (!edited.ok) return;
+    expect(edited.todo.title).toBe("Still mine");
+    expect(edited.todo.assignees.map((person) => person.id)).toEqual([member.id]);
+  });
+
+  it("refuses an assigned member who replaces assignees or edits an admin's to-do", async () => {
+    const site = await project();
+    const admin = await createTestUser("admin", "edit-admin@ulix.test");
+    const member = await createTestUser("member", "edit-member@ulix.test");
+    const other = await createTestUser("member", "edit-other@ulix.test");
+    const shared = await createTodo({
+      actor: admin,
+      projectId: site.id,
+      title: "Shared",
+      description: "Keep this",
+      assigneeIds: [member.id, other.id],
+    });
+    expect(shared.ok).toBe(true);
+    if (!shared.ok) return;
+
+    const crafted = await updateTodo({
+      actor: member,
+      id: shared.todo.id,
+      title: "Shared",
+      description: "Keep this",
+      assigneeIds: [member.id],
+    });
+    expect(crafted).toEqual({ ok: false, error: todoCopy.editDenied });
+
+    const renamed = await updateTodo({
+      actor: member,
+      id: shared.todo.id,
+      title: "Renamed by member",
+      description: "Changed",
+    });
+    expect(renamed).toEqual({ ok: false, error: todoCopy.editDenied });
+    const archived = await setTodoArchived({ actor: member, id: shared.todo.id, archived: true });
+    expect(archived).toEqual({ ok: false, error: todoCopy.editDenied });
+    const removed = await deleteTodo(member, shared.todo.id);
+    expect(removed).toEqual({ ok: false, error: todoCopy.editDenied });
+
+    const stored = await prisma.todo.findUniqueOrThrow({
+      where: { id: shared.todo.id },
+      include: { assignees: true },
+    });
+    expect(stored.title).toBe("Shared");
+    expect(stored.description).toBe("Keep this");
+    expect(stored.archivedAt).toBeNull();
+    expect(stored.assignees.map((assignee) => assignee.userId).sort()).toEqual(
+      [member.id, other.id].sort(),
+    );
+
+    const done = await setTodoStatus({ actor: member, id: shared.todo.id, status: "done" });
+    expect(done.ok).toBe(true);
+    const reopened = await setTodoStatus({ actor: member, id: shared.todo.id, status: "open" });
+    expect(reopened.ok).toBe(true);
+    const started = await startTimer({
+      projectId: site.id,
+      note: "",
+      now,
+      userId: member.id,
+      todoId: shared.todo.id,
+    });
+    expect(started.ok).toBe(true);
+
+    const own = await createTodo({
+      actor: member,
+      projectId: site.id,
+      title: "Mine",
+      assigneeIds: [other.id],
+    });
+    expect(own.ok).toBe(true);
+    if (!own.ok) return;
+    const described = await updateTodo({
+      actor: member,
+      id: own.todo.id,
+      title: "Mine, renamed",
+      description: "My notes",
+      assigneeIds: [member.id],
+    });
+    expect(described.ok).toBe(true);
+    if (!described.ok) return;
+    expect(described.todo.title).toBe("Mine, renamed");
+    expect(described.todo.description).toBe("My notes");
+    expect(described.todo.assignees.map((person) => person.id)).toEqual([member.id]);
+
+    await createManualEntry(
+      {
+        ...entryInput(site.id, own.todo.id),
+        startedAt: new Date("2026-10-22T13:00:00.000Z"),
+        endedAt: new Date("2026-10-22T14:00:00.000Z"),
+      },
+      now,
+      member.id,
+    );
+    const withTime = await setTodoArchived({ actor: member, id: own.todo.id, archived: true });
+    expect(withTime.ok).toBe(true);
+    if (!withTime.ok) return;
+    expect(withTime.todo.archivedAt).toBeInstanceOf(Date);
+    expect(await deleteTodo(member, own.todo.id)).toEqual({
+      ok: false,
+      error: todoCopy.deleteBlocked,
+    });
   });
 
   it("hides done and archived to-dos from the picker but keeps them on an existing entry", async () => {
@@ -269,13 +370,16 @@ describe("to-do permissions", () => {
 
     expect(await listProjectTodos(manager, site.id)).toEqual([]);
     expect(await listPickerTodos(manager)).toEqual([]);
-    const denied = await createTodo({
+    const createdByManager = await createTodo({
       actor: manager,
       projectId: site.id,
       title: "Assigned out",
       assigneeIds: [member.id],
     });
-    expect(denied).toEqual({ ok: false, error: todoCopy.assignDenied });
+    expect(createdByManager.ok).toBe(true);
+    if (!createdByManager.ok) return;
+    expect(createdByManager.todo.assignees.map((person) => person.id)).toEqual([manager.id]);
+    expect((await listPickerTodos(member)).map((todo) => todo.id)).not.toContain(createdByManager.todo.id);
     await expect(
       createManualEntry(entryInput(site.id, created.todo.id), now, manager.id),
     ).rejects.toBeInstanceOf(TodoUnavailableError);

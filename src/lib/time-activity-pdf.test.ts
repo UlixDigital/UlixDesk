@@ -336,7 +336,8 @@ describe("time activity layout", () => {
     expect(text).toContain("Client: Acme · Billable: Billable");
     expect(text.split("Timezone: Asia/Colombo").length - 1).toBeGreaterThan(1);
     expect(text).toContain("(continued)");
-    expect(text.split("To-do ID").length - 1).toBeGreaterThan(1);
+    expect(text).not.toContain("To-do ID");
+    expect(text.split("To-dos").length - 1).toBeGreaterThan(1);
     const declared = Number(text.match(/Page 1 of (\d+)/)?.[1]);
     expect(pdfPageCount(pdf)).toBe(declared);
 

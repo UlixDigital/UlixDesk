@@ -552,9 +552,7 @@ function drawGrandTotal(doc: Doc, model: ActivityModel) {
 }
 
 function columnWidths(showMoney: boolean, total: number) {
-  const fixed = showMoney
-    ? [108, 100, 58, 140, 68, 78, 78]
-    : [108, 108, 58, 160, 72, 78];
+  const fixed = showMoney ? [108, 100, 198, 68, 78, 78] : [108, 108, 218, 72, 78];
   const used = fixed.reduce((sum, width) => sum + width, 0);
   return [...fixed, Math.max(total - used, 72)];
 }
@@ -563,7 +561,6 @@ function columnLabels(showMoney: boolean) {
   const labels: string[] = [
     reportCopy.date,
     reportCopy.member,
-    reportCopy.todoId,
     reportCopy.todos,
     reportCopy.timeLabel,
   ];
@@ -606,21 +603,21 @@ function measureSection(doc: Doc, client: ActivityClient, widths: number[], show
 }
 
 function groupCells(group: ActivityGroup, showMoney: boolean) {
-  const cells = [group.dateLabel, group.memberName, "", "", group.time];
+  const cells = [group.dateLabel, group.memberName, "", group.time];
   if (showMoney) cells.push(group.billed);
   cells.push(group.billable, "");
   return cells;
 }
 
 function detailCells(detail: ActivityDetail, showMoney: boolean) {
-  const cells = ["", "", "", detail.todo, detail.time];
+  const cells = ["", "", detail.todo, detail.time];
   if (showMoney) cells.push(detail.billed);
   cells.push(detail.billable, detail.notes);
   return cells;
 }
 
 function totalCells(client: ActivityClient, showMoney: boolean) {
-  const cells = [reportCopy.total, "", "", "", client.time];
+  const cells = [reportCopy.total, "", "", client.time];
   if (showMoney) cells.push(client.billed);
   cells.push(client.billable, "");
   return cells;
@@ -629,7 +626,7 @@ function totalCells(client: ActivityClient, showMoney: boolean) {
 function measureCells(doc: Doc, cells: string[], widths: number[], bold: boolean, italicTodo = false) {
   let height = 16;
   cells.forEach((cell, index) => {
-    const font = italicTodo && index === 3 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
+    const font = italicTodo && index === 2 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
     doc.font(font).fontSize(8);
     const textHeight = doc.heightOfString(pdfText(cell) || " ", {
       width: Math.max((widths[index] ?? 40) - 8, 8),
@@ -753,7 +750,7 @@ function drawDataRow(
   doc.restore();
   let x = MARGIN;
   cells.forEach((cell, index) => {
-    const font = italicTodo && index === 3 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
+    const font = italicTodo && index === 2 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
     doc.font(font).fontSize(8).fillColor(INK);
     doc.text(pdfText(cell), x + 4, y + 4, {
       width: Math.max((widths[index] ?? 40) - 8, 8),

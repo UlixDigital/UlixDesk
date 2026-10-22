@@ -322,7 +322,7 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 ## To-dos
 
 - Each project has a To-dos tab: add, edit, assign, mark done, reopen, archive, and delete when the to-do has no time. The timer, manual entries, and entry edits can set one. Done and archived to-dos stay on old entries and leave the picker.
-- A member sees to-dos they created or are assigned to. Owners and admins see every to-do. There is no manager role, and a project has no manager.
+- A member sees to-dos they created or are assigned to. Owners and admins see every to-do. There is no manager role, and a project has no manager. A member can rename, describe, archive, and delete only to-dos they created. On someone else's to-do they can mark it done or reopen it, and log time against it. Assignees stay as an owner or admin set them.
 - Time reports can group and filter by to-do. Work session CSV includes a To-do column. Members still see no money.
 
 ## Deferred
