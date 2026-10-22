@@ -301,7 +301,7 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 ## What shipped in Slice 10
 
 - A Reports page at `/reports` with Time & Activity (time only), daily totals, weekly totals (Monday–Sunday in the workspace timezone), and work sessions. Time edits stays on that hub.
-- Shared filters in the URL: date presets, member, client, project, and billable. Group by member, client, project, or date. A column chooser is remembered per report.
+- Shared filters in the URL: date presets, member, client, project, to-do, and billable. Group by member, client, project, to-do, or date. A column chooser is remembered per report.
 - CSV export of the same filters, grouping, and columns. Amounts stay in their own currency columns. Members see only their own rows and no amounts, in the page and in the CSV.
 - See [docs/REPORTS.md](docs/REPORTS.md).
 
@@ -319,13 +319,19 @@ A click on Add client, Add project, Add time, or the header timer before hydrati
 - Void and reopen stay blocked while any payment exists. A paid invoice cannot be voided or reopened until its payments are removed, which returns it to open.
 - Client invoices and invoice aging reports, with CSV and PDF export and saved reports. Drafts and void invoices are excluded. Aging buckets are Current, 1-30, 31-60, 61-90, and 90+ days past the due date, totaled per currency. A past as-of date counts only payments on or before that date. Members do not see these reports.
 
+## To-dos
+
+- Each project has a To-dos tab: add, edit, assign, mark done, reopen, archive, and delete when the to-do has no time. The timer, manual entries, and entry edits can set one. Done and archived to-dos stay on old entries and leave the picker.
+- A member sees to-dos they created or are assigned to. Owners and admins see every to-do. There is no manager role, and a project has no manager. A member can rename, describe, archive, and delete only to-dos they created. On someone else's to-do they can mark it done or reopen it, and log time against it. Assignees stay as an owner or admin set them.
+- Time reports can group and filter by to-do. Work session CSV includes a To-do column. Members still see no money.
+
 ## Deferred
 
 - Chrome Web Store publishing
 - Screenshots, activity percentage, and idle tracking
 - Approvals and reasons
 - Saved reports and PDF export
-- Pay rates and to-dos
+- Pay rates
 - Import, duplicate, and transfer
 - Invoicing, auto-invoicing, invoice notes, tax, and net terms
 - Email delivery for invites

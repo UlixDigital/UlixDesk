@@ -23,10 +23,12 @@ export function ReportFilters({
   memberId,
   clientId,
   projectId,
+  todoId,
   billable,
   groupBy,
   columns,
   projects,
+  todos = [],
   clients,
   people = [],
   filtered,
@@ -38,10 +40,12 @@ export function ReportFilters({
   memberId: string;
   clientId: string;
   projectId: string;
+  todoId: string;
   billable: BillableFilter;
   groupBy: GroupBy;
   columns: string[] | null;
   projects: Option[];
+  todos?: Option[];
   clients: Option[];
   people?: Option[];
   filtered: boolean;
@@ -123,6 +127,16 @@ export function ReportFilters({
           ))}
         </select>
       </Field>
+      <Field label={reportCopy.todoColumn} id="report-todo">
+        <select id="report-todo" name="todo" key={todoId} defaultValue={todoId} className={ui.input}>
+          <option value="">{reportCopy.allTodos}</option>
+          {todos.map((todo) => (
+            <option key={todo.id} value={todo.id}>
+              {todo.name}
+            </option>
+          ))}
+        </select>
+      </Field>
       <Field label={reportCopy.billableLabel} id="report-billable">
         <select
           id="report-billable"
@@ -141,6 +155,7 @@ export function ReportFilters({
           {people.length > 0 ? <option value="member">{reportCopy.groupMember}</option> : null}
           <option value="client">{reportCopy.groupClient}</option>
           <option value="project">{reportCopy.groupProject}</option>
+          <option value="todo">{reportCopy.groupTodo}</option>
           <option value="date">{reportCopy.groupDate}</option>
         </select>
       </Field>

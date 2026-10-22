@@ -31,6 +31,9 @@ export type ActivityLine = {
   date: string;
   memberName: string;
   projectName: string;
+  /** Set when the entry has a real to-do. Otherwise the column stays the project name. */
+  todoId?: string;
+  todoTitle?: string;
   durationMs: number;
   billableMs: number;
   amount: MoneyTotal | null;
@@ -311,14 +314,16 @@ function buildGroup(
   input: { showMoney: boolean },
 ): ActivityGroup {
   const [date, memberName] = key.split("\t");
-  const byTodo = new Map<string, ActivityLine[]>();
+  const byTodo = new Map<string, { label: string; lines: ActivityLine[] }>();
   for (const line of lines) {
-    const todoKey = line.projectName.trim();
-    const list = byTodo.get(todoKey);
-    if (list) list.push(line);
-    else byTodo.set(todoKey, [line]);
+    const title = (line.todoTitle ?? "").trim();
+    const label = title || line.projectName.trim();
+    const todoKey = (line.todoId ?? "").trim() || label;
+    const existing = byTodo.get(todoKey);
+    if (existing) existing.lines.push(line);
+    else byTodo.set(todoKey, { label, lines: [line] });
   }
-  const todos = [...byTodo.keys()].sort((a, b) => a.localeCompare(b, "en"));
+  const todos = [...byTodo.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "en") || a[0].localeCompare(b[0]));
   return {
     // The client is part of the id. Date and member repeat across clients, and
     // the painter looks rows up by id.
@@ -326,8 +331,8 @@ function buildGroup(
     dateLabel: formatActivityDate(date),
     memberName,
     ...totalsFor(lines, input.showMoney),
-    details: todos.map((todo) =>
-      buildDetail(`${clientName}\t${key}`, todo, byTodo.get(todo) ?? [], input),
+    details: todos.map(([todoKey, bucket]) =>
+      buildDetail(`${clientName}\t${key}`, todoKey, bucket.label, bucket.lines, input),
     ),
   };
 }
@@ -335,13 +340,14 @@ function buildGroup(
 function buildDetail(
   groupId: string,
   todoKey: string,
+  label: string,
   lines: ActivityLine[],
   input: { showMoney: boolean },
 ): ActivityDetail {
-  const missingTodo = todoKey === "";
+  const missingTodo = label === "";
   return {
     id: `${groupId}\t${todoKey}`,
-    todo: missingTodo ? reportCopy.noTodo : todoKey,
+    todo: missingTodo ? reportCopy.noTodo : label,
     missingTodo,
     notes: detailNotes(lines),
     ...totalsFor(lines, input.showMoney),
@@ -546,9 +552,7 @@ function drawGrandTotal(doc: Doc, model: ActivityModel) {
 }
 
 function columnWidths(showMoney: boolean, total: number) {
-  const fixed = showMoney
-    ? [108, 100, 58, 140, 68, 78, 78]
-    : [108, 108, 58, 160, 72, 78];
+  const fixed = showMoney ? [108, 100, 198, 68, 78, 78] : [108, 108, 218, 72, 78];
   const used = fixed.reduce((sum, width) => sum + width, 0);
   return [...fixed, Math.max(total - used, 72)];
 }
@@ -557,7 +561,6 @@ function columnLabels(showMoney: boolean) {
   const labels: string[] = [
     reportCopy.date,
     reportCopy.member,
-    reportCopy.todoId,
     reportCopy.todos,
     reportCopy.timeLabel,
   ];
@@ -600,21 +603,21 @@ function measureSection(doc: Doc, client: ActivityClient, widths: number[], show
 }
 
 function groupCells(group: ActivityGroup, showMoney: boolean) {
-  const cells = [group.dateLabel, group.memberName, "", "", group.time];
+  const cells = [group.dateLabel, group.memberName, "", group.time];
   if (showMoney) cells.push(group.billed);
   cells.push(group.billable, "");
   return cells;
 }
 
 function detailCells(detail: ActivityDetail, showMoney: boolean) {
-  const cells = ["", "", "", detail.todo, detail.time];
+  const cells = ["", "", detail.todo, detail.time];
   if (showMoney) cells.push(detail.billed);
   cells.push(detail.billable, detail.notes);
   return cells;
 }
 
 function totalCells(client: ActivityClient, showMoney: boolean) {
-  const cells = [reportCopy.total, "", "", "", client.time];
+  const cells = [reportCopy.total, "", "", client.time];
   if (showMoney) cells.push(client.billed);
   cells.push(client.billable, "");
   return cells;
@@ -623,7 +626,7 @@ function totalCells(client: ActivityClient, showMoney: boolean) {
 function measureCells(doc: Doc, cells: string[], widths: number[], bold: boolean, italicTodo = false) {
   let height = 16;
   cells.forEach((cell, index) => {
-    const font = italicTodo && index === 3 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
+    const font = italicTodo && index === 2 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
     doc.font(font).fontSize(8);
     const textHeight = doc.heightOfString(pdfText(cell) || " ", {
       width: Math.max((widths[index] ?? 40) - 8, 8),
@@ -747,7 +750,7 @@ function drawDataRow(
   doc.restore();
   let x = MARGIN;
   cells.forEach((cell, index) => {
-    const font = italicTodo && index === 3 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
+    const font = italicTodo && index === 2 ? "Helvetica-Oblique" : bold ? "Helvetica-Bold" : "Helvetica";
     doc.font(font).fontSize(8).fillColor(INK);
     doc.text(pdfText(cell), x + 4, y + 4, {
       width: Math.max((widths[index] ?? 40) - 8, 8),

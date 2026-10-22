@@ -5,6 +5,8 @@ import { useActionState, useEffect, useState, type ReactNode } from "react";
 import { saveTimeEntryAction } from "@/app/timesheets/actions";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { StatusBadge } from "@/components/status-badge";
+import { TodoPicker } from "@/components/todo-picker";
+import type { PickerTodo } from "@/lib/todos";
 import { cn } from "@/lib/cn";
 import { rateCopy } from "@/lib/rate-copy";
 import { timeCopy } from "@/lib/time-copy";
@@ -41,6 +43,8 @@ export function TimeEntryForm({
   cancelHref,
   entryId,
   projects,
+  todos = [],
+  pinnedTodo = null,
   overlaps,
   timeZone,
   mode,
@@ -52,6 +56,8 @@ export function TimeEntryForm({
   cancelHref: string;
   entryId?: string;
   projects: ProjectChoice[];
+  todos?: PickerTodo[];
+  pinnedTodo?: { id: string; projectId: string; title: string; label: string } | null;
   overlaps: OverlapCandidate[];
   timeZone: string;
   mode: "create" | "edit";
@@ -65,6 +71,7 @@ export function TimeEntryForm({
   const [endTime, setEndTime] = useSyncedState(state.values.endTime, serverKey);
   const [billable, setBillable] = useSyncedState(state.values.billable, serverKey);
   const [note, setNote] = useSyncedState(state.values.note, serverKey);
+  const [todoId, setTodoId] = useSyncedState(state.values.todoId, serverKey);
   const selectedProject = projects.find((project) => project.id === projectId);
   const [billableTouched, setBillableTouched] = useState(mode === "edit");
   const [seenTouch, setSeenTouch] = useState(serverKey);
@@ -169,6 +176,7 @@ export function TimeEntryForm({
             onChange={(event) => {
               const nextId = event.target.value;
               setProjectId(nextId);
+              setTodoId("");
               if (!billableTouched) setBillable(billableDefault(projects, nextId));
             }}
             aria-invalid={state.errors.projectId ? true : undefined}
@@ -189,6 +197,15 @@ export function TimeEntryForm({
             </p>
           ) : null}
         </Field>
+        <TodoPicker
+          idPrefix="entry"
+          projectId={projectId}
+          todos={todos}
+          pinned={pinnedTodo}
+          todoId={todoId}
+          onTodoId={setTodoId}
+          error={state.errors.todoId}
+        />
         <div className="grid gap-5 sm:grid-cols-3">
           <Field id="entry-date" label="Date" required error={state.errors.date}>
             <input

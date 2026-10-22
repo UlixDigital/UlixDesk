@@ -52,6 +52,7 @@ const reportParamKeys = [
   "member",
   "client",
   "project",
+  "todo",
   "billable",
   "group",
   "columns",
@@ -209,6 +210,8 @@ function canonicalizeReport(kind: ReportKind, input: Record<string, string>, tod
   if (member) params.member = member;
   if (client) params.client = client;
   if (project) params.project = project;
+  const todo = parseId(parsed.query.todoId);
+  if (todo) params.todo = todo;
   if (parsed.query.billable !== "all") params.billable = parsed.query.billable;
   if (parsed.query.groupBy !== defaultGroupBy(kind)) params.group = parsed.query.groupBy;
   params.columns = storedColumns(kind, parsed.query.columns);

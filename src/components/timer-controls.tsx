@@ -10,6 +10,8 @@ import {
   type TimerActionState,
 } from "@/app/timesheets/actions";
 import { ClockIcon } from "@/components/icons";
+import { TodoPicker } from "@/components/todo-picker";
+import type { PickerTodo } from "@/lib/todos";
 import { useSharedNow } from "@/components/shared-now";
 import { submitWithoutFormReset } from "@/components/submit-without-form-reset";
 import { MAX_ENTRY_MS, timeCopy } from "@/lib/time-copy";
@@ -23,16 +25,19 @@ const idleTimerState: TimerActionState = { error: null, warnings: [] };
 type TimerSnapshot = {
   projectName: string;
   clientName: string | null;
+  todoTitle: string | null;
   startedAt: string;
 };
 
 export function TimerControls({
   projects,
+  todos = [],
   timer,
   serverNow,
   canManage = true,
 }: {
   projects: Array<{ id: string; name: string; clientName: string | null }>;
+  todos?: PickerTodo[];
   timer: TimerSnapshot | null;
   serverNow: number;
   canManage?: boolean;
@@ -44,6 +49,7 @@ export function TimerControls({
   const [stopState, stopAction] = useActionState(stopTimerAction, idleTimerState);
   const now = useSharedNow(serverNow);
   const [projectId, setProjectId] = useState("");
+  const [todoId, setTodoId] = useState("");
   const [rememberedProjectId, setRememberedProjectId] = useState("");
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
@@ -88,7 +94,7 @@ export function TimerControls({
         <form action={stopAction} className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <TimerIdentity
             title={timer.projectName}
-            detail={timer.clientName}
+            detail={[timer.todoTitle, timer.clientName].filter(Boolean).join(" · ") || null}
           />
           <p className="font-mono text-lg font-semibold tracking-tight text-ink tabular-nums">
             <span className="sr-only">Elapsed time </span>
@@ -114,8 +120,12 @@ export function TimerControls({
           pending={startPending}
           projectId={projectId}
           notice={projectNotice}
+          todos={todos}
+          todoId={todoId}
+          onTodoId={setTodoId}
           onProjectId={(next) => {
             setProjectId(next);
+            setTodoId("");
             setRememberedProjectId(next);
             writeTimerProject(next);
           }}
@@ -187,53 +197,70 @@ function TimerMessages({
 
 function IdleTimer({
   projects,
+  todos,
   action,
   pending,
   projectId,
+  todoId,
   notice,
   onProjectId,
+  onTodoId,
 }: {
   projects: Array<{ id: string; name: string; clientName: string | null }>;
+  todos: PickerTodo[];
   action: (payload: FormData) => void;
   pending: boolean;
   projectId: string;
+  todoId: string;
   notice: string | null;
   onProjectId: (projectId: string) => void;
+  onTodoId: (todoId: string) => void;
 }) {
   return (
     <form
       action={action}
-      className="flex flex-col gap-3 sm:flex-row sm:items-center"
+      className="flex flex-col gap-3"
       onSubmit={(event) => submitWithoutFormReset(event, action)}
     >
-      <label htmlFor="timer-project" className="sr-only">
-        Project
-      </label>
-      <select
-        id="timer-project"
-        name="projectId"
-        value={projectId}
-        onChange={(event) => onProjectId(event.target.value)}
-        className={`${ui.input} sm:max-w-xs`}
-      >
-        <option value="">Project</option>
-        {projects.map((project) => (
-          <option key={project.id} value={project.id}>
-            {project.clientName
-              ? `${project.name} · ${project.clientName}`
-              : project.name}
-          </option>
-        ))}
-      </select>
-      <p
-        role={notice ? "status" : undefined}
-        className={notice ? "text-sm text-amber-800" : "text-sm text-slate-600"}
-      >
-        {notice ?? (projectId ? timeCopy.timerIdle : timeCopy.chooseProject)}
-      </p>
-      <div className="sm:ml-auto">
-        <StartButton disabled={!projectId} pending={pending} />
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <label htmlFor="timer-project" className="sr-only">
+          Project
+        </label>
+        <select
+          id="timer-project"
+          name="projectId"
+          value={projectId}
+          onChange={(event) => onProjectId(event.target.value)}
+          className={`${ui.input} sm:max-w-xs`}
+        >
+          <option value="">Project</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.clientName
+                ? `${project.name} · ${project.clientName}`
+                : project.name}
+            </option>
+          ))}
+        </select>
+        <p
+          role={notice ? "status" : undefined}
+          className={notice ? "text-sm text-amber-800" : "text-sm text-slate-600"}
+        >
+          {notice ?? (projectId ? timeCopy.timerIdle : timeCopy.chooseProject)}
+        </p>
+        <div className="sm:ml-auto">
+          <StartButton disabled={!projectId} pending={pending} />
+        </div>
       </div>
+      {projectId ? (
+        <TodoPicker
+          idPrefix="timer"
+          projectId={projectId}
+          todos={todos}
+          todoId={todoId}
+          onTodoId={onTodoId}
+        />
+      ) : null}
     </form>
   );
 }

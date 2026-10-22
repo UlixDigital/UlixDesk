@@ -78,6 +78,7 @@ export default async function ReportPage({
               member: prepared.query.memberId,
               client: prepared.query.clientId,
               project: prepared.query.projectId,
+              todo: prepared.query.todoId,
               billable: prepared.query.billable,
               group: prepared.query.groupBy,
               columns: prepared.columns.join(","),
@@ -93,6 +94,7 @@ export default async function ReportPage({
         memberId={prepared.query.memberId}
         clientId={prepared.query.clientId}
         projectId={prepared.query.projectId}
+        todoId={prepared.query.todoId}
         billable={prepared.query.billable}
         groupBy={prepared.query.groupBy}
         columns={prepared.columnsInUrl ? prepared.columns : null}
@@ -102,6 +104,7 @@ export default async function ReportPage({
           name: item.name,
           archived: item.archivedAt !== null,
         }))}
+        todos={prepared.todos.map((item) => ({ id: item.id, name: item.name }))}
         clients={prepared.clients.map((item) => ({
           id: item.id,
           name: item.name,

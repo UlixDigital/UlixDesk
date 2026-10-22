@@ -78,6 +78,7 @@ export const timeCopy = {
   budgetReached:
     "This project has reached its budget. New time can't be started or added until the budget resets or someone raises it.",
   invoicedTime: "This time is on an issued invoice and can't be edited, deleted, or moved.",
+  todoUnavailable: "Choose an open to-do on this project, or leave it blank.",
 } as const;
 
 export const NOTE_MAX = 2000;
@@ -99,7 +100,8 @@ export type TimerFailureCode =
   | "not-running"
   | "too-short"
   | "budget-reached"
-  | "invoiced";
+  | "invoiced"
+  | "todo-unavailable";
 
 export function timerFailureMessage(code: TimerFailureCode) {
   switch (code) {
@@ -121,5 +123,7 @@ export function timerFailureMessage(code: TimerFailureCode) {
       return timeCopy.budgetReached;
     case "invoiced":
       return timeCopy.invoicedTime;
+    case "todo-unavailable":
+      return timeCopy.todoUnavailable;
   }
 }

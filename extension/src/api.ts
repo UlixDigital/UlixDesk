@@ -17,6 +17,14 @@ export type ApiTimer = {
   billable: boolean;
   note: string | null;
   source: string;
+  todoId?: string | null;
+  todoTitle?: string | null;
+};
+
+export type ApiTodo = {
+  id: string;
+  projectId: string;
+  title: string;
 };
 
 export type ConnectionConfig = {
@@ -35,6 +43,8 @@ export type ClientFailure =
   | { ok: false; reason: "http"; status: number; message: string };
 
 export type ProjectsResult = { ok: true; projects: ApiProject[] } | ClientFailure;
+export type TodosResult = { ok: true; todos: ApiTodo[] } | ClientFailure;
+export type CreateTodoResult = { ok: true; todo: ApiTodo } | ClientFailure;
 export type TimerResult = { ok: true; timer: ApiTimer | null } | ClientFailure;
 export type StartResult =
   | { ok: true; timer: ApiTimer; warnings: string[] }
@@ -197,16 +207,71 @@ export async function fetchTimer(
   return { ok: true, timer };
 }
 
+function isTodo(value: unknown): value is ApiTodo {
+  if (!value || typeof value !== "object") return false;
+  const record = value as Record<string, unknown>;
+  return (
+    typeof record.id === "string" &&
+    typeof record.projectId === "string" &&
+    typeof record.title === "string"
+  );
+}
+
+export async function fetchTodos(
+  config: ConnectionConfig,
+  projectId: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<TodosResult> {
+  const result = await requestJson(
+    config,
+    `/api/todos?projectId=${encodeURIComponent(projectId)}`,
+    { method: "GET" },
+    fetchImpl,
+  );
+  if (!result.ok) return clientFailure(result);
+  if (!result.body || typeof result.body !== "object" || !("todos" in result.body)) {
+    return { ok: false, reason: "invalid-response", message: "The server returned an unexpected response." };
+  }
+  const todos = (result.body as { todos: unknown }).todos;
+  if (!Array.isArray(todos) || !todos.every(isTodo)) {
+    return { ok: false, reason: "invalid-response", message: "The server returned an unexpected response." };
+  }
+  return { ok: true, todos };
+}
+
+export async function createTodo(
+  config: ConnectionConfig,
+  projectId: string,
+  title: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<CreateTodoResult> {
+  const result = await requestJson(
+    config,
+    "/api/todos",
+    { method: "POST", body: JSON.stringify({ projectId, title }) },
+    fetchImpl,
+  );
+  if (!result.ok) return clientFailure(result);
+  if (!result.body || typeof result.body !== "object" || !isTodo((result.body as { todo?: unknown }).todo)) {
+    return { ok: false, reason: "invalid-response", message: "The server returned an unexpected response." };
+  }
+  return { ok: true, todo: (result.body as { todo: ApiTodo }).todo };
+}
+
 export async function startTimer(
   config: ConnectionConfig,
   projectId: string,
   note: string,
   fetchImpl: FetchLike = fetch,
+  todoId = "",
 ): Promise<StartResult> {
   const result = await requestJson(
     config,
     "/api/timer/start",
-    { method: "POST", body: JSON.stringify({ projectId, note }) },
+    {
+      method: "POST",
+      body: JSON.stringify({ projectId, note, ...(todoId ? { todoId } : {}) }),
+    },
     fetchImpl,
   );
   if (!result.ok && result.reason === "http" && errorCode(result.body) === "ALREADY_RUNNING") {

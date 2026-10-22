@@ -138,6 +138,7 @@ export default async function TimesheetsPage({
                 startedAt: runningRecord.startedAt,
                 billable: runningRecord.billable,
                 note: runningRecord.note,
+                todoTitle: runningRecord.todo?.title ?? null,
               }
             : null,
         })

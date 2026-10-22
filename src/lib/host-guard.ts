@@ -4,6 +4,7 @@ import { hostForbiddenMessage, hostIsTrusted } from "@/lib/timer-api-guard";
 /** Routes that accept a bearer token and therefore skip the Host allowlist. */
 export const TOKEN_API_PATHS = [
   "/api/projects",
+  "/api/todos",
   "/api/timer",
   "/api/timer/start",
   "/api/timer/stop",

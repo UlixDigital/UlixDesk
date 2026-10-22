@@ -836,11 +836,13 @@ type EntryRow = {
   billable: boolean;
   project: { id: string; name: string; clientId: string | null; billable: boolean };
   user: { id: string; name: string } | null;
+  todo: { title: string } | null;
 };
 
 const entryInclude = {
   project: { select: { id: true, name: true, clientId: true, billable: true } },
   user: { select: { id: true, name: true } },
+  todo: { select: { title: true } },
 } as const;
 
 /**
@@ -1074,6 +1076,7 @@ function rowsToSlices(
           sliceEnd: new Date(piece.end),
           rateMinor,
           unratedReason,
+          todoTitle: row.todo?.title ?? null,
         });
       }
     }

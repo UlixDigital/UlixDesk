@@ -14,6 +14,7 @@ import {
   type TimerFailureCode,
 } from "@/lib/time-copy";
 import type { TimesheetEntry } from "@/lib/timesheet";
+import { resolveTodoForEntry, TodoUnavailableError } from "@/lib/todos";
 import { intervalsOverlap, normalizeNote } from "@/lib/time-validation";
 
 /**
@@ -39,6 +40,8 @@ export type TimeEntryRecord = {
   billable: boolean;
   note: string | null;
   source: "manual" | "timer";
+  todoId: string | null;
+  todo: { id: string; title: string; status: string; archivedAt: Date | null } | null;
   project: TimeProject;
 };
 
@@ -56,6 +59,7 @@ export type ManualEntryInput = {
   endedAt: Date;
   billable: boolean;
   note: string | null;
+  todoId?: string | null;
 };
 
 const entryInclude = {
@@ -68,6 +72,7 @@ const entryInclude = {
       client: { select: { id: true, name: true, archivedAt: true } },
     },
   },
+  todo: { select: { id: true, title: true, status: true, archivedAt: true } },
 } as const;
 
 type EntryRow = {
@@ -79,6 +84,8 @@ type EntryRow = {
   billable: boolean;
   note: string | null;
   source: string;
+  todoId: string | null;
+  todo: { id: string; title: string; status: string; archivedAt: Date | null } | null;
   project: TimeProject;
 };
 
@@ -92,6 +99,8 @@ function toRecord(row: EntryRow): TimeEntryRecord {
     billable: row.billable,
     note: row.note,
     source: row.source === "timer" ? "timer" : "manual",
+    todoId: row.todoId,
+    todo: row.todo,
     project: row.project,
   };
 }
@@ -113,6 +122,7 @@ function toTimesheetEntry(row: TimeEntryRecord): TimesheetEntry | null {
     rate: null,
     note: row.note,
     source: row.source,
+    todoTitle: row.todo?.title ?? null,
   };
 }
 
@@ -283,6 +293,14 @@ export async function createManualEntry(
   userId: string,
   change?: Partial<ChangeContext>,
 ) {
+  if (input.todoId) {
+    const resolved = await resolveTodoForEntry({
+      actorId: userId,
+      projectId: input.projectId,
+      todoId: input.todoId,
+    });
+    if (!resolved.ok) throw new TodoUnavailableError();
+  }
   const overlap = await hasOverlap({
     startedAt: input.startedAt,
     endedAt: input.endedAt,
@@ -305,6 +323,7 @@ export async function createManualEntry(
         billable: input.billable,
         note: input.note,
         source: "manual",
+        todoId: input.todoId ?? null,
       },
       include: entryInclude,
     });
@@ -335,6 +354,7 @@ export async function updateManualEntry(
   now: Date,
   userId: string,
   change?: Partial<ChangeContext>,
+  actorId = userId,
 ) {
   const overlap = await hasOverlap({
     startedAt: input.startedAt,
@@ -350,6 +370,18 @@ export async function updateManualEntry(
       include: entryInclude,
     });
     if (!existing || !existing.endedAt) return null;
+    if (input.todoId !== undefined) {
+      const resolved = await resolveTodoForEntry(
+        {
+          actorId,
+          projectId: input.projectId,
+          todoId: input.todoId,
+          currentTodoId: existing.todoId,
+        },
+        tx,
+      );
+      if (!resolved.ok) throw new TodoUnavailableError();
+    }
     if (await timeEntryIsLocked(tx, existing.id)) throw new InvoicedTimeError();
     const guard = await guardProjectBudget(tx, {
       projectId: input.projectId,
@@ -380,6 +412,7 @@ export async function updateManualEntry(
         endedAt: input.endedAt,
         billable: input.billable,
         note: input.note,
+        ...(input.todoId !== undefined ? { todoId: input.todoId } : {}),
       },
       include: entryInclude,
     });
@@ -446,6 +479,7 @@ export async function startTimer(input: {
   userId: string;
   actorId?: string;
   source?: ChangeContext["source"];
+  todoId?: string | null;
 }): Promise<
   | { ok: true; timer: TimeEntryRecord; warning: string | null }
   | { ok: false; code: TimerFailureCode; timer?: TimeEntryRecord }
@@ -478,6 +512,18 @@ export async function startTimer(input: {
       });
       if (!project) return { missing: true as const };
       if (project.archivedAt) return { inactive: true as const };
+      const requestedTodo = input.todoId?.trim() || null;
+      if (requestedTodo) {
+        const resolved = await resolveTodoForEntry(
+          {
+            actorId: input.userId,
+            projectId,
+            todoId: requestedTodo,
+          },
+          tx,
+        );
+        if (!resolved.ok) return { todo: true as const };
+      }
       const guard = await guardProjectBudget(tx, { projectId, at: input.now });
       if (guard.blocked) return { budget: true as const };
 
@@ -490,6 +536,7 @@ export async function startTimer(input: {
           billable: project.billable,
           note: note || null,
           source: "timer",
+          todoId: input.todoId?.trim() || null,
         },
         include: entryInclude,
       });
@@ -517,6 +564,7 @@ export async function startTimer(input: {
     if ("missing" in timer) return { ok: false, code: "project-missing" };
     if ("inactive" in timer) return { ok: false, code: "project-inactive" };
     if ("budget" in timer) return { ok: false, code: "budget-reached" };
+    if ("todo" in timer) return { ok: false, code: "todo-unavailable" };
     return { ok: true, timer: timer.timer, warning: timer.warning };
   } catch (error) {
     const running = await getRunningTimer(input.userId);

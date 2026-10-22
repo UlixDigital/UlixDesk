@@ -21,6 +21,8 @@ export function serializeTimer(timer: TimeEntryRecord) {
     billable: timer.billable,
     note: timer.note,
     source: timer.source,
+    todoId: timer.todoId,
+    todoTitle: timer.todo?.title ?? null,
   };
 }
 

@@ -5,6 +5,7 @@ import { requireUser } from "@/lib/auth";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { entryTimeZoneNote } from "@/lib/rate-copy";
 import { listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
+import { listPickerTodos } from "@/lib/todos";
 import { timesheetsHref } from "@/lib/timesheet";
 import { isRealCalendarDate, todayInTimeZone } from "@/lib/time-zone";
 import {
@@ -36,13 +37,17 @@ export default async function NewTimeEntryPage({
     ? requestedProject
     : "";
   const user = await requireUser();
-  const overlaps = await listOverlapCandidates(new Date(), user.id);
+  const [overlaps, todos] = await Promise.all([
+    listOverlapCandidates(new Date(), user.id),
+    listPickerTodos(user),
+  ]);
 
   return (
     <TimeEntryForm
       mode="create"
       timeZone={timeZone}
       projects={projects}
+      todos={todos}
       overlaps={overlaps}
       cancelHref={timesheetsHref({ date })}
       title="Add time"

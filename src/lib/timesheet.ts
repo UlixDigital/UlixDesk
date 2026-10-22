@@ -31,6 +31,7 @@ export type TimesheetEntry = {
   rate: ResolvedRate | null;
   note: string | null;
   source: "manual" | "timer";
+  todoTitle?: string | null;
 };
 
 export type RunningDailyEntry = {
@@ -43,6 +44,7 @@ export type RunningDailyEntry = {
   startedAt: string;
   billable: boolean;
   note: string | null;
+  todoTitle?: string | null;
   continuesFromPrevious: boolean;
   continuesToNext: boolean;
 };
@@ -59,6 +61,7 @@ export type DailyRow = {
   billable: boolean;
   amount: MoneyTotal | null;
   note: string | null;
+  todoTitle?: string | null;
   source: "manual" | "timer";
   continuesFromPrevious: boolean;
   continuesToNext: boolean;
@@ -289,6 +292,7 @@ export function buildDailyTimesheet(input: {
       billable: entry.billable && entry.projectBillable,
       amount: portionAmount(slice),
       note: entry.note,
+      todoTitle: entry.todoTitle ?? null,
       source: entry.source,
       continuesFromPrevious: entry.startedAt < dayStart,
       continuesToNext: entry.endedAt > dayEnd,
@@ -431,6 +435,7 @@ type RunningSource = {
   startedAt: Date;
   billable: boolean;
   note: string | null;
+  todoTitle?: string | null;
 };
 
 /** The running timer when it overlaps this local day and the active filters. Totals stay separate. */
@@ -459,6 +464,7 @@ export function runningEntryForDay(input: {
     startedAt: entry.startedAt.toISOString(),
     billable: entry.billable,
     note: entry.note,
+    todoTitle: entry.todoTitle ?? null,
     continuesFromPrevious: entry.startedAt < dayStart,
     continuesToNext: input.now > dayEnd,
   };

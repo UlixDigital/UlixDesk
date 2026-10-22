@@ -21,7 +21,7 @@ export const reportPresets = [
 ] as const;
 export type ReportPreset = (typeof reportPresets)[number];
 
-export const groupByOptions = ["member", "client", "project", "date"] as const;
+export const groupByOptions = ["member", "client", "project", "todo", "date"] as const;
 export type GroupBy = (typeof groupByOptions)[number];
 
 export const billableFilters = ["all", "billable", "non-billable"] as const;
@@ -42,6 +42,7 @@ export type ReportQuery = {
   memberId: string;
   clientId: string;
   projectId: string;
+  todoId: string;
   billable: BillableFilter;
   groupBy: GroupBy;
   /** Null when the URL has no columns key. The page then uses the defaults. */
@@ -113,6 +114,7 @@ export function parseReportSearchParams(
       memberId: firstSearchParam(params.member),
       clientId: firstSearchParam(params.client),
       projectId: firstSearchParam(params.project),
+      todoId: firstSearchParam(params.todo),
       billable: parseEnumParam(params.billable, billableFilters) ?? "all",
       groupBy: parseEnumParam(params.group, groupByOptions) ?? defaultGroupBy(kind),
       columns: params.columns === undefined ? null : parseColumnList(params.columns),
@@ -139,7 +141,7 @@ export function parseColumnList(value: string | string[] | undefined | null): st
 
 export function allowedColumns(kind: ReportKind, showMoney: boolean, manager: boolean) {
   if (kind === "work-sessions") {
-    const columns = ["start", "end", "duration", "project", "client", "notes", "billable"];
+    const columns = ["start", "end", "duration", "project", "todo", "client", "notes", "billable"];
     if (manager) columns.push("member");
     return columns;
   }
@@ -171,6 +173,7 @@ export function columnLabel(id: string) {
   if (id === "end") return reportCopy.end;
   if (id === "duration") return reportCopy.duration;
   if (id === "project") return reportCopy.projectLabel;
+  if (id === "todo") return reportCopy.todoColumn;
   if (id === "client") return reportCopy.clientLabel;
   if (id === "notes") return reportCopy.notes;
   if (id === "billable") return reportCopy.billable;
@@ -191,6 +194,7 @@ export function reportHref(
     memberId?: string;
     clientId?: string;
     projectId?: string;
+    todoId?: string;
     billable?: BillableFilter;
     groupBy?: GroupBy;
     columns?: string[] | null;
@@ -208,6 +212,7 @@ export function reportHref(
   if (query.memberId) params.set("member", query.memberId);
   if (query.clientId) params.set("client", query.clientId);
   if (query.projectId) params.set("project", query.projectId);
+  if (query.todoId) params.set("todo", query.todoId);
   if (query.billable && query.billable !== "all") params.set("billable", query.billable);
   if (query.groupBy && query.groupBy !== defaultGroupBy(kind)) params.set("group", query.groupBy);
   if (query.columns) params.set("columns", query.columns.join(","));
@@ -231,6 +236,7 @@ export function groupByLabel(kind: ReportKind, groupBy: GroupBy) {
   if (groupBy === "member") return reportCopy.groupMember;
   if (groupBy === "client") return reportCopy.groupClient;
   if (groupBy === "project") return reportCopy.groupProject;
+  if (groupBy === "todo") return reportCopy.groupTodo;
   return reportCopy.groupDate;
 }
 
@@ -249,6 +255,7 @@ export function describeActivityFilters(input: {
   memberName: string | null;
   clientName: string | null;
   projectName: string | null;
+  todoName?: string | null;
   billable: BillableFilter;
 }) {
   const parts: string[] = [];
@@ -257,6 +264,7 @@ export function describeActivityFilters(input: {
   }
   if (input.clientName) parts.push(`${reportCopy.clientLabel}: ${input.clientName}`);
   if (input.projectName) parts.push(`${reportCopy.projectLabel}: ${input.projectName}`);
+  if (input.todoName) parts.push(`${reportCopy.todoColumn}: ${input.todoName}`);
   if (input.billable !== "all") {
     parts.push(`${reportCopy.billableLabel}: ${billableFilterLabel(input.billable)}`);
   }
@@ -273,6 +281,7 @@ export function describeReportFilters(input: {
   memberName: string | null;
   clientName: string | null;
   projectName: string | null;
+  todoName?: string | null;
   billable: BillableFilter;
   groupBy: GroupBy;
 }) {
@@ -285,6 +294,7 @@ export function describeReportFilters(input: {
   lines.push(
     `${reportCopy.clientLabel}: ${input.clientName ?? reportCopy.allClients}`,
     `${reportCopy.projectLabel}: ${input.projectName ?? reportCopy.allProjects}`,
+    ...(input.todoName ? [`${reportCopy.todoColumn}: ${input.todoName}`] : []),
     `${reportCopy.billableLabel}: ${billableFilterLabel(input.billable)}`,
     `${reportCopy.groupLabel}: ${groupByLabel(input.kind, input.groupBy)}`,
     `${reportCopy.timezoneLabel}: ${input.timeZone}`,
