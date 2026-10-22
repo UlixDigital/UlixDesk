@@ -18,6 +18,8 @@ export type PdfTable = {
   columns: PdfColumn[];
   rows: string[][];
   totals: string[] | null;
+  /** Row indexes drawn in bold. Time & Activity uses these for subtotals. */
+  boldRows?: number[];
 };
 
 export type PdfBlock = {
@@ -190,15 +192,17 @@ function columnWidths(
 
 function drawTable(doc: Doc, title: string, table: PdfTable) {
   const widths = columnWidths(doc, table.columns, table.rows, table.totals, contentWidth(doc));
+  const bold = new Set(table.boldRows ?? []);
   let y = drawTableHeader(doc, table.columns, widths, doc.y);
-  for (const row of table.rows) {
-    const height = measureRow(doc, table.columns, row, widths, false);
+  table.rows.forEach((row, index) => {
+    const strong = bold.has(index);
+    const height = measureRow(doc, table.columns, row, widths, strong);
     if (y + height > contentBottom(doc)) {
       newPage(doc, title);
       y = drawTableHeader(doc, table.columns, widths, doc.y);
     }
-    y = drawRow(doc, table.columns, row, widths, y, height, false);
-  }
+    y = drawRow(doc, table.columns, row, widths, y, height, false, strong);
+  });
   if (!table.totals) {
     doc.y = y;
     return;
@@ -208,7 +212,7 @@ function drawTable(doc: Doc, title: string, table: PdfTable) {
     newPage(doc, title);
     y = drawTableHeader(doc, table.columns, widths, doc.y);
   }
-  doc.y = drawRow(doc, table.columns, table.totals, widths, y, height, true);
+  doc.y = drawRow(doc, table.columns, table.totals, widths, y, height, true, true);
 }
 
 function drawTableHeader(doc: Doc, columns: PdfColumn[], widths: number[], y: number) {
@@ -251,7 +255,13 @@ function drawRow(
   y: number,
   height: number,
   total: boolean,
+  strong = false,
 ) {
+  if (strong && !total) {
+    doc.save();
+    doc.rect(MARGIN, y, contentWidth(doc), height).fill(HEADER_BG);
+    doc.restore();
+  }
   doc.save();
   doc
     .moveTo(MARGIN, y)
@@ -260,7 +270,7 @@ function drawRow(
     .lineWidth(total ? 1 : 0.4)
     .stroke();
   doc.restore();
-  doc.font(total ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(INK);
+  doc.font(total || strong ? "Helvetica-Bold" : "Helvetica").fontSize(8).fillColor(INK);
   let x = MARGIN;
   cells.forEach((cell, index) => {
     const align = columns[index]?.align ?? "left";
@@ -337,6 +347,7 @@ function cleanPdfInput(input: PdfReportInput): PdfReportInput {
           columns: input.table.columns.map((column) => ({ ...column, label: pdfText(column.label) })),
           rows: input.table.rows.map((row) => row.map(pdfText)),
           totals: input.table.totals ? input.table.totals.map(pdfText) : null,
+          boldRows: input.table.boldRows,
         }
       : input.table,
     blocks: input.blocks
@@ -365,6 +376,7 @@ export function builtReportToTable(report: BuiltReport): PdfTable | null {
     totals: report.totals
       ? report.columns.map((column) => report.totals?.[column.id] ?? "")
       : null,
+    boldRows: report.rows.flatMap((row, index) => (row.kind === "subtotal" ? [index] : [])),
   };
 }
 

@@ -1,11 +1,14 @@
 import type { Prisma } from "@prisma/client";
+import { buildActivityTree, type ActivitySlice } from "@/lib/activity-grouping";
 import { toCsv } from "@/lib/csv";
 import { prisma } from "@/lib/db";
 import { formatMoney, formatMoneyNumber, sumMoney, type MoneyTotal } from "@/lib/money";
 import { amountColumnLabel, reportCopy } from "@/lib/report-copy";
 import {
+  defaultActivitySort,
   REPORT_PAGE_SIZE,
   REPORT_ROW_CAP,
+  type ActivitySort,
   type BillableFilter,
   type GroupBy,
   type ReportKind,
@@ -82,7 +85,14 @@ export type ReportCsv = {
 
 export type BuiltReport = {
   columns: ReportColumn[];
-  rows: Array<{ id: string; cells: Record<string, string> }>;
+  rows: Array<{
+    id: string;
+    cells: Record<string, string>;
+    /** 0 is the first group. 1 is the row inside it. */
+    depth?: number;
+    /** A subtotal row holds the total for the group above its children. */
+    kind?: "group" | "subtotal";
+  }>;
   totals: Record<string, string> | null;
   /** Numeric hours and amounts. The screen keeps the formatted cells. */
   csv: ReportCsv;
@@ -278,6 +288,8 @@ export function buildReport(input: {
   rangeEnd: Date;
   timeZone: string;
   groupBy: GroupBy;
+  groupBy2?: GroupBy | null;
+  sort?: ActivitySort | null;
   columns: string[];
   showMoney: boolean;
   manager: boolean;
@@ -293,6 +305,9 @@ export function buildReport(input: {
   const slices = input.entries.flatMap((entry) =>
     slicesForEntry(entry, input.rangeStart, input.rangeEnd, input.timeZone),
   );
+  if (input.kind === "time-activity") {
+    return buildTimeActivityReport(input, slices, showAmount, selected);
+  }
   const aggs = aggregate(slices, input.kind, input.groupBy);
   const columns: ReportColumn[] = [];
   const bucket = aggs.some((row) => row.bucketId);
@@ -339,6 +354,106 @@ export function buildReport(input: {
       rows.length === 0
         ? null
         : summaryCsvLine(totalsSource, totals ?? {}, csvColumns, true, input.showMoney),
+  };
+  return {
+    columns,
+    rows,
+    totals,
+    csv,
+    totalRows: rows.length,
+    page: 1,
+    pageCount: 1,
+    pageSize: Math.max(rows.length, 1),
+  };
+}
+
+function activitySlice(slice: ReportSlice): ActivitySlice {
+  return {
+    userId: slice.userId,
+    userName: slice.userName,
+    projectId: slice.projectId,
+    projectName: slice.projectName,
+    clientId: slice.clientId,
+    clientName: slice.clientName,
+    todoId: slice.todoId,
+    todoTitle: slice.todoTitle,
+    date: slice.date,
+    durationMs: slice.durationMs,
+    billableMs: slice.billableMs,
+    amount: slice.amount,
+    unrated: slice.unrated,
+  };
+}
+
+function buildTimeActivityReport(
+  input: {
+    groupBy: GroupBy;
+    groupBy2?: GroupBy | null;
+    sort?: ActivitySort | null;
+    showMoney: boolean;
+  },
+  slices: ReportSlice[],
+  showAmount: boolean,
+  selected: Set<string>,
+): BuiltReport {
+  const groupBy2 = input.groupBy2 && input.groupBy2 !== input.groupBy ? input.groupBy2 : null;
+  const requested = input.sort ?? defaultActivitySort(input.groupBy);
+  const sort =
+    !input.showMoney && requested.key === "amount" ? defaultActivitySort(input.groupBy) : requested;
+  const tree = buildActivityTree({
+    slices: slices.map(activitySlice),
+    groupBy: input.groupBy,
+    groupBy2,
+    sort,
+  });
+  const columns: ReportColumn[] = [{ id: "group", label: groupHeading(input.groupBy, "time-activity") }];
+  if (groupBy2) columns.push({ id: "group2", label: groupHeading(groupBy2, "time-activity") });
+  if (selected.has("hours")) columns.push({ id: "hours", label: reportCopy.hours });
+  if (selected.has("billableHours")) columns.push({ id: "billableHours", label: reportCopy.billableHours });
+  const flat = tree.flatMap((node) =>
+    groupBy2
+      ? [{ node, depth: 0, parentId: node.id }, ...node.children.map((child) => ({ node: child, depth: 1, parentId: node.id }))]
+      : [{ node, depth: 0, parentId: node.id }],
+  );
+  columns.push(...moneyColumns(flat.map((row) => row.node), showAmount));
+  const rows = flat.map(({ node, depth, parentId }) => ({
+    id: depth === 0 ? node.id : `${parentId}\t${node.id}`,
+    depth,
+    kind: groupBy2 && depth === 0 ? ("subtotal" as const) : ("group" as const),
+    cells: {
+      group: depth === 0 ? node.label : "",
+      ...(groupBy2 ? { group2: depth === 1 ? node.label : "" } : {}),
+      ...summaryCells(node, columns),
+    },
+  }));
+  const totalsSource = {
+    durationMs: tree.reduce((sum, node) => sum + node.durationMs, 0),
+    billableMs: tree.reduce((sum, node) => sum + node.billableMs, 0),
+    amounts: sumMoney(tree.flatMap((node) => node.amounts)),
+    unrated: tree.some((node) => node.unrated),
+  };
+  const totals =
+    rows.length === 0
+      ? null
+      : {
+          ...summaryCells(totalsSource, columns),
+          group: reportCopy.grandTotal,
+          ...(groupBy2 ? { group2: "" } : {}),
+        };
+  const csvColumns = summaryCsvColumns(columns);
+  const csv = {
+    columns: csvColumns,
+    rows: flat.map(({ node, depth }, index) =>
+      summaryCsvLine(
+        node,
+        rows[index]?.cells ?? {},
+        csvColumns,
+        Boolean(groupBy2) && depth === 0,
+        input.showMoney,
+      ),
+    ),
+    totals:
+      rows.length === 0 ? null : summaryCsvLine(totalsSource, totals ?? {}, csvColumns, true, input.showMoney),
   };
   return {
     columns,

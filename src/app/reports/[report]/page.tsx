@@ -1,19 +1,24 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { ReportColumns } from "@/components/report-columns";
 import { ReportFilters } from "@/components/report-filters";
+import { ReportRemember } from "@/components/report-remember";
 import { ReportTable } from "@/components/report-table";
 import { SaveReportDialog } from "@/components/save-report-dialog";
 import { reportCodes, reportCopy } from "@/lib/report-copy";
 import {
+  activitySortToken,
   allowedColumns,
+  groupByOptions,
   isReportKind,
+  parseActivitySort,
   reportDescription,
   reportHref,
   reportTitle,
 } from "@/lib/report-query";
 import { prepareReport } from "@/lib/report-request";
+import { firstSearchParam, parseEnumParam } from "@/lib/search-params";
 import { getCurrentUser } from "@/lib/session";
 import { ui } from "@/lib/ui";
 
@@ -40,11 +45,24 @@ export default async function ReportPage({
   if (!isReportKind(report)) notFound();
   const actor = await getCurrentUser();
   if (!actor) return null;
+  const search = await searchParams;
   const prepared = await prepareReport({
     actor,
     kind: report,
-    params: await searchParams,
+    params: search,
   });
+  if (report === "time-activity") {
+    const rawGroup = parseEnumParam(firstSearchParam(search.group), groupByOptions);
+    const rawThen = parseEnumParam(firstSearchParam(search.then), groupByOptions);
+    const rawSort = parseActivitySort(search.sort);
+    const groupDrift = rawGroup !== null && rawGroup !== prepared.query.groupBy;
+    const thenDrift = rawThen !== prepared.query.groupBy2;
+    const sortDrift =
+      rawSort !== null && activitySortToken(rawSort) !== activitySortToken(prepared.query.sort);
+    if (groupDrift || thenDrift || sortDrift) {
+      redirect(reportHref(report, { ...prepared.query, columns: prepared.columnsInUrl ? prepared.columns : null }));
+    }
+  }
 
   return (
     <div className="min-w-0">
@@ -81,11 +99,26 @@ export default async function ReportPage({
               todo: prepared.query.todoId,
               billable: prepared.query.billable,
               group: prepared.query.groupBy,
+              ...(report === "time-activity"
+                ? {
+                    then: prepared.query.groupBy2 ?? "",
+                    sort: activitySortToken(prepared.query.sort),
+                  }
+                : {}),
               columns: prepared.columns.join(","),
             }}
           />
         </div>
       </div>
+      <ReportRemember
+        kind={report}
+        columnsInUrl={prepared.columnsInUrl}
+        columns={prepared.columns}
+        viewInUrl={prepared.viewInUrl}
+        manager={prepared.manager}
+        showMoney={prepared.showMoney}
+        query={prepared.query}
+      />
       <ReportFilters
         kind={report}
         preset={prepared.query.preset}
@@ -97,6 +130,9 @@ export default async function ReportPage({
         todoId={prepared.query.todoId}
         billable={prepared.query.billable}
         groupBy={prepared.query.groupBy}
+        groupBy2={prepared.query.groupBy2}
+        sort={prepared.query.sort}
+        showMoney={prepared.showMoney}
         columns={prepared.columnsInUrl ? prepared.columns : null}
         filtered={prepared.filtered}
         projects={prepared.projects.map((item) => ({

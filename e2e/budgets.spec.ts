@@ -428,22 +428,20 @@ async function rasterContinued(pdf: Buffer, dir: string) {
   await writeFile(pdfPath, pdf);
   const info = execFileSync("pdfinfo", [pdfPath], { encoding: "utf8" });
   const count = Number(/Pages:\s+(\d+)/.exec(info)?.[1] ?? "1");
-  let chosen = 1;
+  const pages: string[] = [];
   for (let pageNumber = 1; pageNumber <= count; pageNumber += 1) {
-    const text = execFileSync("pdftotext", ["-f", String(pageNumber), "-l", String(pageNumber), "-layout", pdfPath, "-"], {
-      encoding: "utf8",
-    });
-    // The date cell is "Thu, Oct 15, 2026 (continued)" and wraps, so the
-    // marker sits on the next line. The client heading's "(continued)" does not.
-    if (
-      /(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}[^\n]{0,180}\n\s*\(continued\)/.test(
-        text,
-      )
-    ) {
-      chosen = pageNumber;
-      break;
-    }
+    pages.push(
+      execFileSync("pdftotext", ["-f", String(pageNumber), "-l", String(pageNumber), "-layout", pdfPath, "-"], {
+        encoding: "utf8",
+      }),
+    );
   }
-  expect(chosen).toBeGreaterThan(1);
-  await rasterPdf(pdf, dir, name, chosen);
+  const text = pages.join("\n");
+  // The download is the grouped table (project, by default), not the old
+  // client / date / member layout that repeated a "(continued)" date cell.
+  expect(text).toContain("Split task 01");
+  expect(text).toContain("Split task 24");
+  expect(text).toContain("Grand total");
+  expect(text).not.toContain("(continued)");
+  await rasterPdf(pdf, dir, name, count);
 }

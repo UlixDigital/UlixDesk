@@ -2,8 +2,11 @@ import { Prisma, type Prisma as PrismaTypes } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { savedReportCodes, reportCopy } from "@/lib/report-copy";
 import {
+  activitySortToken,
   defaultColumns,
   defaultGroupBy,
+  groupByOptions,
+  parseActivitySort,
   parseReportSearchParams,
   resolveColumns,
   reportTitle,
@@ -55,6 +58,8 @@ const reportParamKeys = [
   "todo",
   "billable",
   "group",
+  "then",
+  "sort",
   "columns",
 ] as const;
 
@@ -213,7 +218,16 @@ function canonicalizeReport(kind: ReportKind, input: Record<string, string>, tod
   const todo = parseId(parsed.query.todoId);
   if (todo) params.todo = todo;
   if (parsed.query.billable !== "all") params.billable = parsed.query.billable;
-  if (parsed.query.groupBy !== defaultGroupBy(kind)) params.group = parsed.query.groupBy;
+  const explicitGroup = parseEnumParam(input.group, groupByOptions);
+  if (kind === "time-activity" && explicitGroup) params.group = explicitGroup;
+  else if (parsed.query.groupBy !== defaultGroupBy(kind)) params.group = parsed.query.groupBy;
+  if (kind === "time-activity") {
+    const group = params.group ?? parsed.query.groupBy;
+    const explicitThen = parseEnumParam(input.then, groupByOptions);
+    if (explicitThen && explicitThen !== group) params.then = explicitThen;
+    const explicitSort = parseActivitySort(input.sort);
+    if (explicitSort) params.sort = activitySortToken(explicitSort);
+  }
   params.columns = storedColumns(kind, parsed.query.columns);
   return params;
 }
@@ -250,6 +264,8 @@ export function scopeStoredParams(
     if (isInvoiceMoneyReport(reportType)) return {};
     delete next.member;
     if (next.group === "member") delete next.group;
+    if (next.then === "member") delete next.then;
+    if (next.sort?.startsWith("amount")) delete next.sort;
     if (reportType !== "manual-time-edits") {
       const allowed = new Set(defaultColumns(reportType, false, false));
       next.columns = (next.columns ?? "")

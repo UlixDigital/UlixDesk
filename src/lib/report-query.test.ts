@@ -73,6 +73,18 @@ describe("report query", () => {
     expect(resolveColumns("work-sessions", null, false, false)).not.toContain("member");
   });
 
+  it("keeps a shareable Time & Activity sort in the URL and describes it for the PDF", () => {
+    const parsed = parseReportSearchParams(
+      { group: "member", then: "todo", sort: "amount-USD-desc" },
+      today,
+      "time-activity",
+    );
+    expect(reportHref("time-activity", parsed.query)).toBe(
+      "/reports/time-activity?group=member&then=todo&sort=amount-USD-desc",
+    );
+    expect(reportHref("daily", { ...parsed.query, groupBy: "client" })).toBe("/reports/daily?group=client");
+  });
+
   it("describes the filters the Time & Activity PDF applies, without group by", () => {
     expect(
       describeActivityFilters({

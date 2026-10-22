@@ -1,3 +1,4 @@
+import { isCurrencyCode } from "@/lib/currencies";
 import { reportCopy } from "@/lib/report-copy";
 import {
   firstSearchParam,
@@ -24,6 +25,22 @@ export type ReportPreset = (typeof reportPresets)[number];
 export const groupByOptions = ["member", "client", "project", "todo", "date"] as const;
 export type GroupBy = (typeof groupByOptions)[number];
 
+export const activitySortKeys = ["name", "time", "billable", "amount", "date"] as const;
+export type ActivitySortKey = (typeof activitySortKeys)[number];
+
+export const sortDirections = ["asc", "desc"] as const;
+export type SortDirection = (typeof sortDirections)[number];
+
+/** One sort for every group level. Amount sorts never add currencies together. */
+export type ActivitySort = {
+  key: ActivitySortKey;
+  direction: SortDirection;
+  /** A currency column. Null compares each currency in code order. */
+  currency: string | null;
+};
+
+const ACTIVITY_SORT_PATTERN = /^(name|time|billable|date|amount)(?:-([A-Z]{3}))?-(asc|desc)$/;
+
 export const billableFilters = ["all", "billable", "non-billable"] as const;
 export type BillableFilter = (typeof billableFilters)[number];
 
@@ -45,6 +62,9 @@ export type ReportQuery = {
   todoId: string;
   billable: BillableFilter;
   groupBy: GroupBy;
+  /** Second group for Time & Activity. Null when the report has one level. */
+  groupBy2: GroupBy | null;
+  sort: ActivitySort;
   /** Null when the URL has no columns key. The page then uses the defaults. */
   columns: string[] | null;
   page: number;
@@ -91,6 +111,72 @@ export function defaultGroupBy(kind: ReportKind): GroupBy {
   return kind === "daily" ? "date" : "project";
 }
 
+/** Dates open oldest first. Every other group opens A-Z. */
+export function defaultActivitySort(groupBy: GroupBy): ActivitySort {
+  if (groupBy === "date") return { key: "date", direction: "asc", currency: null };
+  return { key: "name", direction: "asc", currency: null };
+}
+
+export function activitySortToken(sort: ActivitySort) {
+  if (sort.key === "amount" && sort.currency) return `amount-${sort.currency}-${sort.direction}`;
+  return `${sort.key}-${sort.direction}`;
+}
+
+export function isDefaultActivitySort(groupBy: GroupBy, sort: ActivitySort) {
+  return activitySortToken(sort) === activitySortToken(defaultActivitySort(groupBy));
+}
+
+/** `time-desc`, `amount-USD-asc`. Anything else is ignored. */
+export function parseActivitySort(value: string | string[] | undefined | null): ActivitySort | null {
+  const match = ACTIVITY_SORT_PATTERN.exec(firstSearchParam(value));
+  if (!match) return null;
+  const key = match[1] as ActivitySortKey;
+  const currency = match[2] ?? null;
+  const direction = match[3] as SortDirection;
+  if (currency && (key !== "amount" || !isCurrencyCode(currency))) return null;
+  return { key, direction, currency: key === "amount" ? currency : null };
+}
+
+export function activitySortChoices(showMoney: boolean) {
+  const choices: Array<{ value: string; label: string }> = [
+    { value: "name-asc", label: reportCopy.sortNameAsc },
+    { value: "name-desc", label: reportCopy.sortNameDesc },
+    { value: "time-desc", label: reportCopy.sortTimeDesc },
+    { value: "time-asc", label: reportCopy.sortTimeAsc },
+    { value: "billable-desc", label: reportCopy.sortBillableDesc },
+    { value: "billable-asc", label: reportCopy.sortBillableAsc },
+  ];
+  if (showMoney) {
+    choices.push(
+      { value: "amount-desc", label: reportCopy.sortAmountDesc },
+      { value: "amount-asc", label: reportCopy.sortAmountAsc },
+    );
+  }
+  choices.push(
+    { value: "date-desc", label: reportCopy.sortDateDesc },
+    { value: "date-asc", label: reportCopy.sortDateAsc },
+  );
+  return choices;
+}
+
+export function activitySortLabel(sort: ActivitySort) {
+  if (sort.key === "amount" && sort.currency) {
+    const way = sort.direction === "desc" ? "high to low" : "low to high";
+    return `${reportCopy.amount} (${sort.currency}) ${way}`;
+  }
+  const token = activitySortToken(sort);
+  return activitySortChoices(true).find((choice) => choice.value === token)?.label ?? token;
+}
+
+/** True when the URL named a group, a second group, or a sort. Those win over the remembered view. */
+export function reportViewInUrl(params: SearchInput) {
+  return (
+    firstSearchParam(params.group) !== "" ||
+    firstSearchParam(params.then) !== "" ||
+    firstSearchParam(params.sort) !== ""
+  );
+}
+
 export function parseReportSearchParams(
   params: SearchInput,
   today: string,
@@ -98,6 +184,8 @@ export function parseReportSearchParams(
 ): {
   query: ReportQuery;
   rangeError: boolean;
+  /** The raw URL named group, then, or sort. Remembered choices must not replace it. */
+  viewInUrl: boolean;
 } {
   const preset = parseEnumParam(params.preset, reportPresets) ?? "this-week";
   const fallback = rangeForPreset("this-week", today);
@@ -106,6 +194,7 @@ export function parseReportSearchParams(
     preset === "custom" ? parseBoundedDate(params.from, fallback.from) : (range?.from ?? fallback.from);
   const to =
     preset === "custom" ? parseBoundedDate(params.to, fallback.to) : (range?.to ?? fallback.to);
+  const groupBy = parseEnumParam(params.group, groupByOptions) ?? defaultGroupBy(kind);
   return {
     query: {
       preset,
@@ -116,11 +205,14 @@ export function parseReportSearchParams(
       projectId: firstSearchParam(params.project),
       todoId: firstSearchParam(params.todo),
       billable: parseEnumParam(params.billable, billableFilters) ?? "all",
-      groupBy: parseEnumParam(params.group, groupByOptions) ?? defaultGroupBy(kind),
+      groupBy,
+      groupBy2: parseEnumParam(params.then, groupByOptions),
+      sort: parseActivitySort(params.sort) ?? defaultActivitySort(groupBy),
       columns: params.columns === undefined ? null : parseColumnList(params.columns),
       page: parsePageParam(params.page),
     },
     rangeError: from > to,
+    viewInUrl: reportViewInUrl(params),
   };
 }
 
@@ -197,6 +289,8 @@ export function reportHref(
     todoId?: string;
     billable?: BillableFilter;
     groupBy?: GroupBy;
+    groupBy2?: GroupBy | null;
+    sort?: ActivitySort | null;
     columns?: string[] | null;
     page?: number;
   },
@@ -214,7 +308,13 @@ export function reportHref(
   if (query.projectId) params.set("project", query.projectId);
   if (query.todoId) params.set("todo", query.todoId);
   if (query.billable && query.billable !== "all") params.set("billable", query.billable);
-  if (query.groupBy && query.groupBy !== defaultGroupBy(kind)) params.set("group", query.groupBy);
+  if (kind === "time-activity" && query.groupBy) {
+    params.set("group", query.groupBy);
+    if (query.groupBy2 && query.groupBy2 !== query.groupBy) params.set("then", query.groupBy2);
+    if (query.sort) params.set("sort", activitySortToken(query.sort));
+  } else if (query.groupBy && query.groupBy !== defaultGroupBy(kind)) {
+    params.set("group", query.groupBy);
+  }
   if (query.columns) params.set("columns", query.columns.join(","));
   const exporting = Boolean(options.exportCsv || options.exportPdf);
   if (query.page && query.page > 1 && !exporting) params.set("page", String(query.page));
@@ -284,6 +384,8 @@ export function describeReportFilters(input: {
   todoName?: string | null;
   billable: BillableFilter;
   groupBy: GroupBy;
+  groupBy2?: GroupBy | null;
+  sortLabel?: string | null;
 }) {
   const lines = [
     `${reportCopy.filterDates}: ${formatDayHeading(input.from)} – ${formatDayHeading(input.to)}`,
@@ -297,8 +399,12 @@ export function describeReportFilters(input: {
     ...(input.todoName ? [`${reportCopy.todoColumn}: ${input.todoName}`] : []),
     `${reportCopy.billableLabel}: ${billableFilterLabel(input.billable)}`,
     `${reportCopy.groupLabel}: ${groupByLabel(input.kind, input.groupBy)}`,
-    `${reportCopy.timezoneLabel}: ${input.timeZone}`,
   );
+  if (input.groupBy2 && input.groupBy2 !== input.groupBy) {
+    lines.push(`${reportCopy.thenLabel}: ${groupByLabel(input.kind, input.groupBy2)}`);
+  }
+  if (input.sortLabel) lines.push(`${reportCopy.sortLabel}: ${input.sortLabel}`);
+  lines.push(`${reportCopy.timezoneLabel}: ${input.timeZone}`);
   return lines;
 }
 
