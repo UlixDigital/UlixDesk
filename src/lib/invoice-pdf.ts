@@ -1,6 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import PDFDocument from "pdfkit";
+import { normalizeInvoiceText } from "@/lib/invoice-text";
 import { pdfText } from "@/lib/report-pdf";
 import { ulixLogoPng } from "@/lib/ulix-logo";
 
@@ -114,8 +115,8 @@ function cleanInput(input: InvoicePdfInput): InvoicePdfInput {
     issueDate: pdfText(input.issueDate),
     dueDate: pdfText(input.dueDate),
     poNumber: input.poNumber ? pdfText(input.poNumber) : null,
-    notes: pdfText(input.notes),
-    bankDetails: pdfText(input.bankDetails),
+    notes: pdfText(normalizeInvoiceText(input.notes)),
+    bankDetails: pdfText(normalizeInvoiceText(input.bankDetails)),
     lines: input.lines.map((line) => ({
       title: pdfText(line.title),
       detail: pdfText(line.detail),

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { UlixLogo } from "@/components/ulix-logo";
 import { getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { isOverdue } from "@/lib/invoice-balance";
 import { invoiceCopy, invoiceStatusLabel } from "@/lib/invoice-copy";
@@ -13,6 +14,7 @@ import {
 import { findPublicInvoice, takePublicInvoiceRead } from "@/lib/invoice-public";
 import { formatMoney } from "@/lib/money";
 import { utcDateKey } from "@/lib/rates";
+import { normalizeInvoiceText } from "@/lib/invoice-text";
 import { requestIp } from "@/lib/request-headers";
 import { todayInTimeZone } from "@/lib/time-zone";
 import { ui } from "@/lib/ui";
@@ -44,6 +46,8 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
     today: todayInTimeZone(await getWorkspaceTimeZone()),
     dueMinor,
   });
+  const notes = normalizeInvoiceText(invoice.notes);
+  const bankDetails = normalizeInvoiceText(invoice.bankDetails);
   const quantityHeader = invoice.lines.some((line) => line.quantityKind === "item") ? invoiceCopy.qty : invoiceCopy.hours;
   const rows = [
     [invoiceCopy.subtotal, formatMoney(invoice.subtotalMinor, invoice.currency)],
@@ -57,18 +61,21 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
   ];
   return (
     <main id="public-invoice" className="mx-auto w-full max-w-3xl px-4 py-10">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-        <div>
+      <header id="public-invoice-header" className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
           <p id="public-invoice-status" className="text-sm font-medium text-slate-500">
             {invoiceStatusLabel(invoice.status)}
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-ink">Invoice {invoice.number}</h1>
           <p className="mt-1 text-sm text-slate-600">{invoice.clientName}</p>
         </div>
-        <a href={`/v/${encodeURIComponent(token)}/pdf`} className={ui.secondaryButton}>
-          {invoiceCopy.publicDownload}
-        </a>
-      </div>
+        <div className="flex shrink-0 flex-col items-start gap-3 sm:items-end">
+          <UlixLogo height={36} />
+          <a href={`/v/${encodeURIComponent(token)}/pdf`} className={ui.secondaryButton}>
+            {invoiceCopy.publicDownload}
+          </a>
+        </div>
+      </header>
       {overdue ? (
         <p id="public-invoice-overdue" role="status" className="mt-6 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-950">
           {invoiceCopy.publicOverdue}
@@ -133,16 +140,16 @@ export default async function PublicInvoicePage({ params }: { params: Promise<{ 
           </div>
         ))}
       </dl>
-      {invoice.notes ? (
+      {notes.trim() ? (
         <section className="mt-6">
           <h2 className="text-sm font-semibold text-ink">{invoiceCopy.notes}</h2>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{invoice.notes}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{notes}</p>
         </section>
       ) : null}
-      {invoice.bankDetails.trim() ? (
+      {bankDetails.trim() ? (
         <section className="mt-6">
           <h2 className="text-sm font-semibold text-ink">{invoiceCopy.bank}</h2>
-          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{invoice.bankDetails}</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{bankDetails}</p>
         </section>
       ) : null}
     </main>

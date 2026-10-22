@@ -51,12 +51,14 @@
     "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "postcss": "8.5.29",
     "deepmerge-ts": "8.0.2",
     "crypto-js": "4.2.0",
-    "braces": "$braces"
+    "braces": "$braces",
+    "vitest": "4.1.12",
+    "@vitest/mocker": "4.1.12"
   }
 }

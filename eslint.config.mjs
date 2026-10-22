@@ -1,6 +1,7 @@
 import { dirname } from "path";
 import { fileURLToPath } from "url";
 import { FlatCompat } from "@eslint/eslintrc";
+import noOptimizedImage from "./eslint/no-optimized-image.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,6 +25,18 @@ const eslintConfig = [
       "extension/dist/**",
       "vendor/**",
     ],
+  },
+  {
+    plugins: {
+      ulixdesk: {
+        rules: {
+          "no-optimized-image": noOptimizedImage,
+        },
+      },
+    },
+    rules: {
+      "ulixdesk/no-optimized-image": "error",
+    },
   },
   {
     files: ["extension/**/*.ts", "extension/**/*.mjs"],

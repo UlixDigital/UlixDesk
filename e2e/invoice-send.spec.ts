@@ -166,6 +166,9 @@ test("an owner emails a draft only after SMTP is set, and a client opens the lin
     expect(opened?.status()).toBe(200);
     await expect(clientPage.locator("#public-invoice")).toBeVisible();
     await expect(clientPage.getByRole("heading", { name: `Invoice ${number}` })).toBeVisible();
+    const publicLogo = clientPage.locator("#public-invoice-header").getByRole("img", { name: "Ulix" });
+    await expect(publicLogo).toBeVisible();
+    await expect(publicLogo).toHaveAttribute("src", "/ulix-logo.svg");
     await expect(clientPage.getByText("Northwind Billing")).toBeVisible();
     await expect(clientPage.getByText("USD 25.00").first()).toBeVisible();
     await expect(clientPage.getByText("Status history")).toHaveCount(0);
