@@ -42,6 +42,12 @@ jobs:
           sudo apt-get install -y postgresql-client
           psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" -c "CREATE DATABASE ulixdesk_test;"
           psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" -c "CREATE DATABASE ulixdesk_e2e;"
+      - name: Reject agent artifact paths in e2e
+        run: |
+          if grep -R -n -F '/opt/cursor/artifacts' e2e; then
+            echo "e2e tests must write screenshots to ULIXDESK_E2E_ARTIFACTS or the Playwright output directory."
+            exit 1
+          fi
       - name: Lint
         run: npm run lint
       - name: Typecheck
