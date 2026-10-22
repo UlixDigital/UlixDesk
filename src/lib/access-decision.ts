@@ -7,8 +7,23 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/set-password/") ||
     pathname === "/api/health" ||
     pathname.startsWith("/api/health/") ||
+    isExtensionHelpPath(pathname) ||
+    isExtensionVersionPath(pathname) ||
     isClientInvoicePath(pathname)
   );
+}
+
+/**
+ * The install guide has no secrets. The zip itself is not on this path.
+ * Signed-out staff can open the steps before they have an account handy.
+ */
+export function isExtensionHelpPath(pathname: string) {
+  return pathname === "/help/extension" || pathname.startsWith("/help/extension/");
+}
+
+/** Version and build date only, so the extension can compare without a session cookie. */
+export function isExtensionVersionPath(pathname: string) {
+  return pathname === "/api/extension/version";
 }
 
 /** The unguessable client invoice link. No session cookie. */

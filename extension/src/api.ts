@@ -406,6 +406,38 @@ export async function revokeSession(
   return { ok: true };
 }
 
+/** Public version check. No access token is sent. A failure means no notice. */
+export async function fetchExtensionVersion(
+  serverUrl: string,
+  fetchImpl: FetchLike = fetch,
+): Promise<{ version: string; builtAt: string } | null> {
+  const base = normalizeServerUrl(serverUrl);
+  if (!base.ok) return null;
+  let response: Response;
+  try {
+    response = await fetchImpl(`${base.origin}/api/extension/version`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      cache: "no-store",
+      credentials: "omit",
+    });
+  } catch {
+    return null;
+  }
+  if (!response.ok) return null;
+  let body: unknown;
+  try {
+    body = await response.json();
+  } catch {
+    return null;
+  }
+  if (!body || typeof body !== "object") return null;
+  const record = body as { version?: unknown; builtAt?: unknown };
+  if (typeof record.version !== "string" || !record.version.trim()) return null;
+  if (typeof record.builtAt !== "string") return null;
+  return { version: record.version, builtAt: record.builtAt };
+}
+
 export async function fetchSession(
   config: ConnectionConfig,
   fetchImpl: FetchLike = fetch,

@@ -76,7 +76,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Build the image
-        run: docker build -t ulixdesk:ci .
+        run: |
+          docker build \
+            --build-arg ULIXDESK_COMMIT="$GITHUB_SHA" \
+            --build-arg ULIXDESK_BUILD_NUMBER="$GITHUB_RUN_NUMBER" \
+            -t ulixdesk:ci .
       - name: Migrate, start, and render a PDF
         run: |
           set -eu
@@ -94,6 +98,9 @@ jobs:
             -e MIGRATE_DATABASE_URL='postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk?connection_limit=1' \
             -e ULIXDESK_SESSION_SECRET='ci-session-secret-at-least-32-characters' \
             -e ULIXDESK_EXTENSION_IDS='abcdefghijklmnopabcdefghijklmnop' \
+            -e ULIXDESK_BOOTSTRAP_EMAIL='smoke@ulix.test' \
+            -e ULIXDESK_BOOTSTRAP_PASSWORD='smoke-password-10' \
+            -e ULIXDESK_BOOTSTRAP_NAME='Smoke' \
             -e CHECKPOINT_DISABLE=1 \
             -e "PRISMA_SCHEMA_ENGINE_BINARY=$schema_engine" \
             -e "PRISMA_QUERY_ENGINE_LIBRARY=$query_engine" \
@@ -114,6 +121,31 @@ jobs:
           docker logs ulixdesk-smoke 2>&1 | grep -q "Migrations applied."
           docker logs ulixdesk-smoke 2>&1 | grep -q "Connecting for migrations as ulixdesk."
           docker logs ulixdesk-smoke 2>&1 | grep -q "Starting the app as ulixdesk_app."
+          docker logs ulixdesk-smoke 2>&1 | grep -q "Created the owner account smoke@ulix.test."
+          psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" <<'SQL'
+          GRANT USAGE ON SCHEMA public TO ulixdesk_app;
+          GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO ulixdesk_app;
+          GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO ulixdesk_app;
+          SQL
+          user_id=$(psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" -tA \
+            -c "SELECT id FROM \"User\" WHERE email = 'smoke@ulix.test';")
+          [[ "$user_id" =~ ^[a-z0-9]+$ ]]
+          creds=$(docker exec ulixdesk-smoke node --input-type=module -e '
+            import { createHash, randomBytes } from "node:crypto";
+            import { signSessionCookie } from "/app/scripts/session-cookie.mjs";
+            const token = randomBytes(32).toString("base64url");
+            const hash = createHash("sha256").update(token).digest("hex");
+            const cookie = signSessionCookie(token, process.env.ULIXDESK_SESSION_SECRET);
+            process.stdout.write(hash + "\n" + cookie + "\n");
+          ')
+          token_hash=$(printf '%s\n' "$creds" | sed -n '1p')
+          session_cookie=$(printf '%s\n' "$creds" | sed -n '2p')
+          [[ "$token_hash" =~ ^[a-f0-9]{64}$ ]]
+          [ -n "$session_cookie" ]
+          psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" \
+            -c "INSERT INTO \"Session\" (\"id\", \"userId\", \"tokenHash\", \"expiresAt\") VALUES ('smoke-extension', '$user_id', '$token_hash', NOW() + interval '1 hour');"
+          docker exec -e ULIXDESK_SMOKE_COOKIE="$session_cookie" ulixdesk-smoke \
+            node scripts/smoke-extension-download.mjs
           docker run --rm --memory=384m --memory-swap=384m ulixdesk:ci \
             node scripts/render-invoice-sample.mjs /tmp/invoice-sample.pdf
           echo "PDF render exited 0 under --memory=384m."

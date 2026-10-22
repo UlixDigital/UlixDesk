@@ -52,6 +52,7 @@ yarn-error.log*
 # unpacked Chrome extension build
 /extension/dist/
 /extension/ulixdesk-extension.zip
+/extension/extension-build.json
 
 # vercel
 .vercel
