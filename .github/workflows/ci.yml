@@ -97,6 +97,7 @@ jobs:
             -e DATABASE_URL='postgresql://ulixdesk_app:ulixdeskapp@127.0.0.1:5432/ulixdesk' \
             -e MIGRATE_DATABASE_URL='postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk?connection_limit=1' \
             -e ULIXDESK_SESSION_SECRET='ci-session-secret-at-least-32-characters' \
+            -e ULIXDESK_PUBLIC_ORIGIN='https://staging.desk.ulixdigital.com' \
             -e ULIXDESK_EXTENSION_IDS='abcdefghijklmnopabcdefghijklmnop' \
             -e ULIXDESK_BOOTSTRAP_EMAIL='smoke@ulix.test' \
             -e ULIXDESK_BOOTSTRAP_PASSWORD='smoke-password-10' \

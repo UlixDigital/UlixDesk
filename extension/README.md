@@ -23,7 +23,7 @@ The unpacked id is `cjlaoflbipaehclleojofopapalhiooe`. The server must list that
 ## Sign in
 
 1. Click the UlixDesk toolbar button.
-2. The server is `https://desk.ulixdigital.com`. Choose **Use staging** for the rehearsal site, or **Custom server** for another origin.
+2. A zip from Settings already points at the server that served it. A local unpacked build leaves the server blank. **Use production** selects `https://desk.ulixdigital.com`. **Use staging** selects the rehearsal site. **Custom server** is any other origin.
 3. Enter the UlixDesk email and password and choose **Sign in**.
 4. When Chrome asks, allow the extension to reach that server. It asks only for that origin.
 5. The popup shows the name and email. **Sign out** revokes the sign-in on the server.

@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { zipEntries } from "../extension/zip.mjs";
 
 const origin = process.env.ULIXDESK_SMOKE_ORIGIN ?? "http://127.0.0.1:3000";
 const cookie = process.env.ULIXDESK_SMOKE_COOKIE ?? "";
@@ -53,12 +54,23 @@ if (!type.includes("application/zip")) {
   process.exit(1);
 }
 const body = Buffer.from(await signed.arrayBuffer());
-if (body.readUInt32LE(0) !== 0x04034b50 || !body.includes(Buffer.from("INSTALL.txt"))) {
-  console.error("Signed download was not the extension zip.");
+if (body.readUInt32LE(0) !== 0x04034b50) {
+  console.error("Signed download was not a zip.");
   process.exit(1);
 }
-if (body.length !== packed.length) {
-  console.error(`Signed download was ${body.length} bytes, image zip is ${packed.length}.`);
+const entries = zipEntries(body);
+for (const name of ["INSTALL.txt", "manifest.json", "default-server.json"]) {
+  if (!entries.some((entry) => entry.name === name)) {
+    console.error(`Signed download is missing ${name}.`);
+    process.exit(1);
+  }
+}
+const baked = JSON.parse(entries.find((entry) => entry.name === "default-server.json").data.toString("utf8"));
+const expectedServer = process.env.ULIXDESK_PUBLIC_ORIGIN
+  ? new URL(process.env.ULIXDESK_PUBLIC_ORIGIN).origin
+  : new URL(origin).origin;
+if (baked.serverUrl !== expectedServer) {
+  console.error(`Signed download server URL was ${baked.serverUrl}, expected ${expectedServer}.`);
   process.exit(1);
 }
 
