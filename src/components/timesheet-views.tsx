@@ -91,6 +91,9 @@ export function DailyTimesheet({
                   {" · "}
                   {row.billable ? rateCopy.billablePrefix : rateCopy.nonBillable}
                 </p>
+                {row.todoTitle ? (
+                  <p className="mt-1 text-sm text-slate-700">{row.todoTitle}</p>
+                ) : null}
                 {row.note ? (
                   <p className="mt-1 line-clamp-2 text-sm break-words text-slate-600">
                     {row.note}

@@ -33,6 +33,8 @@ model User {
   invoicePayments   InvoicePayment[]
   invoiceStatusEvents InvoiceStatusEvent[]
   invoiceEmailsSent InvoiceEmail[]
+  todosCreated      Todo[]           @relation("TodoAuthor")
+  todoAssignments   TodoAssignee[]
 
   @@index([role])
   @@index([deactivatedAt])
@@ -120,6 +122,7 @@ model Project {
   timeEntries TimeEntry[]
   billRates   BillRate[]
   budget      Budget?
+  todos       Todo[]
 
   @@index([clientId])
   @@index([archivedAt])
@@ -184,6 +187,9 @@ model TimeEntry {
   billable     Boolean
   note         String?
   source       String
+  /// Optional to-do. Done and archived to-dos stay on old entries.
+  todoId       String?
+  todo         Todo?         @relation(fields: [todoId], references: [id], onDelete: Restrict)
   createdAt    DateTime      @default(now())
   updatedAt    DateTime      @updatedAt
   runningTimer RunningTimer?
@@ -193,6 +199,46 @@ model TimeEntry {
   @@index([userId, startedAt])
   @@index([startedAt])
   @@index([endedAt])
+  @@index([todoId])
+}
+
+/// Work inside a project. Assignees default to the creator.
+/// `status` is open or done. Archive sets `archivedAt`; rows are not deleted
+/// while time entries still point here.
+/// There is no manager role and Project has no manager relation.
+model Todo {
+  id          String         @id @default(cuid())
+  projectId   String
+  project     Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title       String
+  description String?
+  /// open or done.
+  status      String         @default("open")
+  archivedAt  DateTime?
+  createdById String
+  createdBy   User           @relation("TodoAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  assignees   TodoAssignee[]
+  timeEntries TimeEntry[]
+
+  @@index([projectId])
+  @@index([createdById])
+  @@index([status])
+  @@index([archivedAt])
+}
+
+/// A person assigned to a to-do. The creator is assigned unless an owner or
+/// admin chooses someone else. Workspace users are the project members:
+/// projects do not have their own membership list.
+model TodoAssignee {
+  todoId String
+  userId String
+  todo   Todo   @relation(fields: [todoId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([todoId, userId])
+  @@index([userId])
 }
 
 /// Append-only log of a time entry create, edit, delete, or timer start/stop.

@@ -29,6 +29,7 @@ export type PopupModel =
       elapsedLabel: string;
       status: string;
       alert: string | null;
+      todoTitle: string | null;
     };
 
 /** Maps a failed token refresh onto the popup error that matches its message. */
@@ -92,6 +93,7 @@ export function derivePopup(input: {
       elapsedLabel: formatElapsed(input.now - Date.parse(input.timer.startedAt)),
       status: input.startedHere ? popupCopy.timerRunning : popupCopy.alreadyRunning,
       alert: input.alert,
+      todoTitle: input.timer.todoTitle?.trim() || null,
     };
   }
   if (input.failure) return failureModel(input.failure);

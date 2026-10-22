@@ -9,6 +9,7 @@ import { BudgetForm } from "@/components/budget-form";
 import { BudgetProgressView } from "@/components/budget-progress";
 import { RateHistory } from "@/components/rate-history";
 import { ProjectForm } from "@/components/project-form";
+import { ProjectTabs } from "@/components/project-tabs";
 import { authCopy } from "@/lib/auth-copy";
 import { budgetCopy } from "@/lib/budget-copy";
 import { budgetFormValues, projectBudgetProgress } from "@/lib/budgets";
@@ -61,6 +62,7 @@ export default async function EditProjectPage({ params }: EditPageProps) {
     });
     return (
       <div>
+        <ProjectTabs projectId={project.id} current="details" />
         <p className="text-sm text-slate-500">
           <Link href="/projects" className="hover:text-accent">
             Projects
@@ -110,7 +112,9 @@ export default async function EditProjectPage({ params }: EditPageProps) {
   const archived = project.archivedAt !== null;
 
   return (
-    <ProjectForm
+    <div>
+      <ProjectTabs projectId={project.id} current="details" />
+      <ProjectForm
       key={project.id}
       action={saveProjectAction}
       projectId={project.id}
@@ -187,5 +191,6 @@ export default async function EditProjectPage({ params }: EditPageProps) {
         </div>
       }
     />
+    </div>
   );
 }

@@ -31,6 +31,9 @@ export async function POST(request: Request) {
   if (record.note != null && typeof record.note !== "string") {
     return jsonApi(request, apiError(timeCopy.invalidJson, apiCodes.INVALID_JSON), 400);
   }
+  if (record.todoId != null && typeof record.todoId !== "string") {
+    return jsonApi(request, apiError(timeCopy.invalidJson, apiCodes.INVALID_JSON), 400);
+  }
 
   const result = await startTimer({
     projectId: record.projectId,
@@ -39,6 +42,7 @@ export async function POST(request: Request) {
     userId: actor.userId,
     actorId: actor.userId,
     source: actor.source,
+    todoId: typeof record.todoId === "string" ? record.todoId : null,
   });
 
   if (!result.ok) {
@@ -47,7 +51,9 @@ export async function POST(request: Request) {
         ? 409
         : result.code === "project-missing"
           ? 404
-          : 400;
+          : result.code === "todo-unavailable"
+            ? 403
+            : 400;
     return jsonApi(
       request,
       {

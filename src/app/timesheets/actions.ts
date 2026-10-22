@@ -7,6 +7,7 @@ import { BudgetReachedError } from "@/lib/budgets";
 import { isInvoicedTimeError } from "@/lib/invoice-lock";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy, timerFailureMessage } from "@/lib/time-copy";
+import { TodoUnavailableError, todoIdForTime } from "@/lib/todos";
 import {
   createManualEntry,
   deleteTimeEntry,
@@ -65,11 +66,25 @@ export async function saveTimeEntryAction(
     return { errors: { projectId: timeCopy.projectInactive }, values };
   }
 
+  const chosen = await todoIdForTime({
+    actor: gate.user,
+    projectId: result.data.projectId,
+    todoId: result.data.todoId,
+    draftTitle: String(formData.get("todoDraft") ?? ""),
+    currentTodoId: existing?.todoId ?? null,
+  });
+  if (!chosen.ok) return { errors: { todoId: chosen.error }, values };
+
   let saved: { overlap: boolean; clientId: string | null; warnings: string[]; projectId: string };
   const change = { actorId: gate.user.id, source: "web" as const, changedAt: now };
   try {
     if (!existing) {
-      const created = await createManualEntry(result.data, now, gate.user.id, change);
+      const created = await createManualEntry(
+        { ...result.data, todoId: chosen.todoId },
+        now,
+        gate.user.id,
+        change,
+      );
       saved = {
         overlap: created.overlap,
         clientId: created.entry.project.client?.id ?? null,
@@ -79,10 +94,11 @@ export async function saveTimeEntryAction(
     } else {
       const updated = await updateManualEntry(
         existing.id,
-        result.data,
+        { ...result.data, todoId: chosen.todoId },
         now,
         existing.userId ?? gate.user.id,
         change,
+        gate.user.id,
       );
       if (!updated) return { errors: { form: timeCopy.entryGone }, values };
       saved = {
@@ -98,6 +114,9 @@ export async function saveTimeEntryAction(
     }
     if (isInvoicedTimeError(error)) {
       return { errors: { form: timeCopy.invoicedTime }, values };
+    }
+    if (error instanceof TodoUnavailableError) {
+      return { errors: { todoId: timeCopy.todoUnavailable }, values };
     }
     console.error("Failed to save time entry", error);
     return { errors: { form: timeCopy.saveFailed }, values };
@@ -152,13 +171,22 @@ export async function startTimerAction(
   const gate = await gateMutation();
   if (!gate.ok) return { error: gate.error, warnings: [] };
   const now = new Date();
+  const projectId = String(formData.get("projectId") ?? "");
+  const chosen = await todoIdForTime({
+    actor: gate.user,
+    projectId,
+    todoId: String(formData.get("todoId") ?? ""),
+    draftTitle: String(formData.get("todoDraft") ?? ""),
+  });
+  if (!chosen.ok) return { error: chosen.error, warnings: [] };
   const result = await startTimer({
-    projectId: String(formData.get("projectId") ?? ""),
+    projectId,
     note: "",
     now,
     userId: gate.user.id,
     actorId: gate.user.id,
     source: "web",
+    todoId: chosen.todoId,
   });
   if (!result.ok) {
     return { error: timerFailureMessage(result.code), warnings: [] };

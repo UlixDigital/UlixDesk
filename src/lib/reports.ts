@@ -40,6 +40,8 @@ export type SourceEntry = {
   billable: boolean;
   projectBillable: boolean;
   note: string | null;
+  todoId?: string | null;
+  todoTitle?: string | null;
   rate: ResolvedRate | null;
   /** manual or timer. Omitted on older fixtures; treated as timer. */
   source?: "manual" | "timer";
@@ -58,6 +60,8 @@ export type ReportSlice = {
   startedAt: Date;
   endedAt: Date;
   note: string;
+  todoId: string;
+  todoTitle: string;
   source: "manual" | "timer";
   edited: boolean;
   date: string;
@@ -113,6 +117,8 @@ function named(entry: SourceEntry): Omit<ReportSlice, "date" | "weekStart" | "du
     startedAt: entry.startedAt,
     endedAt: entry.endedAt,
     note: entry.note ?? "",
+    todoId: entry.todoId ?? "",
+    todoTitle: entry.todoTitle?.trim() ?? "",
     source: entry.source === "manual" ? "manual" : "timer",
     edited: entry.edited === true,
   };
@@ -163,6 +169,10 @@ function groupOf(slice: ReportSlice, groupBy: GroupBy, kind: ReportKind) {
   if (groupBy === "member") return { id: slice.userId || "none", label: slice.userName };
   if (groupBy === "client") return { id: slice.clientId || "none", label: slice.clientName };
   if (groupBy === "project") return { id: slice.projectId, label: slice.projectName };
+  if (groupBy === "todo") {
+    if (!slice.todoId) return { id: "none", label: reportCopy.noTodo };
+    return { id: slice.todoId, label: slice.todoTitle || reportCopy.noTodo };
+  }
   return { id: slice.date, label: formatDayHeading(slice.date) };
 }
 
@@ -181,6 +191,7 @@ function groupHeading(groupBy: GroupBy, kind: ReportKind) {
   if (groupBy === "member") return reportCopy.member;
   if (groupBy === "client") return reportCopy.clientLabel;
   if (groupBy === "project") return reportCopy.projectLabel;
+  if (groupBy === "todo") return reportCopy.todoColumn;
   return reportCopy.date;
 }
 
@@ -401,7 +412,7 @@ function buildSessions(
   selected: Set<string>,
 ): BuiltReport {
   const columns: ReportColumn[] = [];
-  const order = ["member", "start", "end", "duration", "project", "client", "notes", "billable"];
+  const order = ["member", "start", "end", "duration", "project", "todo", "client", "notes", "billable"];
   for (const id of order) {
     if (!selected.has(id)) continue;
     if (id === "member" && !input.manager) continue;
@@ -414,9 +425,11 @@ function buildSessions(
             ? reportCopy.end
             : id === "duration"
               ? reportCopy.duration
-              : id === "project"
-                ? reportCopy.projectLabel
-                : id === "client"
+                : id === "project"
+                  ? reportCopy.projectLabel
+                  : id === "todo"
+                    ? reportCopy.todoColumn
+                    : id === "client"
                   ? reportCopy.clientLabel
                   : id === "notes"
                     ? reportCopy.notes
@@ -448,6 +461,7 @@ function buildSessions(
       cells.duration = formatTrackedDuration(entry.endedAt.getTime() - entry.startedAt.getTime());
     }
     if (selected.has("project")) cells.project = name.projectName;
+    if (selected.has("todo")) cells.todo = name.todoTitle || "—";
     if (selected.has("client")) cells.client = name.clientName;
     if (selected.has("notes")) cells.notes = name.note === "" ? "—" : name.note;
     if (selected.has("billable")) cells.billable = sessionBillable(entry);
@@ -466,6 +480,7 @@ function buildSessions(
         return decimalHours(entry.endedAt.getTime() - entry.startedAt.getTime());
       }
       if (column.id === "project") return name.projectName;
+      if (column.id === "todo") return entry.todoTitle?.trim() ?? "";
       if (column.id === "client") return name.clientName;
       if (column.id === "notes") return entry.note ?? "";
       if (column.id === "billable") return sessionBillable(entry);
@@ -490,6 +505,7 @@ function sessionSortKey(entry: SourceEntry, groupBy: GroupBy, timeZone: string) 
   if (groupBy === "member") return name.userName;
   if (groupBy === "client") return name.clientName;
   if (groupBy === "project") return name.projectName;
+  if (groupBy === "todo") return name.todoTitle || reportCopy.noTodo;
   return date;
 }
 
@@ -515,6 +531,7 @@ function reportWhere(input: {
   userId: string | null;
   clientId: string | null;
   projectId: string | null;
+  todoId: string | null;
   billable: BillableFilter;
 }): Prisma.TimeEntryWhereInput {
   const and: Prisma.TimeEntryWhereInput[] = [
@@ -523,6 +540,7 @@ function reportWhere(input: {
   ];
   if (input.userId) and.push({ userId: input.userId });
   if (input.projectId) and.push({ projectId: input.projectId });
+  if (input.todoId) and.push({ todoId: input.todoId });
   if (input.clientId) and.push({ project: { clientId: input.clientId } });
   if (input.billable === "billable") {
     and.push({ billable: true, project: { billable: true } });
@@ -549,6 +567,7 @@ export async function loadReportEntries(input: {
   memberId: string | null;
   clientId: string | null;
   projectId: string | null;
+  todoId?: string | null;
   billable: BillableFilter;
   timeZone: string;
 }): Promise<LoadedReport> {
@@ -561,6 +580,7 @@ export async function loadReportEntries(input: {
     userId,
     clientId: input.clientId,
     projectId: input.projectId,
+    todoId: input.todoId ?? null,
     billable: input.billable,
   });
   const total = await prisma.timeEntry.count({ where });
@@ -576,6 +596,7 @@ export async function loadReportEntries(input: {
           client: { select: { id: true, name: true } },
         },
       },
+      todo: { select: { id: true, title: true } },
     },
     orderBy: [{ startedAt: "asc" }, { id: "asc" }],
   });
@@ -605,6 +626,8 @@ export async function loadReportEntries(input: {
         billable: row.billable,
         projectBillable: row.project.billable,
         note: row.note,
+        todoId: row.todo?.id ?? null,
+        todoTitle: row.todo?.title ?? null,
         rate: null,
         source: row.source === "manual" ? "manual" : "timer",
         edited: editedIds.has(row.id),

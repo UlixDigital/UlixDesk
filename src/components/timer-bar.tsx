@@ -4,13 +4,15 @@ import {
   getRunningTimer,
   listActiveProjectsForPicker,
 } from "@/lib/time-entries";
+import { listPickerTodos } from "@/lib/todos";
 import { canManageWorkspace } from "@/lib/users-validation";
 
 export async function TimerBar() {
   const user = await getCurrentUser();
-  const [projects, timer] = await Promise.all([
+  const [projects, timer, todos] = await Promise.all([
     listActiveProjectsForPicker(),
     user ? getRunningTimer(user.id) : Promise.resolve(null),
+    user ? listPickerTodos(user) : Promise.resolve([]),
   ]);
 
   return (
@@ -25,11 +27,13 @@ export async function TimerBar() {
             name: project.name,
             clientName: project.clientName,
           }))}
+          todos={todos}
           timer={
             timer
               ? {
                   projectName: timer.project.name,
                   clientName: timer.project.client?.name ?? null,
+                  todoTitle: timer.todo?.title ?? null,
                   startedAt: timer.startedAt.toISOString(),
                 }
               : null

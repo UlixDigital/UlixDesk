@@ -50,12 +50,15 @@ export async function GET(
       : null;
     const client = prepared.clients.find((item) => item.id === prepared.query.clientId) ?? null;
     const project = prepared.projects.find((item) => item.id === prepared.query.projectId) ?? null;
+    const todo = prepared.todos.find((item) => item.id === prepared.query.todoId) ?? null;
     const lines: ActivityLine[] = prepared.entries.flatMap((entry) =>
       slicesForEntry(entry, rangeStart, rangeEnd, prepared.timeZone).map((slice) => ({
         clientName: slice.clientName,
         date: slice.date,
         memberName: slice.userName,
         projectName: slice.projectName,
+        todoId: slice.todoId,
+        todoTitle: slice.todoTitle,
         durationMs: slice.durationMs,
         billableMs: slice.billableMs,
         amount: slice.amount,
@@ -75,6 +78,7 @@ export async function GET(
         memberName: member?.name ?? null,
         clientName: client?.name ?? null,
         projectName: project?.name ?? null,
+        todoName: todo?.name ?? null,
         billable: prepared.query.billable,
       }),
     });
@@ -89,6 +93,7 @@ export async function GET(
     const member = prepared.people.find((person) => person.id === prepared.query.memberId) ?? null;
     const client = prepared.clients.find((item) => item.id === prepared.query.clientId) ?? null;
     const project = prepared.projects.find((item) => item.id === prepared.query.projectId) ?? null;
+    const todo = prepared.todos.find((item) => item.id === prepared.query.todoId) ?? null;
     const pdf = await renderReportPdf({
       title: reportTitle(report),
       filters: describeReportFilters({
@@ -100,6 +105,7 @@ export async function GET(
         memberName: member?.name ?? null,
         clientName: client?.name ?? null,
         projectName: project?.name ?? null,
+        todoName: todo?.name ?? null,
         billable: prepared.query.billable,
         groupBy: prepared.query.groupBy,
       }),

@@ -3,9 +3,11 @@ import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 import { popupCopy } from "./copy";
 import {
+  createTodo,
   fetchExtensionVersion,
   fetchProjects,
   fetchTimer,
+  fetchTodos,
   requestExtensionSignIn,
   startTimer,
   stopTimer,
@@ -201,5 +203,39 @@ describe("extension API client", () => {
       throw new Error("offline");
     };
     expect(await fetchExtensionVersion("http://127.0.0.1:3000", down)).toBeNull();
+  });
+
+  it("loads open to-dos and sends a selected to-do when the timer starts", async () => {
+    const calls: Array<{ url: string; body: string }> = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      calls.push({ url, body: String(init?.body ?? "") });
+      if (url.endsWith("/api/todos") && init?.method === "POST") {
+        return jsonResponse({ todo: { id: "todo-1", projectId: "website", title: "Design the header" } }, 201);
+      }
+      if (url.includes("/api/todos")) {
+        return jsonResponse({ todos: [{ id: "todo-1", projectId: "website", title: "Design the header" }] });
+      }
+      return jsonResponse({ timer, warnings: [] }, 201);
+    };
+    expect(await fetchTodos(config, "website", fetchImpl)).toEqual({
+      ok: true,
+      todos: [{ id: "todo-1", projectId: "website", title: "Design the header" }],
+    });
+    expect(await createTodo(config, "website", "Design the header", fetchImpl)).toMatchObject({
+      ok: true,
+      todo: { id: "todo-1", title: "Design the header" },
+    });
+    expect(await startTimer(config, "website", "Note", fetchImpl, "todo-1")).toMatchObject({ ok: true });
+    expect(calls.map((call) => call.url)).toEqual([
+      "http://127.0.0.1:3000/api/todos?projectId=website",
+      "http://127.0.0.1:3000/api/todos",
+      "http://127.0.0.1:3000/api/timer/start",
+    ]);
+    expect(JSON.parse(calls[2]?.body ?? "{}")).toEqual({
+      projectId: "website",
+      note: "Note",
+      todoId: "todo-1",
+    });
+    expect(calls[1]?.body).toContain("Design the header");
   });
 });

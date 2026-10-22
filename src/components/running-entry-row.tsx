@@ -54,6 +54,9 @@ export function RunningEntryRow({
           {" · "}
           {entry.billable ? rateCopy.billablePrefix : rateCopy.nonBillable}
         </p>
+        {entry.todoTitle ? (
+          <p className="mt-1 text-sm text-slate-700">{entry.todoTitle}</p>
+        ) : null}
         {entry.note ? (
           <p className="mt-1 line-clamp-2 text-sm break-words text-slate-600">{entry.note}</p>
         ) : null}

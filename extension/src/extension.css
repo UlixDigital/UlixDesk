@@ -284,6 +284,47 @@ button:focus-visible {
   word-break: break-all;
 }
 
+.todo-list {
+  max-height: 140px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--card);
+}
+
+.todo-option,
+.todo-add {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.todo-option[aria-selected="true"] {
+  background: #eef3ff;
+  font-weight: 600;
+}
+
+.todo-add {
+  color: var(--primary);
+  font-weight: 600;
+}
+
+.todo-empty,
+.todo-heading {
+  margin: 8px 0 4px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
 .sr-only {
   position: absolute;
   width: 1px;

@@ -9,6 +9,8 @@ import { getCurrentUser } from "@/lib/session";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { timeCopy } from "@/lib/time-copy";
 import { getTimeEntry, listOverlapCandidates, listProjectChoices } from "@/lib/time-entries";
+import { listPickerTodos } from "@/lib/todos";
+import { todoCopy } from "@/lib/todo-copy";
 import { timesheetsHref } from "@/lib/timesheet";
 import { isRealCalendarDate, todayInTimeZone, zonedParts } from "@/lib/time-zone";
 import { ui } from "@/lib/ui";
@@ -67,8 +69,20 @@ export default async function EditTimeEntryPage({
     );
   }
 
-  const projects = await listProjectChoices(entry.projectId);
-  const overlaps = await listOverlapCandidates(new Date(), entry.userId ?? user.id);
+  const [projects, overlaps, todos] = await Promise.all([
+    listProjectChoices(entry.projectId),
+    listOverlapCandidates(new Date(), entry.userId ?? user.id),
+    listPickerTodos(user),
+  ]);
+  const pinned =
+    entry.todo && (entry.todo.status !== "open" || entry.todo.archivedAt)
+      ? {
+          id: entry.todo.id,
+          projectId: entry.projectId,
+          title: entry.todo.title,
+          label: entry.todo.archivedAt ? todoCopy.archived : todoCopy.done,
+        }
+      : null;
   const start = zonedParts(entry.startedAt, timeZone);
   const end = zonedParts(entry.endedAt, timeZone);
   const requestedDate = (query.date ?? "").trim();
@@ -81,6 +95,8 @@ export default async function EditTimeEntryPage({
         entryId={entry.id}
         timeZone={timeZone}
         projects={projects}
+        todos={todos}
+        pinnedTodo={pinned}
         overlaps={overlaps}
         cancelHref={timesheetsHref({ date: returnDate })}
         title="Edit time entry"
@@ -96,6 +112,7 @@ export default async function EditTimeEntryPage({
             endTime: end.time,
             billable: entry.billable,
             note: entry.note ?? "",
+            todoId: entry.todoId ?? "",
             timeZone,
           },
         }}

@@ -1,13 +1,16 @@
 import {
+  createTodo,
   fetchExtensionVersion,
   fetchProjects,
   fetchSession,
   fetchTimer,
+  fetchTodos,
   requestExtensionSignIn,
   startTimer,
   stopTimer,
   type ApiProject,
   type ApiTimer,
+  type ApiTodo,
   type ClientFailure,
 } from "./api";
 import { popupCopy } from "./copy";
@@ -37,6 +40,12 @@ let timer: ApiTimer | null = null;
 let failure: ClientFailure | null = null;
 let projectId = "";
 let note = "";
+let todos: ApiTodo[] = [];
+let todosForProject = "";
+let todosLoading = "";
+let todoId = "";
+let todoQuery = "";
+let todoError: string | null = null;
 let projectNotice: string | null = null;
 let startedHere = false;
 let alertMessage: string | null = null;
@@ -253,7 +262,16 @@ async function load() {
 }
 
 function render() {
+  const restoreTodo = document.activeElement instanceof HTMLInputElement && document.activeElement.id === "todo-search";
   root.replaceChildren(view());
+  if (restoreTodo) {
+    const search = document.getElementById("todo-search");
+    if (search instanceof HTMLInputElement) {
+      search.focus();
+      const end = search.value.length;
+      search.setSelectionRange(end, end);
+    }
+  }
   if (signedIn) {
     const model = currentModel();
     if (model.kind === "running") scheduleTick(model.startedAt);
@@ -610,6 +628,11 @@ function idleForm(model: Extract<PopupModel, { kind: "idle" }>) {
     projectId = select.value;
     projectNotice = null;
     alertMessage = null;
+    todoId = "";
+    todoQuery = "";
+    todoError = null;
+    todos = [];
+    todosForProject = "";
     void writeSettings({ lastProjectId: projectId });
     render();
   });
@@ -632,6 +655,7 @@ function idleForm(model: Extract<PopupModel, { kind: "idle" }>) {
   noteField.append(noteLabel, textarea);
 
   form.append(projectField);
+  if (model.projectId) form.append(todoField(model.projectId));
   if (model.notice) form.append(noteLine(model.notice, "notice"));
   else form.append(noteLine(model.helper, "helper"));
   if (model.alert) form.append(noteLine(model.alert, "alert"));
@@ -649,6 +673,7 @@ function runningView(model: Extract<PopupModel, { kind: "running" }>) {
   status.setAttribute("role", "status");
   const name = el("h2", "project-name", model.projectName);
   wrap.append(status, name);
+  if (model.todoTitle) wrap.append(el("p", "client-name", model.todoTitle));
   if (model.clientName) wrap.append(el("p", "client-name", model.clientName));
   const elapsed = el("p", "elapsed", model.elapsedLabel);
   elapsed.dataset.elapsed = "true";
@@ -660,12 +685,150 @@ function runningView(model: Extract<PopupModel, { kind: "running" }>) {
   return wrap;
 }
 
+function todoField(currentProjectId: string) {
+  ensureTodos(currentProjectId);
+  const field = el("div", "field");
+  const label = el("span", "label-row");
+  label.append(el("span", "label", popupCopy.todoLabel));
+  label.append(el("span", "optional", popupCopy.todoOptional));
+  const search = document.createElement("input");
+  search.type = "text";
+  search.id = "todo-search";
+  search.placeholder = popupCopy.todoSearch;
+  search.value = todoQuery;
+  search.addEventListener("input", () => {
+    todoQuery = search.value;
+    render();
+  });
+  field.append(label, search);
+  if (todosLoading === currentProjectId && todosForProject !== currentProjectId) {
+    field.append(el("p", "todo-heading", popupCopy.todoLoading));
+    return field;
+  }
+  if (todoError) field.append(noteLine(todoError, "alert"));
+  const needle = todoQuery.trim().toLowerCase();
+  const matches = todos.filter((todo) => !needle || todo.title.toLowerCase().includes(needle));
+  const exact = todos.find((todo) => todo.title.toLowerCase() === needle);
+  field.append(el("p", "todo-heading", popupCopy.todoMine));
+  const list = document.createElement("ul");
+  list.className = "todo-list";
+  list.setAttribute("role", "listbox");
+  list.setAttribute("aria-label", popupCopy.todoMine);
+  const none = document.createElement("button");
+  none.type = "button";
+  none.className = "todo-option";
+  none.textContent = popupCopy.todoNone;
+  none.setAttribute("role", "option");
+  none.setAttribute("aria-selected", todoId ? "false" : "true");
+  none.addEventListener("click", () => {
+    todoId = "";
+    render();
+  });
+  const noneItem = document.createElement("li");
+  noneItem.append(none);
+  list.append(noneItem);
+  for (const todo of matches) {
+    const item = document.createElement("li");
+    const option = document.createElement("button");
+    option.type = "button";
+    option.className = "todo-option";
+    option.textContent = todo.title;
+    option.setAttribute("role", "option");
+    option.setAttribute("aria-selected", todo.id === todoId ? "true" : "false");
+    option.addEventListener("click", () => {
+      todoId = todo.id;
+      todoQuery = "";
+      render();
+    });
+    item.append(option);
+    list.append(item);
+  }
+  if (matches.length === 0) {
+    const empty = document.createElement("li");
+    empty.className = "todo-empty";
+    empty.textContent = popupCopy.todoEmpty;
+    list.append(empty);
+  }
+  if (needle && !exact && !todoId) {
+    const item = document.createElement("li");
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "todo-add";
+    add.textContent = `${popupCopy.todoAdd} “${todoQuery.trim()}”`;
+    add.addEventListener("click", () => {
+      void addTodo(currentProjectId, todoQuery.trim());
+    });
+    item.append(add);
+    list.append(item);
+  }
+  field.append(list);
+  return field;
+}
+
+async function addTodo(currentProjectId: string, title: string) {
+  if (busy || !title) return;
+  busy = true;
+  todoError = null;
+  render();
+  const created = await createTodo({ serverUrl, token }, currentProjectId, title);
+  busy = false;
+  if (!created.ok) {
+    todoError = created.reason === "http" ? created.message : popupCopy.todoFailed;
+    render();
+    return;
+  }
+  todos = [...todos.filter((todo) => todo.id !== created.todo.id), created.todo].sort((a, b) =>
+    a.title.localeCompare(b.title, "en", { sensitivity: "base" }),
+  );
+  todoId = created.todo.id;
+  todoQuery = "";
+  render();
+}
+
+function ensureTodos(currentProjectId: string) {
+  if (!currentProjectId || todosForProject === currentProjectId || todosLoading === currentProjectId) return;
+  todosLoading = currentProjectId;
+  void fetchTodos({ serverUrl, token }, currentProjectId).then((result) => {
+    if (projectId !== currentProjectId) return;
+    todosLoading = "";
+    if (!result.ok) {
+      todos = [];
+      todosForProject = currentProjectId;
+      todoError = result.reason === "http" ? result.message : popupCopy.todoFailed;
+    } else {
+      todos = result.todos;
+      todosForProject = currentProjectId;
+      todoError = null;
+    }
+    render();
+  });
+}
+
 async function onStart() {
   if (busy || !projectId) return;
   busy = true;
   alertMessage = null;
   render();
-  const result = await startTimer({ serverUrl, token }, projectId, note.trim());
+  let selectedTodo = todoId;
+  const draft = todoQuery.trim();
+  if (!selectedTodo && draft) {
+    const exact = todos.find((todo) => todo.title.toLowerCase() === draft.toLowerCase());
+    if (exact) selectedTodo = exact.id;
+    else {
+      const created = await createTodo({ serverUrl, token }, projectId, draft);
+      if (!created.ok) {
+        busy = false;
+        todoError = created.reason === "http" ? created.message : popupCopy.todoFailed;
+        render();
+        return;
+      }
+      selectedTodo = created.todo.id;
+      todos = [...todos, created.todo];
+      todoId = created.todo.id;
+      todoQuery = "";
+    }
+  }
+  const result = await startTimer({ serverUrl, token }, projectId, note.trim(), fetch, selectedTodo);
   busy = false;
   if (result.ok) {
     timer = result.timer;

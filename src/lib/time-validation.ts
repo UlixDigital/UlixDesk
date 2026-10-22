@@ -20,6 +20,7 @@ export type TimeEntryFormValues = {
   billable: boolean;
   note: string;
   timeZone: string;
+  todoId: string;
 };
 
 export type TimeEntryFieldErrors = {
@@ -29,6 +30,7 @@ export type TimeEntryFieldErrors = {
   startTime?: string;
   endTime?: string;
   note?: string;
+  todoId?: string;
   form?: string;
 };
 
@@ -45,6 +47,7 @@ export type NormalizedTimeEntry = {
   note: string | null;
   timeZone: string;
   date: string;
+  todoId: string | null;
 };
 
 export type IntervalError = "end-after-start" | "too-long" | "future";
@@ -62,6 +65,7 @@ export function emptyTimeEntryFormValues(
     billable: true,
     note: "",
     timeZone,
+    todoId: "",
   };
 }
 
@@ -136,6 +140,7 @@ export function parseTimeEntryFormData(formData: FormData): TimeEntryFormValues 
     billable: billable === "true" || billable === "on",
     note: String(formData.get("note") ?? ""),
     timeZone: String(formData.get("timeZone") ?? ""),
+    todoId: String(formData.get("todoId") ?? ""),
   };
 }
 
@@ -182,6 +187,7 @@ export function validateTimeEntryInput(
     billable: input.billable,
     note: input.note,
     timeZone: input.timeZone,
+    todoId: input.todoId.trim(),
   };
 
   const projectId = input.projectId.trim();
@@ -246,6 +252,7 @@ export function validateTimeEntryInput(
       note: note || null,
       timeZone: input.timeZone,
       date,
+      todoId: values.todoId || null,
     },
   };
 }

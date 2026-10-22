@@ -30,6 +30,8 @@ export type InvoiceSlice = {
   /** Null when the entry has no rate, or the rate currency is not the client's. */
   rateMinor: number | null;
   unratedReason: "no-rate" | "currency" | null;
+  /** Omitted on older slices. A shared title is appended to the line detail. */
+  todoTitle?: string | null;
 };
 
 export type BuiltInvoiceLine = {
@@ -77,6 +79,7 @@ export function buildInvoiceLines(input: {
       durationMs: number;
       projectNames: string[];
       userNames: string[];
+      todoTitles: string[];
       day: string;
       timeEntryIds: string[];
       windows: InvoiceWindow[];
@@ -108,6 +111,7 @@ export function buildInvoiceLines(input: {
     }
     const detail =
       input.grouping === "day" ? "" : formatInvoiceRange(input.periodStart, input.periodEnd);
+    const todoTitle = slice.todoTitle?.trim() ?? "";
     const sort = sortKey(input.grouping, slice);
     const key = `${input.grouping}:${sort}:${slice.rateMinor}`;
     const existing = groups.get(key);
@@ -115,6 +119,7 @@ export function buildInvoiceLines(input: {
       existing.durationMs += slice.durationMs;
       if (!existing.projectNames.includes(slice.projectName)) existing.projectNames.push(slice.projectName);
       if (!existing.userNames.includes(slice.userName)) existing.userNames.push(slice.userName);
+      existing.todoTitles.push(todoTitle);
       if (!existing.timeEntryIds.includes(slice.timeEntryId)) {
         existing.timeEntryIds.push(slice.timeEntryId);
       }
@@ -132,6 +137,7 @@ export function buildInvoiceLines(input: {
       durationMs: slice.durationMs,
       projectNames: [slice.projectName],
       userNames: [slice.userName],
+      todoTitles: [todoTitle],
       day: slice.day,
       timeEntryIds: [slice.timeEntryId],
       windows: [
@@ -157,7 +163,7 @@ export function buildInvoiceLines(input: {
     return {
       kind: "time" as const,
       title: titles[index] ?? groupTitle(input.grouping, group.projectNames, group.userNames, group.day),
-      detail: group.detail,
+      detail: detailWithTodo(group.detail, group.todoTitles),
       quantitySeconds,
       unitPriceMinor: group.unitPriceMinor,
       amountMinor: lineAmountMinor(group.unitPriceMinor, quantitySeconds),
@@ -263,6 +269,13 @@ function counts(values: string[]) {
   const map = new Map<string, number>();
   for (const value of values) map.set(value, (map.get(value) ?? 0) + 1);
   return map;
+}
+
+/** Append the to-do only when every slice in the line shares one title. */
+function detailWithTodo(detail: string, titles: string[]) {
+  const first = titles[0]?.trim() ?? "";
+  if (!first || titles.some((title) => title.trim() !== first)) return detail;
+  return detail ? `${detail} · ${first}` : first;
 }
 
 function sortKey(grouping: InvoiceGrouping, slice: InvoiceSlice) {

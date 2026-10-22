@@ -31,6 +31,9 @@ export type ActivityLine = {
   date: string;
   memberName: string;
   projectName: string;
+  /** Set when the entry has a real to-do. Otherwise the column stays the project name. */
+  todoId?: string;
+  todoTitle?: string;
   durationMs: number;
   billableMs: number;
   amount: MoneyTotal | null;
@@ -311,14 +314,16 @@ function buildGroup(
   input: { showMoney: boolean },
 ): ActivityGroup {
   const [date, memberName] = key.split("\t");
-  const byTodo = new Map<string, ActivityLine[]>();
+  const byTodo = new Map<string, { label: string; lines: ActivityLine[] }>();
   for (const line of lines) {
-    const todoKey = line.projectName.trim();
-    const list = byTodo.get(todoKey);
-    if (list) list.push(line);
-    else byTodo.set(todoKey, [line]);
+    const title = (line.todoTitle ?? "").trim();
+    const label = title || line.projectName.trim();
+    const todoKey = (line.todoId ?? "").trim() || label;
+    const existing = byTodo.get(todoKey);
+    if (existing) existing.lines.push(line);
+    else byTodo.set(todoKey, { label, lines: [line] });
   }
-  const todos = [...byTodo.keys()].sort((a, b) => a.localeCompare(b, "en"));
+  const todos = [...byTodo.entries()].sort((a, b) => a[1].label.localeCompare(b[1].label, "en") || a[0].localeCompare(b[0]));
   return {
     // The client is part of the id. Date and member repeat across clients, and
     // the painter looks rows up by id.
@@ -326,8 +331,8 @@ function buildGroup(
     dateLabel: formatActivityDate(date),
     memberName,
     ...totalsFor(lines, input.showMoney),
-    details: todos.map((todo) =>
-      buildDetail(`${clientName}\t${key}`, todo, byTodo.get(todo) ?? [], input),
+    details: todos.map(([todoKey, bucket]) =>
+      buildDetail(`${clientName}\t${key}`, todoKey, bucket.label, bucket.lines, input),
     ),
   };
 }
@@ -335,13 +340,14 @@ function buildGroup(
 function buildDetail(
   groupId: string,
   todoKey: string,
+  label: string,
   lines: ActivityLine[],
   input: { showMoney: boolean },
 ): ActivityDetail {
-  const missingTodo = todoKey === "";
+  const missingTodo = label === "";
   return {
     id: `${groupId}\t${todoKey}`,
-    todo: missingTodo ? reportCopy.noTodo : todoKey,
+    todo: missingTodo ? reportCopy.noTodo : label,
     missingTodo,
     notes: detailNotes(lines),
     ...totalsFor(lines, input.showMoney),

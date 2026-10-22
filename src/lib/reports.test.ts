@@ -274,4 +274,49 @@ describe("report totals", () => {
     expect(breakdown.rows).toHaveLength(2);
     expect(breakdown.columns.map((column) => column.id)).toContain("bucket");
   });
+
+  it("groups by to-do and adds the title to the CSV without money", () => {
+    const brief = entry({
+      id: "brief",
+      todoId: "todo-brief",
+      todoTitle: "Write the brief",
+    });
+    const bare = entry({
+      id: "bare",
+      todoId: null,
+      todoTitle: null,
+      startedAt: new Date("2026-10-12T11:00:00.000Z"),
+      endedAt: new Date("2026-10-12T12:00:00.000Z"),
+    });
+    const grouped = buildReport({
+      kind: "time-activity",
+      entries: [brief, bare],
+      ...range,
+      groupBy: "todo",
+      columns: ["hours", "amount"],
+      showMoney: false,
+      manager: false,
+    });
+    expect(grouped.rows.map((row) => row.cells.group).sort()).toEqual(
+      ["(No to-do)", "Write the brief"].sort(),
+    );
+    expect(grouped.columns.map((column) => column.id).join(" ")).not.toContain("amount");
+
+    const sessions = buildReport({
+      kind: "work-sessions",
+      entries: [brief, bare],
+      ...range,
+      groupBy: "project",
+      columns: ["project", "todo"],
+      showMoney: false,
+      manager: false,
+    });
+    expect(sessions.rows.find((row) => row.id === "brief")?.cells.todo).toBe("Write the brief");
+    expect(sessions.rows.find((row) => row.id === "bare")?.cells.todo).toBe("—");
+    const csv = reportToCsv(sessions);
+    expect(csv).toContain("To-do");
+    expect(csv).toContain("Write the brief");
+    expect(csv).not.toMatch(/USD|Amount|\$/);
+    expect(csv).not.toContain("—");
+  });
 });

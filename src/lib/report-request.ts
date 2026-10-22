@@ -9,6 +9,7 @@ import {
 } from "@/lib/report-query";
 import { buildReport, loadReportEntries, type BuiltReport, type SourceEntry } from "@/lib/reports";
 import { listProjectsForTimesheetFilter } from "@/lib/time-entries";
+import { listReportTodoOptions } from "@/lib/todos";
 import { todayInTimeZone, zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 import { listActiveUsers } from "@/lib/users";
 import { canManageWorkspace, canSeeMoney } from "@/lib/users-validation";
@@ -25,6 +26,7 @@ export type PreparedReport = {
   columnsInUrl: boolean;
   filtered: boolean;
   projects: Array<{ id: string; name: string; archivedAt: Date | null }>;
+  todos: Array<{ id: string; projectId: string; name: string }>;
   clients: Array<{ id: string; name: string; archivedAt: Date | null }>;
   people: Array<{ id: string; name: string }>;
   failure: "range" | "large" | null;
@@ -46,18 +48,22 @@ export async function prepareReport(input: {
   const showMoney = canSeeMoney(input.actor.role);
   const groupBy =
     !manager && query.groupBy === "member" ? defaultGroupBy(input.kind) : query.groupBy;
-  const [projects, clients, people] = await Promise.all([
+  const [projects, clients, people, todoOptions] = await Promise.all([
     listProjectsForTimesheetFilter(),
     listClientsForFilter(),
     manager ? listActiveUsers() : Promise.resolve([]),
+    listReportTodoOptions(input.actor),
   ]);
   const project = projects.find((item) => item.id === query.projectId) ?? null;
+  const todos = todoOptions.filter((todo) => !project || todo.projectId === project.id);
+  const todo = todos.find((item) => item.id === query.todoId) ?? null;
   const client = clients.find((item) => item.id === query.clientId) ?? null;
   const member = manager ? (people.find((person) => person.id === query.memberId) ?? null) : null;
   const columns = resolveColumns(input.kind, query.columns, showMoney, manager);
   const resolved: ReportQuery = {
     ...query,
     projectId: project?.id ?? "",
+    todoId: todo?.id ?? "",
     clientId: client?.id ?? "",
     memberId: member?.id ?? "",
     groupBy,
@@ -68,6 +74,7 @@ export async function prepareReport(input: {
       resolved.memberId ||
       resolved.clientId ||
       resolved.projectId ||
+      resolved.todoId ||
       resolved.billable !== "all" ||
       resolved.groupBy !== defaultGroupBy(input.kind) ||
       query.columns,
@@ -81,6 +88,7 @@ export async function prepareReport(input: {
     columnsInUrl: query.columns !== null,
     filtered,
     projects,
+    todos,
     clients,
     people,
   };
@@ -96,6 +104,7 @@ export async function prepareReport(input: {
     memberId: resolved.memberId || null,
     clientId: resolved.clientId || null,
     projectId: resolved.projectId || null,
+    todoId: resolved.todoId || null,
     billable: resolved.billable,
     timeZone,
   });

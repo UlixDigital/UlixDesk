@@ -88,6 +88,7 @@ describe("host guard", () => {
 
   it("lets a bearer token skip the host check only on the token routes", async () => {
     expect(bearerSkipsHostCheck("/api/projects", bearer)).toBe(true);
+    expect(bearerSkipsHostCheck("/api/todos", bearer)).toBe(true);
     expect(bearerSkipsHostCheck("/api/timer", "bearer token")).toBe(true);
     expect(bearerSkipsHostCheck("/api/timer/start", bearer)).toBe(true);
     expect(bearerSkipsHostCheck("/api/timer/stop", bearer)).toBe(true);
@@ -96,7 +97,7 @@ describe("host guard", () => {
     expect(bearerSkipsHostCheck("/api/projects", "Basic abc")).toBe(false);
     expect(bearerSkipsHostCheck("/api/projects/extra", bearer)).toBe(false);
 
-    for (const pathname of ["/api/projects", "/api/timer", "/api/timer/start", "/api/timer/stop"]) {
+    for (const pathname of ["/api/projects", "/api/todos", "/api/timer", "/api/timer/start", "/api/timer/stop"]) {
       expect(
         hostGuardRefusal({ pathname, host: "evil.test:3000", authorization: bearer }),
       ).toBeNull();
