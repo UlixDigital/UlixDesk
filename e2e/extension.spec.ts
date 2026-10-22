@@ -46,7 +46,8 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    await expect(page.getByText("https://desk.ulixdigital.com")).toBeVisible();
+    await expect(page.locator("#server-url")).toHaveValue("");
+    await expect(page.getByText("https://desk.ulixdigital.com")).toHaveCount(0);
 
     await page.goto(`chrome-extension://${extensionId}/options.html`);
     await expect(page.getByRole("heading", { name: "Connect to UlixDesk" })).toBeVisible();
@@ -112,7 +113,6 @@ test("signs in from the popup, tracks time, signs out, and drops a revoked crede
     const page = await context.newPage();
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
     await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-    await page.getByRole("button", { name: "Custom server" }).click();
     await page.locator("#server-url").fill(e2eOrigin);
     await page.locator("#email").fill(e2eEmail);
     await page.locator("#password").fill(e2ePassword);

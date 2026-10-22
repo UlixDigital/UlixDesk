@@ -1,6 +1,6 @@
 import { authorizeApiRequest, jsonApi } from "@/lib/api-auth";
 import { apiCodes, apiError } from "@/lib/api-errors";
-import { readExtensionZip } from "@/lib/extension-artifact";
+import { extensionZipForDownload } from "@/lib/extension-download-zip";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +10,7 @@ export async function GET(request: Request) {
   const actor = await authorizeApiRequest(request, { requireJson: false });
   if (actor instanceof Response) return actor;
 
-  const zip = await readExtensionZip();
+  const zip = await extensionZipForDownload(request);
   if (!zip) {
     return jsonApi(request, apiError(missing, apiCodes.EXTENSION_NOT_BUILT), 404);
   }

@@ -15,7 +15,7 @@ export const extensionCardCopy = {
     "Open chrome://extensions.",
     "Turn on Developer mode.",
     "Click Load unpacked and select that folder.",
-    "Sign in with your server URL and email.",
+    "Sign in with your server URL, email and password.",
   ],
   updateNote:
     "Unpacked extensions don't auto-update. When the version changes, download again and reload it on chrome://extensions.",
@@ -54,7 +54,7 @@ export const extensionInstallGuide = {
       id: "sign-in",
       title: "Sign in",
       figure: "sign-in",
-      body: "Open the extension. Enter the server URL, your email, and your password, then sign in. Use the origin only, such as https://desk.ulixdigital.com or http://127.0.0.1:3000, with no path on the end.",
+      body: "Open the extension. It already points at the server you downloaded it from. Sign in with your email, and your password. Change the server only if you need a different origin, such as https://desk.ulixdigital.com or http://127.0.0.1:3000, with no path on the end.",
     },
   ],
   update: {

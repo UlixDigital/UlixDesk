@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import * as esbuild from "esbuild";
 import { readBuildIdentity, stampManifest } from "./chrome-version.mjs";
 import { installGuideText } from "../src/lib/extension-install-guide.mjs";
+import { DEFAULT_SERVER_FILE, defaultServerDocument } from "./default-server.mjs";
 import { zipDirectory } from "./zip.mjs";
 
 export async function buildExtension(options = {}) {
@@ -59,6 +60,7 @@ export async function buildExtension(options = {}) {
   });
   writeFileSync(path.join(dist, "manifest.json"), `${JSON.stringify(stamped, null, 2)}\n`);
   writeFileSync(path.join(dist, "INSTALL.txt"), installGuideText());
+  writeFileSync(path.join(dist, DEFAULT_SERVER_FILE), defaultServerDocument(""));
 
   const iconDir = path.join(dist, "icons");
   mkdirSync(iconDir, { recursive: true });

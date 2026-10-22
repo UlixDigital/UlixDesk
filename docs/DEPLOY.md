@@ -423,7 +423,7 @@ Create the GitHub Environment named `production` and add required reviewers befo
 
 The unpacked extension id is `cjlaoflbipaehclleojofopapalhiooe`. Put that in `ULIXDESK_EXTENSION_IDS` (already in the examples). Install steps are in [extension/README.md](../extension/README.md): Load unpacked, then sign in from the popup.
 
-The popup defaults to `https://desk.ulixdigital.com`. **Use staging** points it at `https://staging.desk.ulixdigital.com`. **Custom server** is for a local origin such as `http://127.0.0.1:3000`. No new environment variable is required. Sign-in uses the same email, password, and rate limit as the website.
+A zip downloaded from Settings opens already pointed at `ULIXDESK_PUBLIC_ORIGIN`, so the staging site's zip points at staging and the production site's zip points at production. **Use production** still selects `https://desk.ulixdigital.com`. **Use staging** selects `https://staging.desk.ulixdigital.com`. **Custom server** is for another origin such as `http://127.0.0.1:3000`. A local unpacked build leaves the server blank until one of those is chosen. Sign-in uses the same email, password, and rate limit as the website.
 
 A timer started from the extension runs as that person. **Sign out** in the popup revokes that sign-in. Deactivating them, or changing their password, revokes every extension sign-in and every access token. Extension access lists each sign-in and can revoke one. An access token on that page remains an advanced fallback until the password changes.
 

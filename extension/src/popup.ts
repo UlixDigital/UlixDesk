@@ -16,6 +16,7 @@ import { hostAccessRequest } from "./host-permission";
 import { extensionUpdateNotice } from "./extension-version";
 import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
+import { applyServerSelection, loadBakedServerUrl } from "./default-server";
 import { readSettings, writeSettings } from "./storage";
 import {
   PRODUCTION_ORIGIN,
@@ -23,7 +24,6 @@ import {
   hostPermissionPattern,
   normalizeServerUrl,
   originForPreset,
-  presetForOrigin,
   type ServerPreset,
 } from "./server-url";
 import { formatElapsed } from "./time";
@@ -43,14 +43,14 @@ let alertMessage: string | null = null;
 let loading = true;
 let busy = false;
 let permission = false;
-let serverUrl = PRODUCTION_ORIGIN;
+let serverUrl = "";
 let token = "";
 let tick = 0;
 let signedIn = false;
 let authResolved = false;
 let accountName = "";
 let accountEmail = "";
-let serverPreset: ServerPreset = "production";
+let serverPreset: ServerPreset = "custom";
 let customUrl = "";
 let email = "";
 let password = "";
@@ -98,18 +98,11 @@ async function refreshUpdateNotice() {
   render();
 }
 
-function applyStoredServer(stored: string) {
-  const trimmed = stored.trim();
-  if (!trimmed) {
-    serverPreset = "production";
-    customUrl = "";
-    serverUrl = PRODUCTION_ORIGIN;
-    return;
-  }
-  const parsed = normalizeServerUrl(trimmed);
-  serverUrl = parsed.ok ? parsed.origin : trimmed;
-  serverPreset = parsed.ok ? presetForOrigin(parsed.origin) : "custom";
-  customUrl = serverPreset === "custom" ? trimmed : "";
+function applyStoredServer(stored: string, baked: string) {
+  const applied = applyServerSelection(stored, baked);
+  serverUrl = applied.serverUrl;
+  serverPreset = applied.serverPreset;
+  customUrl = applied.customUrl;
 }
 
 function chosenServerUrl() {
@@ -123,7 +116,8 @@ async function load() {
   projectNotice = null;
   render();
   const settings = await readSettings();
-  applyStoredServer(settings.serverUrl);
+  const baked = settings.serverUrl.trim() ? "" : await loadBakedServerUrl();
+  applyStoredServer(settings.serverUrl, baked);
   void refreshUpdateNotice();
   projectId = settings.lastProjectId;
   accountName = settings.userName;
@@ -402,7 +396,7 @@ function serverFields() {
     wrap.append(input);
     wrap.append(el("p", "hint", popupCopy.customServerHint));
   } else {
-    const shown = el("p", "server-url", serverPreset === "staging" ? STAGING_ORIGIN : PRODUCTION_ORIGIN);
+    const shown = el("p", "server-url", serverUrl);
     shown.id = "server-url";
     wrap.append(shown);
   }

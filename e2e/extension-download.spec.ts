@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test } from "@playwright/test";
+import { zipEntries } from "../extension/zip.mjs";
 import { signIn } from "./auth";
-import { e2eEmail, e2ePassword } from "./env";
+import { e2eEmail, e2eOrigin, e2ePassword } from "./env";
 
 const shots = process.env.ULIXDESK_SCREENSHOT_DIR;
 
@@ -58,6 +59,7 @@ test("signed-in staff can download the extension from Settings", async ({ page }
   await expect(card.getByRole("heading", { name: "Chrome extension" })).toBeVisible();
   await expect(card.getByText(meta.version)).toBeVisible();
   await expect(card.getByText("Unpacked extensions don't auto-update.")).toBeVisible();
+  await expect(card.getByText("Sign in with your server URL, email and password.")).toBeVisible();
   await expect(card.getByRole("link", { name: "Download" })).toHaveAttribute("href", "/api/extension/download");
   await expect(card.getByRole("link", { name: "Installation guide" })).toHaveAttribute("href", "/help/extension");
   if (shots) {
@@ -71,6 +73,8 @@ test("signed-in staff can download the extension from Settings", async ({ page }
   expect(body.subarray(0, 4).toString("hex")).toBe("504b0304");
   expect(body.includes(Buffer.from("INSTALL.txt"))).toBe(true);
   expect(body.includes(Buffer.from("manifest.json"))).toBe(true);
+  const baked = zipEntries(body).find((entry) => entry.name === "default-server.json");
+  expect(JSON.parse(baked?.data.toString("utf8") ?? "{}").serverUrl).toBe(e2eOrigin);
 
   await page.setViewportSize({ width: 390, height: 844 });
   await expect(card.getByRole("heading", { name: "Chrome extension" })).toBeVisible();

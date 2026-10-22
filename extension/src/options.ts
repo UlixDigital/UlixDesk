@@ -2,6 +2,7 @@ import { testConnection } from "./api";
 import { optionsCopy } from "./copy";
 import { hostAccessRequest } from "./host-permission";
 import { describeGrant, describeSave, describeTestConnection } from "./options-state";
+import { loadBakedServerUrl } from "./default-server";
 import { readSettings, writeSettings } from "./storage";
 import { hostPermissionPattern, normalizeServerUrl } from "./server-url";
 
@@ -96,7 +97,8 @@ testControl.addEventListener("click", () => {
   })();
 });
 
-void readSettings().then((settings) => {
-  serverUrlInput.value = settings.serverUrl;
+void readSettings().then(async (settings) => {
+  const stored = settings.serverUrl.trim();
+  serverUrlInput.value = stored || (await loadBakedServerUrl());
   accessTokenInput.value = settings.token;
 });
