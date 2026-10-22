@@ -95,6 +95,7 @@ function TodoEditor({
       className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)] sm:p-6"
     >
       <input type="hidden" name="projectId" value={projectId} readOnly />
+      <input type="hidden" name="intent" defaultValue={intent} />
       {todo ? <input type="hidden" name="id" value={todo.id} readOnly /> : null}
       {canAssign ? <input type="hidden" name="assignees" value="1" readOnly /> : null}
       {state.error ? (
@@ -166,36 +167,42 @@ function TodoEditor({
         )}
       </div>
       <div className="mt-4 flex flex-wrap gap-2">
-        <button type="submit" name="intent" value={intent} className={ui.primaryButton} disabled={pending}>
+        <button
+          type="submit"
+          className={ui.primaryButton}
+          disabled={pending}
+          onClick={(event) => setTodoIntent(event.currentTarget.form, intent)}
+        >
           {pending ? todoCopy.saving : submitLabel}
         </button>
         {todo ? (
           <>
             <button
               type="submit"
-              name="intent"
-              value={todo.status === "done" ? "reopen" : "done"}
               className={ui.secondaryButton}
               disabled={pending}
+              onClick={(event) =>
+                setTodoIntent(event.currentTarget.form, todo.status === "done" ? "reopen" : "done")
+              }
             >
               {todo.status === "done" ? todoCopy.reopen : todoCopy.markDone}
             </button>
             <button
               type="submit"
-              name="intent"
-              value={todo.archivedAt ? "restore" : "archive"}
               className={ui.secondaryButton}
               disabled={pending}
+              onClick={(event) =>
+                setTodoIntent(event.currentTarget.form, todo.archivedAt ? "restore" : "archive")
+              }
             >
               {todo.archivedAt ? todoCopy.restore : todoCopy.archive}
             </button>
             <button
               type="submit"
-              name="intent"
-              value="delete"
               className={ui.quietDangerButton}
               disabled={pending || todo.timeCount > 0}
               title={todo.timeCount > 0 ? todoCopy.deleteBlocked : undefined}
+              onClick={(event) => setTodoIntent(event.currentTarget.form, "delete")}
             >
               {todoCopy.delete}
             </button>
@@ -207,4 +214,9 @@ function TodoEditor({
       ) : null}
     </form>
   );
+}
+
+function setTodoIntent(form: HTMLFormElement | null, intent: string) {
+  const field = form?.elements.namedItem("intent");
+  if (field instanceof HTMLInputElement) field.value = intent;
 }
