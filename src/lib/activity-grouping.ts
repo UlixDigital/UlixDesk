@@ -115,6 +115,16 @@ function signed(delta: number, direction: SortDirection) {
   return direction === "asc" ? delta : -delta;
 }
 
+/** Date groups use a calendar id (`YYYY-MM-DD`), not the weekday label. */
+function isCalendarDateId(id: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(id);
+}
+
+function calendarDelta(a: string, b: string) {
+  if (a === b) return 0;
+  return a < b ? -1 : 1;
+}
+
 function amountOf(amounts: MoneyTotal[], currency: string) {
   return amounts.find((amount) => amount.currency === currency)?.amountMinor ?? 0;
 }
@@ -126,10 +136,16 @@ function amountOf(amounts: MoneyTotal[], currency: string) {
 export function compareActivityGroups(a: ActivityNode, b: ActivityNode, sort: ActivitySort) {
   let primary = 0;
   if (sort.key === "name") {
-    primary = signed(
-      a.label.localeCompare(b.label, "en", { sensitivity: "base", numeric: true }),
-      sort.direction,
-    );
+    // Name A-Z on a date group is oldest first. Name Z-A is newest first.
+    // Weekday labels ("Mon" before "Tue") are not chronological.
+    if (isCalendarDateId(a.id) && isCalendarDateId(b.id)) {
+      primary = signed(calendarDelta(a.id, b.id), sort.direction);
+    } else {
+      primary = signed(
+        a.label.localeCompare(b.label, "en", { sensitivity: "base", numeric: true }),
+        sort.direction,
+      );
+    }
   } else if (sort.key === "time") {
     primary = signed(a.durationMs - b.durationMs, sort.direction);
   } else if (sort.key === "billable") {
@@ -260,10 +276,23 @@ export function sortArrowColumnId(
     if (sort.currency) return target.currency === sort.currency;
     return true;
   });
-  if (matches.length === 0) return null;
-  if (sort.key === "amount" && !sort.currency) return matches[0]?.id ?? null;
-  if (sort.key === "name" || sort.key === "date") {
-    return matches.find((column) => column.id === "group")?.id ?? matches[0]?.id ?? null;
+  if (matches.length > 0) {
+    if (sort.key === "amount" && !sort.currency) return matches[0]?.id ?? null;
+    if (sort.key === "name" || sort.key === "date") {
+      return matches.find((column) => column.id === "group")?.id ?? matches[0]?.id ?? null;
+    }
+    return matches[0]?.id ?? null;
   }
-  return matches[0]?.id ?? null;
+  // Name A-Z on a date group is chronological, so the arrow stays on Date.
+  if (sort.key === "name") {
+    const dateColumn = columns.find(
+      (column) => columnActivitySort(column.id, groupBy, groupBy2)?.key === "date",
+    );
+    if (dateColumn) return dateColumn.id;
+  }
+  // A date sort still shows an arrow when Date is not one of the columns.
+  if (sort.key === "date") {
+    return columns.find((column) => column.id === "group")?.id ?? columns[0]?.id ?? null;
+  }
+  return null;
 }

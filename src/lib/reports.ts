@@ -627,7 +627,8 @@ function sessionSortKey(entry: SourceEntry, groupBy: GroupBy, timeZone: string) 
 export function reportToCsv(report: BuiltReport) {
   const header = report.csv.columns.map((column) => column.label);
   const totals = report.csv.totals ? [report.csv.totals] : [];
-  return toCsv([header, ...report.csv.rows, ...totals]);
+  const leading = report.totals?.group === reportCopy.grandTotal ? totals : [];
+  return toCsv([header, ...leading, ...report.csv.rows, ...totals]);
 }
 
 export type LoadedReport =

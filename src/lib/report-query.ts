@@ -254,7 +254,10 @@ export function resolveColumns(
 ) {
   const allowed = new Set(allowedColumns(kind, showMoney, manager));
   const source = requested ?? defaultColumns(kind, showMoney, manager);
-  return source.filter((id) => allowed.has(id));
+  const columns = source.filter((id) => allowed.has(id));
+  // A member can ask for amount only. That leaves no visible column, so show Hours.
+  if (columns.length === 0 && allowed.has("hours")) return ["hours"];
+  return columns;
 }
 
 export function columnLabel(id: string) {

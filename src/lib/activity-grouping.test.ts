@@ -112,6 +112,38 @@ describe("activity grouping", () => {
     expect(tree.map((group) => group.label)).toEqual(["(No to-do)", "Write the brief"]);
   });
 
+  it("sorts date groups oldest first for name A-Z and newest first for Z-A", () => {
+    const slices = [
+      slice({ date: "2026-10-20", projectId: "late", projectName: "Late" }),
+      slice({ date: "2026-10-03", projectId: "early", projectName: "Early" }),
+      slice({ date: "2026-10-12", projectId: "mid", projectName: "Mid" }),
+    ];
+    const oldestFirst = buildActivityTree({
+      slices,
+      groupBy: "date",
+      groupBy2: null,
+      sort: nameAsc,
+    });
+    expect(oldestFirst.map((group) => group.id)).toEqual(["2026-10-03", "2026-10-12", "2026-10-20"]);
+    const newestFirst = buildActivityTree({
+      slices,
+      groupBy: "date",
+      groupBy2: "project",
+      sort: { key: "name", direction: "desc", currency: null },
+    });
+    expect(newestFirst.map((group) => group.id)).toEqual(["2026-10-20", "2026-10-12", "2026-10-03"]);
+    const byMember = buildActivityTree({
+      slices: [
+        slice({ date: "2026-10-20" }),
+        slice({ date: "2026-10-03", projectId: "other", projectName: "Other" }),
+      ],
+      groupBy: "member",
+      groupBy2: "date",
+      sort: nameAsc,
+    });
+    expect(byMember[0]?.children.map((child) => child.id)).toEqual(["2026-10-03", "2026-10-20"]);
+  });
+
   it("sorts by name, time, date, and one currency at a time", () => {
     const ada = node({ id: "ada", label: "Ada", durationMs: 3 * hour, maxDate: "2026-10-14", minDate: "2026-10-12" });
     const ben = node({
@@ -168,6 +200,21 @@ describe("activity grouping", () => {
     expect(
       sortArrowColumnId(columns, "member", "date", { key: "date", direction: "desc", currency: null }),
     ).toBe("group2");
+    expect(sortArrowColumnId([{ id: "group" }, { id: "hours" }], "date", null, nameAsc)).toBe("group");
+    expect(
+      sortArrowColumnId([{ id: "group" }, { id: "hours" }], "project", null, {
+        key: "date",
+        direction: "desc",
+        currency: null,
+      }),
+    ).toBe("group");
+    expect(
+      sortArrowColumnId([{ id: "hours" }], "project", null, {
+        key: "date",
+        direction: "asc",
+        currency: null,
+      }),
+    ).toBe("hours");
   });
 
   it("keeps members off member grouping and amount sorts", () => {
@@ -281,11 +328,13 @@ describe("activity report rows", () => {
     const csv = reportToCsv(report);
     const lines = csv.trim().split("\r\n");
     expect(lines[0]).toContain("Member,Project,Hours (decimal)");
-    expect(lines[1]).toBe("Ada,,3.0000,3.0000,1500,20.00,");
-    expect(lines[2]).toContain("Website,2.0000");
-    expect(lines[2]).toContain("Billable");
+    expect(lines[1]).toBe("Grand total,,4.0000,4.0000,1500,30.00,");
+    expect(lines[2]).toBe("Ada,,3.0000,3.0000,1500,20.00,");
+    expect(lines[3]).toContain("Website,2.0000");
+    expect(lines[3]).toContain("Billable");
     expect(lines.at(-1)).toBe("Grand total,,4.0000,4.0000,1500,30.00,");
-    expect(lines[1]).not.toMatch(/Billable|No rate/);
+    expect(lines.filter((line) => line.startsWith("Grand total,"))).toHaveLength(2);
+    expect(lines[2]).not.toMatch(/Billable|No rate/);
 
     const scoped = scopeActivityView({
       kind: "time-activity",
@@ -317,9 +366,12 @@ describe("activity report rows", () => {
       compress: false,
     });
     const text = pdfPlainText(pdf);
-    expect(text).toContain("Ada");
+    const firstTotal = text.indexOf("Grand total");
+    const secondTotal = text.indexOf("Grand total", firstTotal + 1);
+    expect(firstTotal).toBeGreaterThanOrEqual(0);
+    expect(text.indexOf("Ada")).toBeGreaterThan(firstTotal);
+    expect(secondTotal).toBeGreaterThan(text.indexOf("Ada"));
     expect(text).toContain("Website");
-    expect(text).toContain("Grand total");
     expect(text).toContain("USD 30.00");
     expect(text).not.toMatch(/Screenshot|Activity %/);
   });

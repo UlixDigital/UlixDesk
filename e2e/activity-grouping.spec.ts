@@ -3,16 +3,20 @@ import { execFile } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 import { promisify } from "node:util";
 import { PrismaClient } from "@prisma/client";
-import { expect, test } from "@playwright/test";
+import { expect, test, type TestInfo } from "@playwright/test";
 import { saveClientRate } from "../src/lib/bill-rates";
 import { createManualEntry } from "../src/lib/time-entries";
 import { signIn } from "./auth";
 import { markupWithoutScripts } from "./markup";
 
 const execFileAsync = promisify(execFile);
-const artifacts = "/opt/cursor/artifacts";
 
-test("time and activity groups two levels and sorts from the header", async ({ browser }) => {
+function artifactDir(testInfo: TestInfo) {
+  return process.env.ULIXDESK_E2E_ARTIFACTS ?? testInfo.outputDir;
+}
+
+test("time and activity groups two levels and sorts from the header", async ({ browser }, testInfo) => {
+  const artifacts = artifactDir(testInfo);
   const prisma = new PrismaClient();
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: "owner@ulix.test" } });
   const zoe = await prisma.user.create({
@@ -100,23 +104,29 @@ test("time and activity groups two levels and sorts from the header", async ({ b
     await expect(subtotals.nth(0)).toContainText("1h");
     await expect(subtotals.nth(1)).toContainText("Zoe Member");
     await expect(subtotals.nth(1)).toContainText("3h");
-    await expect(page.locator("tbody tr").nth(1)).toContainText("Website Group");
+    await expect(page.locator("[data-row-kind=group]").first()).toContainText("Website Group");
+    const grandTotals = page.locator("[data-row-kind=grand-total]");
+    await expect(grandTotals).toHaveCount(2);
+    await expect(grandTotals.first()).toContainText("Grand total");
+    await expect(grandTotals.first()).toContainText("4h");
+    await expect(grandTotals.first()).toContainText("USD 200.00");
     await expect(page.locator("tfoot")).toContainText("Grand total");
     await expect(page.locator("tfoot")).toContainText("4h");
-    await expect(page.locator("tfoot")).toContainText("USD 200.00");
     await expect(page.getByRole("columnheader", { name: /Member/ })).toHaveAttribute("aria-sort", "ascending");
+
+    await mkdir(artifacts, { recursive: true });
+    await page.screenshot({ path: `${artifacts}/time-activity-grand-total-top.png`, fullPage: true });
 
     await page.getByRole("columnheader", { name: /Hours/ }).getByRole("link").click();
     await expect(page).toHaveURL(/sort=time-desc/);
     await expect(page.getByRole("columnheader", { name: /Hours/ })).toHaveAttribute("aria-sort", "descending");
     await expect(page.locator("[data-row-kind=subtotal]").nth(0)).toContainText("Zoe Member");
     await expect(page.locator("[data-row-kind=subtotal]").nth(0)).toContainText("3h");
-    await expect(page.locator("tbody tr").nth(1)).toContainText("Website Group");
-    await expect(page.locator("tbody tr").nth(2)).toContainText("Brochure Group");
+    await expect(page.locator("[data-row-kind=group]").nth(0)).toContainText("Website Group");
+    await expect(page.locator("[data-row-kind=group]").nth(1)).toContainText("Brochure Group");
     await expect(page.getByText("Activity %")).toHaveCount(0);
     await expect(page.getByText("Screenshot")).toHaveCount(0);
 
-    await mkdir(artifacts, { recursive: true });
     await page.screenshot({ path: `${artifacts}/time-activity-grouped.png`, fullPage: true });
 
     const pdfResponse = await page.request.get(

@@ -1,4 +1,5 @@
 import PDFDocument from "pdfkit";
+import { reportCopy } from "@/lib/report-copy";
 import type { BuiltReport } from "@/lib/reports";
 import { timeChangeCopy } from "@/lib/time-change-copy";
 import type { TimeChangeView } from "@/lib/time-change-display";
@@ -20,6 +21,8 @@ export type PdfTable = {
   totals: string[] | null;
   /** Row indexes drawn in bold. Time & Activity uses these for subtotals. */
   boldRows?: number[];
+  /** Time & Activity draws the grand total above the rows and again at the bottom. */
+  repeatTotalsAtTop?: boolean;
 };
 
 export type PdfBlock = {
@@ -194,25 +197,36 @@ function drawTable(doc: Doc, title: string, table: PdfTable) {
   const widths = columnWidths(doc, table.columns, table.rows, table.totals, contentWidth(doc));
   const bold = new Set(table.boldRows ?? []);
   let y = drawTableHeader(doc, table.columns, widths, doc.y);
+  if (table.repeatTotalsAtTop && table.totals) {
+    y = drawMeasuredRow(doc, title, table.columns, table.totals, widths, y, true, true);
+  }
   table.rows.forEach((row, index) => {
     const strong = bold.has(index);
-    const height = measureRow(doc, table.columns, row, widths, strong);
-    if (y + height > contentBottom(doc)) {
-      newPage(doc, title);
-      y = drawTableHeader(doc, table.columns, widths, doc.y);
-    }
-    y = drawRow(doc, table.columns, row, widths, y, height, false, strong);
+    y = drawMeasuredRow(doc, title, table.columns, row, widths, y, false, strong);
   });
   if (!table.totals) {
     doc.y = y;
     return;
   }
-  const height = measureRow(doc, table.columns, table.totals, widths, true);
+  doc.y = drawMeasuredRow(doc, title, table.columns, table.totals, widths, y, true, true);
+}
+
+function drawMeasuredRow(
+  doc: Doc,
+  title: string,
+  columns: PdfColumn[],
+  cells: string[],
+  widths: number[],
+  y: number,
+  total: boolean,
+  strong: boolean,
+) {
+  const height = measureRow(doc, columns, cells, widths, total || strong);
   if (y + height > contentBottom(doc)) {
     newPage(doc, title);
-    y = drawTableHeader(doc, table.columns, widths, doc.y);
+    y = drawTableHeader(doc, columns, widths, doc.y);
   }
-  doc.y = drawRow(doc, table.columns, table.totals, widths, y, height, true, true);
+  return drawRow(doc, columns, cells, widths, y, height, total, strong);
 }
 
 function drawTableHeader(doc: Doc, columns: PdfColumn[], widths: number[], y: number) {
@@ -348,6 +362,7 @@ function cleanPdfInput(input: PdfReportInput): PdfReportInput {
           rows: input.table.rows.map((row) => row.map(pdfText)),
           totals: input.table.totals ? input.table.totals.map(pdfText) : null,
           boldRows: input.table.boldRows,
+          repeatTotalsAtTop: input.table.repeatTotalsAtTop,
         }
       : input.table,
     blocks: input.blocks
@@ -377,6 +392,7 @@ export function builtReportToTable(report: BuiltReport): PdfTable | null {
       ? report.columns.map((column) => report.totals?.[column.id] ?? "")
       : null,
     boldRows: report.rows.flatMap((row, index) => (row.kind === "subtotal" ? [index] : [])),
+    repeatTotalsAtTop: report.totals?.group === reportCopy.grandTotal,
   };
 }
 

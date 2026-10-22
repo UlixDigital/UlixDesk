@@ -78,4 +78,42 @@ describe("report table", () => {
     expect(hoursLink?.getAttribute("href")).toContain("group=project");
     container.remove();
   });
+
+  it("shows a date sort arrow when the table has no Date column", async () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    await act(async () => {
+      createRoot(container).render(
+        createElement(ReportTable, {
+          kind: "time-activity",
+          query: {
+            preset: "this-week",
+            from: "2026-10-12",
+            to: "2026-10-18",
+            memberId: "",
+            clientId: "",
+            projectId: "",
+            todoId: "",
+            billable: "all",
+            groupBy: "project",
+            groupBy2: null,
+            sort: { key: "date", direction: "desc", currency: null },
+            columns: ["hours"],
+            page: 1,
+          },
+          report,
+          filtered: false,
+        }),
+      );
+    });
+    const sorted = container.querySelector('[aria-sort="descending"]');
+    expect(sorted?.textContent).toContain("Project");
+    expect(sorted?.textContent).toContain("↓");
+    expect(sorted?.textContent).toContain("Date newest");
+    const totals = container.querySelectorAll("[data-row-kind=grand-total]");
+    expect(totals).toHaveLength(2);
+    expect(totals[0]?.textContent).toContain("Total");
+    expect(container.querySelector("tfoot")?.textContent).toContain("Total");
+    container.remove();
+  });
 });

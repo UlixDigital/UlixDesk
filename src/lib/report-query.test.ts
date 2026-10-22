@@ -69,6 +69,9 @@ describe("report query", () => {
     expect(resolveColumns("time-activity", ["hours", "amount", "member"], false, false)).toEqual([
       "hours",
     ]);
+    expect(resolveColumns("time-activity", ["amount"], false, false)).toEqual(["hours"]);
+    expect(resolveColumns("daily", [""], false, false)).toEqual(["hours"]);
+    expect(resolveColumns("work-sessions", ["amount", "member"], false, false)).toEqual([]);
     expect(resolveColumns("work-sessions", null, true, true)).toContain("member");
     expect(resolveColumns("work-sessions", null, false, false)).not.toContain("member");
   });

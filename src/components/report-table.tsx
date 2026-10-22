@@ -96,6 +96,9 @@ export function ReportTable({
             </tr>
           </thead>
           <tbody>
+            {kind === "time-activity" && report.totals ? (
+              <TotalRow columns={report.columns} totals={report.totals} edge="top" />
+            ) : null}
             {report.rows.map((row) => {
               const headerId = row.depth && row.depth > 0 ? "group2" : report.columns[0]?.id;
               const subtotal = row.kind === "subtotal";
@@ -129,19 +132,7 @@ export function ReportTable({
           </tbody>
           {report.totals ? (
             <tfoot>
-              <tr>
-                {report.columns.map((column) => (
-                  <td
-                    key={column.id}
-                    className={cn(
-                      "border-t border-slate-200 px-4 py-3 font-semibold text-ink",
-                      isAmountColumn(column.id) && "text-right tabular-nums",
-                    )}
-                  >
-                    <CellText value={report.totals?.[column.id] ?? ""} />
-                  </td>
-                ))}
-              </tr>
+              <TotalRow columns={report.columns} totals={report.totals} edge="bottom" />
             </tfoot>
           ) : null}
         </table>
@@ -172,6 +163,33 @@ export function ReportTable({
         </nav>
       ) : null}
     </div>
+  );
+}
+
+function TotalRow({
+  columns,
+  totals,
+  edge,
+}: {
+  columns: BuiltReport["columns"];
+  totals: Record<string, string>;
+  edge: "top" | "bottom";
+}) {
+  return (
+    <tr data-row-kind="grand-total">
+      {columns.map((column) => (
+        <td
+          key={column.id}
+          className={cn(
+            "px-4 py-3 font-semibold text-ink",
+            edge === "top" ? "border-b border-slate-200 bg-slate-50" : "border-t border-slate-200",
+            isAmountColumn(column.id) && "text-right tabular-nums",
+          )}
+        >
+          <CellText value={totals[column.id] ?? ""} />
+        </td>
+      ))}
+    </tr>
   );
 }
 
