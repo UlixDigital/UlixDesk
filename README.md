@@ -90,13 +90,17 @@ A timer can still cross midnight. Editing an entry whose end is on another date 
 
 The extension is Manifest V3 and lives in `extension/`. It talks to whatever server URL you save (http or https), so the same build can point at localhost today and at dev, staging, or prod later. It is not published to the Chrome Web Store.
 
-Build the unpacked folder and the zip:
+Signed-in staff download the current build from Settings. The Docker image runs `npm run build:extension` and stores the zip, so there is no separate upload. `GET /api/extension/download` sends that zip to any signed-in role. Without a session it redirects to sign-in. `GET /api/extension/version` is public and returns the version and build date as JSON. The install guide is public at `/help/extension`, and the same words are `INSTALL.txt` inside the zip.
+
+The Chrome `version` is the package version plus a build number, four integers from 0 to 65535. Package `0.1.0` and build `42` become `0.1.0.42`. The build number is `ULIXDESK_BUILD_NUMBER`, then `GITHUB_RUN_NUMBER`, then `git rev-list --count HEAD`, then `0`. `version_name` adds the short commit SHA when `ULIXDESK_COMMIT`, `GITHUB_SHA`, or git can provide one. A number above 65535 is clamped.
+
+Build the unpacked folder and the zip locally:
 
 ```bash
 npm run build:extension
 ```
 
-That writes `extension/dist` and `extension/ulixdesk-extension.zip`. Neither is committed.
+That writes `extension/dist`, `extension/ulixdesk-extension.zip`, and `extension/extension-build.json`. None of them is committed. Settings says the download isn't built yet until that command has been run.
 
 Load it in Chrome:
 

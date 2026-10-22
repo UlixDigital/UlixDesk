@@ -56,6 +56,8 @@ export const popupCopy = {
   customServerHint: "For a local UlixDesk, use http://127.0.0.1:3000.",
   grant: "Grant permission",
   signedInWithToken: "Signed in with an access token",
+  newVersion:
+    "A new version is available. Download it from UlixDesk, replace the folder, and click Reload on chrome://extensions.",
 } as const;
 
 export const optionsCopy = {

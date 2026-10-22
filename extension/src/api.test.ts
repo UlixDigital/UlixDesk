@@ -2,7 +2,15 @@ import { describe, expect, it } from "vitest";
 import { timeCopy } from "@/lib/time-copy";
 import { tokenCopy } from "@/lib/token-copy";
 import { popupCopy } from "./copy";
-import { fetchProjects, fetchTimer, requestExtensionSignIn, startTimer, stopTimer, type FetchLike } from "./api";
+import {
+  fetchExtensionVersion,
+  fetchProjects,
+  fetchTimer,
+  requestExtensionSignIn,
+  startTimer,
+  stopTimer,
+  type FetchLike,
+} from "./api";
 
 const config = { serverUrl: "http://127.0.0.1:3000/", token: "ulixdesk_secret" };
 const timer = {
@@ -170,5 +178,28 @@ describe("extension API client", () => {
     expect(sentBody).toContain(password);
     expect(result.ok).toBe(true);
     expect(JSON.stringify(result)).not.toContain(password);
+  });
+
+  it("reads the public extension version without sending an access token", async () => {
+    const calls: Array<{ url: string; init: RequestInit | undefined }> = [];
+    const fetchImpl: FetchLike = async (url, init) => {
+      calls.push({ url, init });
+      return jsonResponse({ version: "0.1.0.8", builtAt: "2026-10-22T08:13:00.000Z" });
+    };
+    expect(await fetchExtensionVersion("http://127.0.0.1:3000/", fetchImpl)).toEqual({
+      version: "0.1.0.8",
+      builtAt: "2026-10-22T08:13:00.000Z",
+    });
+    expect(calls[0]?.url).toBe("http://127.0.0.1:3000/api/extension/version");
+    const headers = new Headers(calls[0]?.init?.headers);
+    expect(headers.get("authorization")).toBeNull();
+    expect(calls[0]?.init?.credentials).toBe("omit");
+
+    const missing: FetchLike = async () => jsonResponse({ available: false }, 404);
+    expect(await fetchExtensionVersion("http://127.0.0.1:3000", missing)).toBeNull();
+    const down: FetchLike = async () => {
+      throw new Error("offline");
+    };
+    expect(await fetchExtensionVersion("http://127.0.0.1:3000", down)).toBeNull();
   });
 });

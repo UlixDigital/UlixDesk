@@ -159,6 +159,16 @@ describe("protected routes and roles", () => {
     expect(sessionGate({ pathname: "/api/health", hasValidSession: false, isTokenApi: false })).toEqual({
       type: "allow",
     });
+    expect(sessionGate({ pathname: "/help/extension", hasValidSession: false, isTokenApi: false })).toEqual({
+      type: "allow",
+    });
+    expect(sessionGate({ pathname: "/api/extension/version", hasValidSession: false, isTokenApi: false })).toEqual({
+      type: "allow",
+    });
+    expect(sessionGate({ pathname: "/api/extension/download", hasValidSession: false, isTokenApi: false })).toEqual({
+      type: "redirect",
+      to: "/login?next=%2Fapi%2Fextension%2Fdownload",
+    });
     expect(sessionGate({ pathname: "/api/timer/start", hasValidSession: false, isTokenApi: true })).toEqual({
       type: "allow",
     });

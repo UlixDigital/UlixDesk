@@ -10,7 +10,9 @@ From the repository root:
 npm run build:extension
 ```
 
-That writes `extension/dist`. The zip next to it is not required for a local install. Neither is committed.
+That writes `extension/dist`, `extension/ulixdesk-extension.zip`, and `extension/extension-build.json`. None of them is committed. The zip includes `INSTALL.txt`. Staff can also download that zip from Settings after signing in. The steps are the same either way, and they are written up at `/help/extension`.
+
+The manifest `version` in `extension/dist` is stamped at build time: the package version plus a build number, for example `0.1.0.42`. `version_name` includes the short commit SHA. Unpacked copies do not auto-update. When the version changes, download the new zip, replace the folder, and click Reload on `chrome://extensions`.
 
 1. Open `chrome://extensions`.
 2. Turn on Developer mode.

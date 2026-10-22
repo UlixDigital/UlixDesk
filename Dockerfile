@@ -17,8 +17,14 @@ COPY . .
 # embed the logo and the standard fonts without Chromium.
 RUN node scripts/copy-pdfkit-runtime.mjs /opt/pdfkit-runtime \
   && du -sh /opt/pdfkit-runtime
+# Stamp the Chrome version from the commit and build number. .git is not
+# in the build context, so the workflow passes these as build args.
+ARG ULIXDESK_COMMIT=
+ARG ULIXDESK_BUILD_NUMBER=
+ENV ULIXDESK_COMMIT=$ULIXDESK_COMMIT
+ENV ULIXDESK_BUILD_NUMBER=$ULIXDESK_BUILD_NUMBER
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN npx prisma generate && npm run build \
+RUN npx prisma generate && npm run build:extension && npm run build \
   && find node_modules/@prisma/client/runtime -name '*.wasm-base64.*' -delete \
   && find node_modules/@prisma/client/runtime -name '*.map' -delete \
   && find node_modules/@prisma/engines -type f -name 'libquery_engine-*' -delete \
@@ -70,6 +76,8 @@ COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
 COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
+COPY --from=build --chown=nextjs:nodejs /app/extension/ulixdesk-extension.zip ./extension/ulixdesk-extension.zip
+COPY --from=build --chown=nextjs:nodejs /app/extension/extension-build.json ./extension/extension-build.json
 COPY --from=build --chown=nextjs:nodejs /app/assets/fonts ./assets/fonts
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
@@ -94,7 +102,9 @@ COPY --from=migrate --chown=nextjs:nodejs /opt/migrate /opt/migrate
 # Fail the build if slimming removes the engine the env var names.
 RUN test -s /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.x.so.node \
   && test -s /app/node_modules/@prisma/engines/schema-engine-debian-openssl-3.0.x \
-  && test ! -e /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node
+  && test ! -e /app/node_modules/@prisma/engines/libquery_engine-debian-openssl-3.0.x.so.node \
+  && test -s /app/extension/ulixdesk-extension.zip \
+  && test -s /app/extension/extension-build.json
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=12 \

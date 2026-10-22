@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import { AccessTokenSettings } from "@/components/access-token-settings";
 import { ChangePasswordForm } from "@/components/change-password-form";
+import { ExtensionDownloadCard } from "@/components/extension-download-card";
 import { WorkspaceCurrencyForm } from "@/components/workspace-currency-form";
 import { WorkspaceTimeZoneForm } from "@/components/workspace-timezone-form";
 import { listAccessTokens } from "@/lib/access-tokens";
+import { readExtensionRelease } from "@/lib/extension-artifact";
 import { getWorkspaceCurrency, getWorkspaceTimeZone } from "@/lib/bill-rates";
 import { listExtensionSessions } from "@/lib/extension-session";
 import { getRequestTimeZone } from "@/lib/request-time-zone";
@@ -17,16 +19,18 @@ export const metadata: Metadata = {
 export default async function SettingsPage() {
   const user = await getCurrentUser();
   const manager = Boolean(user && canManageWorkspace(user.role));
-  const [tokens, sessions, browserZone, currency, workspaceZone] = await Promise.all([
+  const [tokens, sessions, browserZone, currency, workspaceZone, extension] = await Promise.all([
     user ? listAccessTokens(user.id) : Promise.resolve([]),
     user ? listExtensionSessions(user.id) : Promise.resolve([]),
     getRequestTimeZone(),
     user && canSeeMoney(user.role) ? getWorkspaceCurrency() : Promise.resolve(null),
     manager ? getWorkspaceTimeZone() : Promise.resolve(null),
+    readExtensionRelease(),
   ]);
 
   return (
     <div className="mx-auto w-full max-w-3xl space-y-8">
+      <ExtensionDownloadCard build={extension} timeZone={browserZone ?? "UTC"} />
       {workspaceZone ? <WorkspaceTimeZoneForm timeZone={workspaceZone} /> : null}
       {currency ? <WorkspaceCurrencyForm currency={currency} /> : null}
       <ChangePasswordForm />

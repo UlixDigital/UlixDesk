@@ -7,6 +7,7 @@ test-results
 blob-report
 extension/dist
 extension/ulixdesk-extension.zip
+extension/extension-build.json
 env/*.env
 *.db
 *.db-journal

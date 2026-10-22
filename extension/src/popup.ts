@@ -1,4 +1,5 @@
 import {
+  fetchExtensionVersion,
   fetchProjects,
   fetchSession,
   fetchTimer,
@@ -12,6 +13,7 @@ import {
 import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
 import { hostAccessRequest } from "./host-permission";
+import { extensionUpdateNotice } from "./extension-version";
 import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel, type PopupModel } from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { readSettings, writeSettings } from "./storage";
@@ -53,6 +55,8 @@ let customUrl = "";
 let email = "";
 let password = "";
 let formError: string | null = null;
+let updateNotice: string | null = null;
+let noticeGeneration = 0;
 
 function requestBadgeRefresh() {
   void chrome.runtime.sendMessage({ type: "refresh-badge" });
@@ -69,6 +73,29 @@ function requestEnsureAccess(force = false): Promise<EnsureResult> {
       resolve(result as EnsureResult);
     });
   });
+}
+
+function localExtensionVersion() {
+  try {
+    return chrome.runtime.getManifest().version;
+  } catch {
+    return "";
+  }
+}
+
+async function refreshUpdateNotice() {
+  const generation = ++noticeGeneration;
+  const parsed = normalizeServerUrl(serverUrl);
+  let next: string | null = null;
+  if (parsed.ok) {
+    const published = await fetchExtensionVersion(parsed.origin);
+    if (generation !== noticeGeneration) return;
+    next = extensionUpdateNotice(published?.version ?? null, localExtensionVersion());
+  }
+  if (generation !== noticeGeneration) return;
+  if (updateNotice === next) return;
+  updateNotice = next;
+  render();
 }
 
 function applyStoredServer(stored: string) {
@@ -97,6 +124,7 @@ async function load() {
   render();
   const settings = await readSettings();
   applyStoredServer(settings.serverUrl);
+  void refreshUpdateNotice();
   projectId = settings.lastProjectId;
   accountName = settings.userName;
   accountEmail = settings.userEmail;
@@ -153,7 +181,9 @@ async function load() {
 
   signedIn = true;
   token = ready.settings.token;
+  const previousServer = serverUrl;
   serverUrl = ready.settings.serverUrl || serverUrl;
+  if (serverUrl !== previousServer) void refreshUpdateNotice();
   accountName = ready.settings.userName;
   accountEmail = ready.settings.userEmail;
 
@@ -270,9 +300,11 @@ function view() {
   }
   if (chrome === "sign-in") {
     shell.append(signInForm());
+    if (updateNotice) shell.append(noteLine(updateNotice, "notice"));
     return shell;
   }
   shell.append(accountStrip());
+  if (updateNotice) shell.append(noteLine(updateNotice, "notice"));
   shell.append(bodyFor(currentModel()));
   return shell;
 }
@@ -397,6 +429,7 @@ async function choosePreset(preset: ServerPreset) {
   const parsed = normalizeServerUrl(serverUrl);
   if (parsed.ok) await writeSettings({ serverUrl: parsed.origin });
   render();
+  void refreshUpdateNotice();
 }
 
 function onSignInClick() {
