@@ -25,6 +25,18 @@ test("a future image path stays behind sign-in", async ({ page }) => {
   await expect(page).toHaveURL(/\/login/);
 });
 
+test("the image optimizer is denied without a session", async ({ request }) => {
+  const response = await request.get("/_next/image?url=%2Fulix-logo.svg&w=48&q=75", {
+    maxRedirects: 0,
+  });
+  expect(response.status()).toBeGreaterThanOrEqual(300);
+  expect(response.status()).toBeLessThan(400);
+  const location = response.headers().location ?? "";
+  expect(location).toContain("/login");
+  expect(new URL(location, "http://127.0.0.1:3100").pathname).toBe("/login");
+  expect(response.headers()["content-type"] ?? "").not.toContain("image/");
+});
+
 test("sends a signed-out visit to sign-in, then accepts the owner password", async ({ page }) => {
   await page.goto("/clients");
   await expect(page).toHaveURL(/\/login/);

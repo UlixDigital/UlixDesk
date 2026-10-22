@@ -3,6 +3,10 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "standalone",
   poweredByHeader: false,
+  // SVG through the image optimizer is GHSA-2464-fhr4-w9xw. Leave this off.
+  images: {
+    dangerouslyAllowSVG: false,
+  },
   serverExternalPackages: ["@node-rs/argon2", "pg", "pdfkit", "nodemailer"],
   async headers() {
     return [
