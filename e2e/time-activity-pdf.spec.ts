@@ -6,7 +6,7 @@ import { expect, test, type TestInfo } from "@playwright/test";
 import { saveClientRate } from "../src/lib/bill-rates";
 import { deleteTimeChangesForTests } from "../src/lib/reset-test-db";
 import { createManualEntry } from "../src/lib/time-entries";
-import { activityFooterHost, todoDisplayId } from "../src/lib/time-activity-pdf";
+import { activityFooterHost } from "../src/lib/time-activity-pdf";
 import { createTodo } from "../src/lib/todos";
 import { signIn } from "./auth";
 
@@ -122,7 +122,7 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
     expect(ownerText).toContain("Grand total");
     expect(ownerText).toContain("4:00:00");
     expect(ownerText).toContain("$200.00");
-    expect(ownerText).toContain("To-do ID");
+    expect(ownerText).not.toContain("To-do ID");
     expect(ownerText).toContain("To-dos");
     expect(ownerText).toContain("Notes");
     expect(ownerText).toContain("Accessories Pdf");
@@ -131,8 +131,6 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
     expect(ownerText).toContain("Zoe Pdf");
     expect(ownerText).toContain("Publishing blogs");
     expect(ownerText).toContain("Wp maintenance");
-    expect(ownerText).toContain(todoDisplayId(blogs.todo.id));
-    expect(ownerText).toContain(todoDisplayId(maintenance.todo.id));
     expect(ownerText).toContain("Manually added; Called the client");
     expect(ownerText).toContain("Zoe timer");
     expect(ownerText.match(/Manually added/g)).toHaveLength(1);
@@ -154,10 +152,10 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
     expect(memberText).toContain("Zoe Pdf");
     expect(memberText).toContain("Palms Trading Pdf");
     expect(memberText).toContain("Publishing blogs");
-    expect(memberText).toContain(todoDisplayId(blogs.todo.id));
     expect(memberText).toContain("1:00:00");
     expect(memberText).toContain("Billable Time");
-    expect(memberText).toContain("To-do ID");
+    expect(memberText).not.toContain("To-do ID");
+    expect(memberText).toContain("To-dos");
     expect(memberText).not.toContain("E2E Owner");
     expect(memberText).not.toContain("Accessories Pdf");
     expect(memberText).not.toContain("Manually added");
