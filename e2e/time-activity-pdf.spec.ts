@@ -107,9 +107,8 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
   try {
     await signIn(ownerContext, prisma, owner.email);
     const ownerPage = await ownerContext.newPage();
-    const ownerPdf = await ownerPage.request.get(
-      "/reports/time-activity/export?preset=custom&from=2026-10-12&to=2026-10-18&format=pdf",
-    );
+    const exportPath = `/reports/time-activity/export?preset=custom&from=2026-10-12&to=2026-10-18&client=${client.id}&format=pdf`;
+    const ownerPdf = await ownerPage.request.get(exportPath);
     expect(ownerPdf.status()).toBe(200);
     const ownerBody = await ownerPdf.body();
     expect(ownerBody.subarray(0, 5).toString()).toBe("%PDF-");
@@ -147,9 +146,7 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
 
     await signIn(memberContext, prisma, zoe.email);
     const memberPage = await memberContext.newPage();
-    const memberPdf = await memberPage.request.get(
-      "/reports/time-activity/export?preset=custom&from=2026-10-12&to=2026-10-18&format=pdf&columns=hours,amount",
-    );
+    const memberPdf = await memberPage.request.get(`${exportPath}&columns=hours,amount`);
     expect(memberPdf.status()).toBe(200);
     const memberPath = `${artifacts}/time-activity-member.pdf`;
     await writeFile(memberPath, await memberPdf.body());
