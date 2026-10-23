@@ -141,7 +141,7 @@ test("time and activity groups two levels and sorts from the header", async ({ b
       expect(stdout).toContain("Zoe Member");
       expect(stdout).toContain("Website Group");
       expect(stdout).toContain("Grand total");
-      expect(stdout).toContain("USD 200.00");
+      expect(stdout).toContain("$200.00");
       expect(stdout).not.toMatch(/Screenshot|Activity %/);
     });
     await execFileAsync("pdftoppm", [

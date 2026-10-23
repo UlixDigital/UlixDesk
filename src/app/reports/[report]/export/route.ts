@@ -1,14 +1,12 @@
 import { requireUser } from "@/lib/auth";
+import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { reportCodes, reportCopy } from "@/lib/report-copy";
 import { builtReportToTable, renderReportPdf } from "@/lib/report-pdf";
-import {
-  activitySortLabel,
-  describeReportFilters,
-  isReportKind,
-  reportTitle,
-} from "@/lib/report-query";
+import { describeReportFilters, isReportKind, reportTitle } from "@/lib/report-query";
 import { prepareReport } from "@/lib/report-request";
-import { reportToCsv } from "@/lib/reports";
+import { reportToCsv, slicesForEntry } from "@/lib/reports";
+import { activityLineFromSlice, buildTimeActivityModel, renderTimeActivityPdf } from "@/lib/time-activity-pdf";
+import { zonedDayEnd, zonedDayStart } from "@/lib/time-zone";
 
 export async function GET(
   request: Request,
@@ -33,6 +31,30 @@ export async function GET(
     .toLowerCase()
     .replaceAll(/[^a-z0-9]+/g, "-")
     .replaceAll(/^-|-$/g, "");
+  if (url.searchParams.get("format") === "pdf" && report === "time-activity") {
+    const settings = await getInvoiceSettings();
+    const from = zonedDayStart(prepared.query.from, prepared.timeZone);
+    const to = zonedDayEnd(prepared.query.to, prepared.timeZone);
+    const lines = prepared.entries.flatMap((entry) =>
+      slicesForEntry(entry, from, to, prepared.timeZone).map(activityLineFromSlice),
+    );
+    const model = buildTimeActivityModel({
+      lines,
+      from: prepared.query.from,
+      to: prepared.query.to,
+      showMoney: prepared.showMoney,
+      organization: settings.companyName,
+      groupBy: prepared.query.groupBy,
+      sort: prepared.query.sort,
+      timeZone: prepared.timeZone,
+    });
+    const pdf = await renderTimeActivityPdf({
+      model,
+      appUrl: process.env.ULIXDESK_PUBLIC_ORIGIN ?? "",
+      empty: prepared.filtered ? reportCopy.emptyFiltered : reportCopy.empty,
+    });
+    return file(new Uint8Array(pdf), "application/pdf", `${slug}.pdf`);
+  }
   if (url.searchParams.get("format") === "pdf") {
     const member = prepared.people.find((person) => person.id === prepared.query.memberId) ?? null;
     const client = prepared.clients.find((item) => item.id === prepared.query.clientId) ?? null;
@@ -52,8 +74,8 @@ export async function GET(
         todoName: todo?.name ?? null,
         billable: prepared.query.billable,
         groupBy: prepared.query.groupBy,
-        groupBy2: report === "time-activity" ? prepared.query.groupBy2 : null,
-        sortLabel: report === "time-activity" ? activitySortLabel(prepared.query.sort) : null,
+        groupBy2: null,
+        sortLabel: null,
       }),
       table: builtReportToTable(prepared.report),
       empty: prepared.filtered ? reportCopy.emptyFiltered : reportCopy.empty,
