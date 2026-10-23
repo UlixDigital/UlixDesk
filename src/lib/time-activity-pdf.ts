@@ -102,8 +102,6 @@ export type ActivitySource = {
 
 export type ActivityDetail = {
   id: string;
-  /** Clean numeric id, or blank when the row has no to-do. */
-  todoId: string;
   todo: string;
   missingTodo: boolean;
   time: string;
@@ -164,22 +162,6 @@ type SectionMeasure = {
 };
 
 type Doc = InstanceType<typeof PDFDocument>;
-
-/**
- * A stable 8-digit id for PDF tables. Numeric to-do ids (4–12 digits) are kept.
- * Anything else, including a cuid, becomes the same 8 digits every time.
- */
-export function todoDisplayId(id: string | null | undefined) {
-  const value = (id ?? "").trim();
-  if (!value) return "";
-  if (/^\d{4,12}$/.test(value)) return value;
-  let hash = 0x811c9dc5;
-  for (let index = 0; index < value.length; index += 1) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 0x01000193);
-  }
-  return String((hash >>> 0) % 90_000_000 + 10_000_000);
-}
 
 /** Hostname only. An empty origin falls back to the public UlixDesk host. */
 export function activityFooterHost(origin?: string | null) {
@@ -472,10 +454,8 @@ function buildDetail(
   showMoney: boolean,
 ): ActivityDetail {
   const missingTodo = label === "";
-  const rawId = (lines.find((line) => (line.todoId ?? "").trim())?.todoId ?? "").trim();
   return {
     id: `${groupId}\t${todoKey}`,
-    todoId: todoDisplayId(rawId),
     todo: missingTodo ? reportCopy.noTodo : label,
     missingTodo,
     notes: detailNotes(lines),
@@ -552,8 +532,10 @@ function contentWidth(doc: Doc) {
 }
 
 function columnWidths(showMoney: boolean, total: number) {
-  const todos = showMoney ? 132 : 132 + 66;
-  const fixed = showMoney ? [66, 66, 133, todos, 66, 66, 66] : [66, 66, 133, todos, 66, 66];
+  // The old To-do ID column was 133pt. Split it between To-dos (66) and Notes (67).
+  // Without money, To-dos still absorbs the 66pt billed column as well.
+  const todos = showMoney ? 198 : 264;
+  const fixed = showMoney ? [66, 66, todos, 66, 66, 66] : [66, 66, todos, 66, 66];
   const used = fixed.reduce((sum, width) => sum + width, 0);
   return [...fixed, Math.max(total - used, 40)];
 }
@@ -562,7 +544,6 @@ function columnLabels(showMoney: boolean) {
   const labels: string[] = [
     reportCopy.date,
     reportCopy.member,
-    reportCopy.todoIdColumn,
     reportCopy.todos,
     reportCopy.timeLabel,
   ];
@@ -727,42 +708,42 @@ function cellHeights(doc: Doc, cells: string[], fonts: Weight[], widths: number[
 }
 
 function summaryFonts(showMoney: boolean): Weight[] {
-  const fonts: Weight[] = ["regular", "regular", "regular", "regular", "bold"];
+  const fonts: Weight[] = ["regular", "regular", "regular", "bold"];
   if (showMoney) fonts.push("bold");
   fonts.push("bold", "regular");
   return fonts;
 }
 
 function detailFonts(showMoney: boolean): Weight[] {
-  const fonts: Weight[] = ["regular", "regular", "regular", "regular", "regular"];
+  const fonts: Weight[] = ["regular", "regular", "regular", "regular"];
   if (showMoney) fonts.push("regular");
   fonts.push("regular", "regular");
   return fonts;
 }
 
 function totalFonts(showMoney: boolean): Weight[] {
-  const fonts: Weight[] = ["bold", "regular", "regular", "regular", "bold"];
+  const fonts: Weight[] = ["bold", "regular", "regular", "bold"];
   if (showMoney) fonts.push("bold");
   fonts.push("bold", "regular");
   return fonts;
 }
 
 function groupCells(group: ActivityGroup, showMoney: boolean) {
-  const cells = [group.showDate ? group.dateLabel : "", group.memberName, "", "", group.time];
+  const cells = [group.showDate ? group.dateLabel : "", group.memberName, "", group.time];
   if (showMoney) cells.push(group.billed);
   cells.push(group.billable, "");
   return cells;
 }
 
 function detailCells(detail: ActivityDetail, showMoney: boolean) {
-  const cells = ["", "", detail.todoId, detail.todo, detail.time];
+  const cells = ["", "", detail.todo, detail.time];
   if (showMoney) cells.push(detail.billed);
   cells.push(detail.billable, detail.notes);
   return cells;
 }
 
 function totalCells(section: ActivitySection, showMoney: boolean) {
-  const cells = [reportCopy.total, "", "", "", section.time];
+  const cells = [reportCopy.total, "", "", section.time];
   if (showMoney) cells.push(section.billed);
   cells.push(section.billable, "");
   return cells;

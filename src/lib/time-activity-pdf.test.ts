@@ -15,7 +15,6 @@ import {
   formatActivityMoney,
   paginateActivity,
   renderTimeActivityPdf,
-  todoDisplayId,
   type ActivityLine,
   type ActivityPdfRun,
   type ActivitySlice,
@@ -57,16 +56,7 @@ describe("time activity layout", () => {
     expect(formatActivityDate("2026-10-04")).toBe("Sun, Oct 4, 2026");
   });
 
-  it("derives a stable numeric to-do id and a footer hostname", () => {
-    expect(todoDisplayId("")).toBe("");
-    expect(todoDisplayId(null)).toBe("");
-    expect(todoDisplayId("19218383")).toBe("19218383");
-    expect(todoDisplayId("14465394")).toBe("14465394");
-    const hashed = todoDisplayId("clh0exampletodo0001");
-    expect(hashed).toMatch(/^[1-9]\d{7}$/);
-    expect(todoDisplayId("clh0exampletodo0001")).toBe(hashed);
-    expect(todoDisplayId("clh0exampletodo0002")).not.toBe(hashed);
-
+  it("uses the public hostname in the footer", () => {
     expect(activityFooterHost("https://desk.example/app")).toBe("desk.example");
     expect(activityFooterHost("desk.custom.com")).toBe("desk.custom.com");
     expect(activityFooterHost("")).toBe(ACTIVITY_REPORT_HOST);
@@ -144,11 +134,11 @@ describe("time activity layout", () => {
     expect(sam?.billable).toBe("0:01:00");
     expect(sam?.billed).toBe("$1.00");
     expect(sam?.details.map((detail) => detail.todo)).toEqual([reportCopy.noTodo, "Website"]);
-    expect(sam?.details[0]).toMatchObject({ missingTodo: true, notes: "Edited", todoId: "" });
+    expect(sam?.details[0]).toMatchObject({ missingTodo: true, notes: "Edited", todo: reportCopy.noTodo });
     expect(sam?.details[1]?.notes).toBe("  keep spaces  ");
     expect(acme?.groups[2]?.details[0]?.notes).toBe("Manually added; Called the client");
     expect(acme?.groups[0]?.details[0]?.notes).toBe("Edited");
-    expect(acme?.groups[0]?.details[0]?.todoId).toBe(todoDisplayId("cltodoada"));
+    expect(acme?.groups[0]?.details[0]?.todo).toBe("Homepage");
     expect(model.grand.time).toBe("2:11:44");
     expect(model.grand.billed).toBe("$86.00");
   });
@@ -347,8 +337,8 @@ describe("time activity layout", () => {
     expect(text).toContain("Ulix Digital");
     expect(text).toContain("Mon, Sep 28, 2026 - Sun, Oct 4, 2026");
     expect(text).toContain("Grand total");
-    expect(text).toContain("To-do ID");
-    expect(text).toContain("19218383");
+    expect(text).not.toContain("To-do ID");
+    expect(text).not.toContain("19218383");
     expect(text).toContain("Wp maintenance");
     expect(text).toContain("Acme");
     expect(text).toContain("Brightpath");
@@ -393,7 +383,7 @@ describe("time activity layout", () => {
     expect(memberText).not.toMatch(/\$|Billed|USD/);
     expect(memberText).toContain("0:05:22");
     expect(memberText).toContain("Billable Time");
-    expect(memberText).toContain("To-do ID");
+    expect(memberText).not.toContain("To-do ID");
     expect(memberText).toContain("To-dos");
   });
 
@@ -556,7 +546,6 @@ describe("time activity layout", () => {
     const wsi = model.sections.find((section) => section.name === "WSI Web Enhancers");
     const manual = wsi?.groups.find((group) => group.memberName === "Anupa Kaluarachchi");
     expect(manual?.details[0]).toMatchObject({
-      todoId: "14465394",
       todo: "Meetings, Minor Tasks, Emails, & QA",
       notes: "Manually added",
       time: "10:00:00",
@@ -568,9 +557,30 @@ describe("time activity layout", () => {
     const pdf = await renderTimeActivityPdf({ model, appUrl: "", compress: false, trace });
     expect(pdfPageCount(pdf)).toBeGreaterThan(1);
     const text = trace.map((run) => run.text).join("\n");
-    expect(text).toContain("To-do ID");
-    expect(text).toContain("19218383");
+    expect(text).not.toContain("To-do ID");
+    expect(text).not.toContain("19218383");
+    expect(text).not.toContain("14465394");
+    expect(text).toContain("To-dos");
     expect(text).toContain("Manually added");
+    const header = trace.filter((run) => run.text === "Date" || run.text === "Member" || run.text === "To-dos" || run.text === "Time" || run.text === "Billed amount" || run.text === "Billable time" || run.text === "Notes");
+    const firstHeaderY = header.find((run) => run.text === "Date")?.y;
+    const firstRow = header.filter((run) => run.y === firstHeaderY).sort((a, b) => a.x - b.x);
+    expect(firstRow.map((run) => run.text)).toEqual([
+      "Date",
+      "Member",
+      "To-dos",
+      "Time",
+      "Billed amount",
+      "Billable time",
+      "Notes",
+    ]);
+    const todosX = firstRow.find((run) => run.text === "To-dos")?.x ?? 0;
+    const notesX = firstRow.find((run) => run.text === "Notes")?.x ?? 0;
+    const timeX = firstRow.find((run) => run.text === "Time")?.x ?? 0;
+    // To-dos absorbed 66pt of the removed To-do ID column (198pt wide).
+    expect(timeX - todosX).toBeGreaterThan(180);
+    // Notes starts earlier than it did beside a 133pt To-do ID column, so the remainder is wider.
+    expect(notesX).toBeLessThan(600);
     expect(text).toContain("Generated with UlixDesk");
     expect(text).not.toContain("(continued)");
     const boldTime = trace.filter((run) => run.text === "0:10:22" && run.font === "bold");
@@ -583,7 +593,18 @@ describe("time activity layout", () => {
       mkdirSync(dir, { recursive: true });
       const pdfPath = `${dir}/time-activity-sample.pdf`;
       writeFileSync(pdfPath, pdf);
-      execFileSync("pdftoppm", ["-png", "-r", "150", pdfPath, `${dir}/ta-pdf-page`]);
+      execFileSync("pdftoppm", [
+        "-png",
+        "-r",
+        "150",
+        "-f",
+        "1",
+        "-l",
+        "1",
+        "-singlefile",
+        pdfPath,
+        `${dir}/ta-pdf-no-todoid-page-1`,
+      ]);
     }
   });
 });
