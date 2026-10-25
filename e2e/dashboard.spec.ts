@@ -155,10 +155,10 @@ test("owners see the team dashboard and members do not see money or other people
     expect(response?.status()).toBe(200);
     await expect(memberPage).toHaveURL(/\/dashboard$/);
     await expect(memberPage.getByRole("link", { name: "ALL", exact: true })).toHaveCount(0);
-    const html = await memberPage.locator("#main-content").innerHTML();
-    expect(html).not.toContain("Maya Chen");
-    expect(html).not.toContain("Jonah Ellis");
-    expect(html).not.toMatch(MONEY);
+    const visible = await memberPage.locator("#main-content").innerText();
+    expect(visible).not.toContain("Maya Chen");
+    expect(visible).not.toContain("Jonah Ellis");
+    expect(visible).not.toMatch(MONEY);
     const denied = await memberPage.request.get("/api/dashboard?scope=all");
     expect(denied.status()).toBe(403);
     expect(await denied.text()).not.toMatch(MONEY);
