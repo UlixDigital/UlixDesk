@@ -101,6 +101,17 @@ export function DocumentIcon(props: IconProps) {
   );
 }
 
+export function DashboardIcon(props: IconProps) {
+  return (
+    <svg {...base(props)}>
+      <rect x="4" y="4" width="6.5" height="6.5" rx="1.25" />
+      <rect x="13.5" y="4" width="6.5" height="6.5" rx="1.25" />
+      <rect x="4" y="13.5" width="6.5" height="6.5" rx="1.25" />
+      <rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.25" />
+    </svg>
+  );
+}
+
 export function ChartIcon(props: IconProps) {
   return (
     <svg {...base(props)}>
