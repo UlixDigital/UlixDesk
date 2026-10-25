@@ -1,11 +1,19 @@
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TimerBar } from "@/components/timer-bar";
+import { cn } from "@/lib/cn";
 import { requireUser } from "@/lib/auth";
 import { canManageWorkspace, roleLabel } from "@/lib/users-validation";
 
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
   const user = await requireUser();
+  const frame = wide ? "mx-auto w-full max-w-[1240px]" : "mx-auto w-full max-w-5xl";
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-ink">
       <a href="#main-content" className="skip-link">
@@ -18,10 +26,10 @@ export async function AppShell({ children }: { children: ReactNode }) {
           showTeam={canManageWorkspace(user.role)}
         />
         <div className="min-w-0 max-w-full">
-          <TimerBar />
+          <TimerBar frameClass={frame} wide={wide} />
           <main
             id="main-content"
-            className="mx-auto w-full min-w-0 max-w-5xl overflow-x-clip px-4 py-6 sm:px-6 sm:py-8"
+            className={cn(frame, "min-w-0 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8", wide && "lg:px-8")}
           >
             {children}
           </main>
