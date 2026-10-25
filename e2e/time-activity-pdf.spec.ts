@@ -131,9 +131,10 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
     expect(ownerText).toContain("Zoe Pdf");
     expect(ownerText).toContain("Publishing blogs");
     expect(ownerText).toContain("Wp maintenance");
-    expect(ownerText).toContain("Manually added; Called the client");
+    expect(ownerText).toContain("Called the client");
     expect(ownerText).toContain("Zoe timer");
-    expect(ownerText.match(/Manually added/g)).toHaveLength(1);
+    expect(ownerText).not.toContain("Manually added");
+    expect(ownerText).not.toContain("Edited");
     // The header range contains this date once. The second member on that date leaves Date blank.
     expect(ownerText.match(/Mon, Oct 12, 2026/g)).toHaveLength(2);
     expect(ownerText).toContain("Tue, Oct 13, 2026");
@@ -158,7 +159,10 @@ test("time and activity PDF matches the reference hierarchy", async ({ browser }
     expect(memberText).toContain("To-dos");
     expect(memberText).not.toContain("E2E Owner");
     expect(memberText).not.toContain("Accessories Pdf");
+    expect(memberText).toContain("Zoe timer");
     expect(memberText).not.toContain("Manually added");
+    expect(memberText).not.toContain("Edited");
+    expect(memberText).not.toContain("Called the client");
     expect(memberText).not.toMatch(/\$|Billed|USD/);
   } finally {
     await ownerContext.close();

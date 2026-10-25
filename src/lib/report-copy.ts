@@ -74,8 +74,6 @@ export const reportCopy = {
   billableTimeColumn: "Billable time",
   todos: "To-dos",
   noTodo: "(No to-do)",
-  manuallyAdded: "Manually added",
-  editedNote: "Edited",
   generatedWith: "Generated with UlixDesk",
   hours: "Hours",
   billableHours: "Billable hours",
