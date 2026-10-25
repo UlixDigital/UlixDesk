@@ -134,10 +134,10 @@ describe("time activity layout", () => {
     expect(sam?.billable).toBe("0:01:00");
     expect(sam?.billed).toBe("$1.00");
     expect(sam?.details.map((detail) => detail.todo)).toEqual([reportCopy.noTodo, "Website"]);
-    expect(sam?.details[0]).toMatchObject({ missingTodo: true, notes: "Edited", todo: reportCopy.noTodo });
+    expect(sam?.details[0]).toMatchObject({ missingTodo: true, notes: "", todo: reportCopy.noTodo });
     expect(sam?.details[1]?.notes).toBe("  keep spaces  ");
-    expect(acme?.groups[2]?.details[0]?.notes).toBe("Manually added; Called the client");
-    expect(acme?.groups[0]?.details[0]?.notes).toBe("Edited");
+    expect(acme?.groups[2]?.details[0]?.notes).toBe("Called the client");
+    expect(acme?.groups[0]?.details[0]?.notes).toBe("");
     expect(acme?.groups[0]?.details[0]?.todo).toBe("Homepage");
     expect(model.grand.time).toBe("2:11:44");
     expect(model.grand.billed).toBe("$86.00");
@@ -344,7 +344,9 @@ describe("time activity layout", () => {
     expect(text).toContain("Brightpath");
     expect(text.indexOf("Acme")).toBeLessThan(text.indexOf("Brightpath"));
     expect(text).toContain("(No to-do)");
-    expect(text).toContain("Manually added; Called the client");
+    expect(text).toContain("Called the client");
+    expect(text).not.toContain("Manually added");
+    expect(text).not.toContain("Edited");
     expect(text).toContain("Total");
     expect(text).toContain("$");
     expect(text).toContain("Generated with UlixDesk");
@@ -514,7 +516,7 @@ describe("time activity layout", () => {
       lines: [line({ note, manual: true })],
     });
     const notes = model.sections[0]?.groups[0]?.details[0]?.notes ?? "";
-    expect(notes.startsWith("Manually added; Start n")).toBe(true);
+    expect(notes.startsWith("Start n")).toBe(true);
     expect(notes.endsWith("…")).toBe(true);
     expect(notes.length).toBeLessThanOrEqual(ACTIVITY_NOTES_MAX + 1);
     expect(notes).not.toContain("end");
@@ -547,7 +549,7 @@ describe("time activity layout", () => {
     const manual = wsi?.groups.find((group) => group.memberName === "Anupa Kaluarachchi");
     expect(manual?.details[0]).toMatchObject({
       todo: "Meetings, Minor Tasks, Emails, & QA",
-      notes: "Manually added",
+      notes: "",
       time: "10:00:00",
       billed: "$250.00",
     });
@@ -561,7 +563,8 @@ describe("time activity layout", () => {
     expect(text).not.toContain("19218383");
     expect(text).not.toContain("14465394");
     expect(text).toContain("To-dos");
-    expect(text).toContain("Manually added");
+    expect(text).not.toContain("Manually added");
+    expect(text).not.toContain("Edited");
     const header = trace.filter((run) => run.text === "Date" || run.text === "Member" || run.text === "To-dos" || run.text === "Time" || run.text === "Billed amount" || run.text === "Billable time" || run.text === "Notes");
     const firstHeaderY = header.find((run) => run.text === "Date")?.y;
     const firstRow = header.filter((run) => run.y === firstHeaderY).sort((a, b) => a.x - b.x);
@@ -603,7 +606,7 @@ describe("time activity layout", () => {
         "1",
         "-singlefile",
         pdfPath,
-        `${dir}/ta-pdf-no-todoid-page-1`,
+        `${dir}/ta-pdf-no-manual-note-page-1`,
       ]);
     }
   });

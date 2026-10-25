@@ -465,8 +465,6 @@ function buildDetail(
 
 function detailNotes(lines: ActivityLine[]) {
   const parts: string[] = [];
-  if (lines.some((line) => line.manual)) parts.push(reportCopy.manuallyAdded);
-  else if (lines.some((line) => line.edited)) parts.push(reportCopy.editedNote);
   const seen = new Set<string>();
   for (const line of lines) {
     if (line.note === "" || seen.has(line.note)) continue;
