@@ -23,6 +23,8 @@ import {
 } from "@/lib/invoice-money";
 import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { getInvoice, invoiceDateKey, unratedForInvoice } from "@/lib/invoices";
+import { quotationCopy } from "@/lib/quotation-copy";
+import { quotationForInvoice } from "@/lib/quotations";
 import { formatMoney, formatMoneyNumber } from "@/lib/money";
 import { getCurrentUser } from "@/lib/session";
 import { todayInTimeZone } from "@/lib/time-zone";
@@ -77,6 +79,7 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
     clientUrl,
   });
   const hasTime = invoice.lines.some((line) => line.kind === "time");
+  const sourceQuotation = await quotationForInvoice(user.role, invoice.id);
   const unrated = invoice.status === "draft" && hasTime ? await unratedForInvoice(invoice) : [];
   const quantityHeader = invoice.lines.some((line) => line.quantityKind === "item") ? invoiceCopy.qty : invoiceCopy.hours;
   const discountValue =
@@ -96,6 +99,14 @@ export default async function InvoiceDetailPage({ params, searchParams }: PagePr
       <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight text-ink">Invoice {invoice.number}</h1>
+          {sourceQuotation ? (
+            <p className="mt-1 text-sm text-slate-600">
+              {quotationCopy.sourceQuotation}{" "}
+              <Link href={`/quotations/${sourceQuotation.id}`} className="font-medium text-accent hover:underline">
+                {sourceQuotation.number}
+              </Link>
+            </p>
+          ) : null}
           <p className="mt-1 text-sm text-slate-600">
             {invoice.client.name}
             <span className="text-slate-400"> · </span>

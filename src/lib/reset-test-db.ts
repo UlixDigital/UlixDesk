@@ -22,6 +22,11 @@ export async function resetTestDatabase() {
   resetPublicInvoiceRateLimits();
   setInvoiceMailTransportForTests(null);
   await deleteTimeChangesForTests(prisma);
+  await prisma.quotationEmail.deleteMany();
+  await prisma.quotationStatusEvent.deleteMany();
+  await prisma.quotationLine.deleteMany();
+  await prisma.quotation.deleteMany();
+  await prisma.quotationNumber.deleteMany();
   await prisma.invoiceEmail.deleteMany();
   await prisma.invoiceStatusEvent.deleteMany();
   await prisma.invoicePayment.deleteMany();

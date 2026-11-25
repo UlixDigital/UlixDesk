@@ -26,6 +26,7 @@ export function AppNav({
     ? [
         ...items.slice(0, 4),
         { href: "/invoices", label: "Invoices", icon: DocumentIcon },
+        { href: "/quotations", label: "Quotations", icon: DocumentIcon },
         { href: "/team", label: "Team", icon: UsersIcon },
         items[4],
       ]

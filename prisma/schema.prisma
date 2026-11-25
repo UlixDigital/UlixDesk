@@ -33,6 +33,9 @@ model User {
   invoicePayments   InvoicePayment[]
   invoiceStatusEvents InvoiceStatusEvent[]
   invoiceEmailsSent InvoiceEmail[]
+  quotationsCreated Quotation[]      @relation("QuotationAuthor")
+  quotationStatusEvents QuotationStatusEvent[]
+  quotationEmailsSent QuotationEmail[]
   todosCreated      Todo[]           @relation("TodoAuthor")
   todoAssignments   TodoAssignee[]
 
@@ -89,6 +92,7 @@ model Client {
   projects       Project[]
   billRates      BillRate[]
   invoices       Invoice[]
+  quotations     Quotation[]
   budget     Budget?
 
   @@index([archivedAt])
@@ -146,6 +150,9 @@ model WorkspaceSettings {
   invoiceTaxEnabled   Boolean  @default(false)
   invoiceTaxLabel     String   @default("Tax")
   invoiceTaxRateBps   Int      @default(0)
+  /// Quotation numbers are separate from invoices. `Q` and 1 print as Q-0001.
+  quotationPrefix     String   @default("Q")
+  nextQuotationNumber Int      @default(1)
   updatedAt           DateTime @updatedAt
 }
 
@@ -434,6 +441,8 @@ model Invoice {
   timeLinks           InvoiceTime[]
   statusEvents        InvoiceStatusEvent[]
   emailsSent          InvoiceEmail[]
+  /// Set when an accepted quotation is converted into this draft.
+  sourceQuotation     Quotation?
 
   @@index([clientId])
   @@index([status])
@@ -549,4 +558,111 @@ model InvoiceEmail {
   createdAt    DateTime @default(now())
 
   @@index([invoiceId, createdAt])
+}
+
+/// A number taken from the quotation counter. Rows stay after a quotation is
+/// removed, so a number is never issued twice. This counter is not the invoice counter.
+model QuotationNumber {
+  number      String   @id
+  allocatedAt DateTime @default(now())
+}
+
+/// A client quotation. `status` is draft, sent, accepted, or declined.
+/// Expired is not stored. It is derived when the valid-until date is before
+/// today and the quotation has not been accepted or declined.
+/// Money is integer minor units in `currency` (the client's currency at creation).
+model Quotation {
+  id              String    @id @default(cuid())
+  number          String    @unique
+  clientId        String
+  client          Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  status          String
+  currency        String
+  issueDate       DateTime  @db.Date
+  validUntil      DateTime  @db.Date
+  notes           String    @default("")
+  terms           String    @default("")
+  taxEnabled      Boolean   @default(false)
+  taxLabel        String    @default("Tax")
+  taxRateBps      Int       @default(0)
+  subtotalMinor   Int
+  taxMinor        Int
+  totalMinor      Int
+  createdById     String
+  createdBy       User      @relation("QuotationAuthor", fields: [createdById], references: [id], onDelete: Restrict)
+  sentAt          DateTime?
+  decidedAt       DateTime?
+  /// The draft invoice created from an accepted quotation. One quotation, one invoice.
+  invoiceId       String?   @unique
+  invoice         Invoice?  @relation(fields: [invoiceId], references: [id], onDelete: SetNull)
+  /// SHA-256 of the client view token. The plaintext is not stored.
+  /// A sealed copy (AES-256-GCM under INVOICE_LINK_KEY) lets owners and admins
+  /// copy the same link again. Both are cleared when the link is revoked.
+  viewTokenHash   String?   @unique
+  viewTokenCipher String?
+  viewTokenNonce  String?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lines           QuotationLine[]
+  statusEvents    QuotationStatusEvent[]
+  emailsSent      QuotationEmail[]
+
+  @@index([clientId])
+  @@index([status])
+  @@index([issueDate])
+  @@index([validUntil])
+}
+
+/// One quotation row. `quantityKind` is `hours` or `item`, using the same
+/// quantity storage as an invoice line. There is no tracked-time link.
+model QuotationLine {
+  id              String    @id @default(cuid())
+  quotationId     String
+  quotation       Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  position        Int
+  /// hours or item.
+  quantityKind    String    @default("item")
+  title           String
+  detail          String    @default("")
+  quantitySeconds Int
+  /// Hours: duration in milliseconds. Items: count scaled by 100000.
+  quantityMs      BigInt    @default(0)
+  rangeStart      DateTime? @db.Date
+  rangeEnd        DateTime? @db.Date
+  unitPriceMinor  Int
+  amountMinor     Int
+
+  @@index([quotationId])
+}
+
+/// One status change. Send, accept, and decline each write a row.
+model QuotationStatusEvent {
+  id          String    @id @default(cuid())
+  quotationId String
+  quotation   Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  actorId     String
+  actor       User      @relation(fields: [actorId], references: [id], onDelete: Restrict)
+  fromStatus  String
+  toStatus    String
+  reason      String
+  createdAt   DateTime  @default(now())
+
+  @@index([quotationId, createdAt])
+}
+
+/// One attempt to email a quotation. Failures are kept as well as successes.
+model QuotationEmail {
+  id           String    @id @default(cuid())
+  quotationId  String
+  quotation    Quotation @relation(fields: [quotationId], references: [id], onDelete: Cascade)
+  sentById     String
+  sentBy       User      @relation(fields: [sentById], references: [id], onDelete: Restrict)
+  toAddresses  String[]
+  ccAddresses  String[]
+  subject      String
+  success      Boolean
+  error        String?
+  createdAt    DateTime  @default(now())
+
+  @@index([quotationId, createdAt])
 }

@@ -56,6 +56,12 @@ export type InvoicePdfInput = {
   clientAddress: string;
   issueDate: string;
   dueDate: string;
+  /** Defaults to `Invoice ${number}`. Quotations pass `Quotation Q-0001`. */
+  heading?: string;
+  /** Defaults to `Due date:`. Quotations pass `Valid until:`. */
+  dueLabel?: string;
+  /** Printed under Notes and before bank details. Invoices leave this empty. */
+  terms?: string;
   /** Drawn when the due date has passed and a balance remains. */
   overdue?: boolean;
   /** Draws Status: Paid in the date block. A zero-total issue sets this. */
@@ -114,8 +120,11 @@ function cleanInput(input: InvoicePdfInput): InvoicePdfInput {
     clientAddress: pdfText(input.clientAddress),
     issueDate: pdfText(input.issueDate),
     dueDate: pdfText(input.dueDate),
+    heading: input.heading ? pdfText(input.heading) : undefined,
+    dueLabel: input.dueLabel ? pdfText(input.dueLabel) : undefined,
     poNumber: input.poNumber ? pdfText(input.poNumber) : null,
     notes: pdfText(normalizeInvoiceText(input.notes)),
+    terms: input.terms ? pdfText(normalizeInvoiceText(input.terms)) : "",
     bankDetails: pdfText(normalizeInvoiceText(input.bankDetails)),
     lines: input.lines.map((line) => ({
       title: pdfText(line.title),
@@ -149,8 +158,9 @@ function fontFile(name: string) {
 
 function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
   doc.fillColor(INK).font(FONT).fontSize(TITLE_SIZE);
-  doc.text(`Invoice ${input.number}`, LEFT, 84, { lineBreak: false });
-  traceText(trace, `Invoice ${input.number}`, LEFT, 84);
+  const heading = input.heading || `Invoice ${input.number}`;
+  doc.text(heading, LEFT, 84, { lineBreak: false });
+  traceText(trace, heading, LEFT, 84);
   doc.image(ulixLogoPng, 482, 100, { fit: [90, 28], align: "right" });
 
   let y = 115;
@@ -203,7 +213,7 @@ function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
 function drawDateBlock(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInput, y: number) {
   const rows = [
     ["Issue date:", input.issueDate],
-    ["Due date:", input.dueDate],
+    [input.dueLabel || "Due date:", input.dueDate],
     ...(input.paid ? [["Status:", "Paid"]] : []),
     ...(input.overdue ? [["Overdue:", "Yes"]] : []),
     ...(input.poNumber ? [["PO number:", input.poNumber]] : []),
@@ -292,7 +302,8 @@ function drawNotes(doc: Doc, trace: PdfTrace[] | undefined, input: InvoicePdfInp
   doc.font(FONT).fontSize(BODY_SIZE).fillColor(INK);
   doc.text("Notes", LEFT + PAD, y, { lineBreak: false });
   traceText(trace, "Notes", LEFT + PAD, y);
-  const body = [input.notes, input.bankDetails].filter(Boolean).join("\n\n");
+  const terms = input.terms?.trim() ? `Terms\n${input.terms.trim()}` : "";
+  const body = [input.notes, terms, input.bankDetails].filter(Boolean).join("\n\n");
   if (!body) return;
   drawWrapped(doc, trace, body, LEFT + PAD, y + INVOICE_NOTES_BODY_GAP, width, BODY_SIZE, FONT, INK, INVOICE_NOTES_LINE_GAP);
 }
