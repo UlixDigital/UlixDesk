@@ -9,7 +9,8 @@ export function isPublicPath(pathname: string) {
     pathname.startsWith("/api/health/") ||
     isExtensionHelpPath(pathname) ||
     isExtensionVersionPath(pathname) ||
-    isClientInvoicePath(pathname)
+    isClientInvoicePath(pathname) ||
+    isClientQuotationPath(pathname)
   );
 }
 
@@ -29,6 +30,11 @@ export function isExtensionVersionPath(pathname: string) {
 /** The unguessable client invoice link. No session cookie. */
 export function isClientInvoicePath(pathname: string) {
   return pathname.startsWith("/v/");
+}
+
+/** The unguessable client quotation link. No session cookie. */
+export function isClientQuotationPath(pathname: string) {
+  return pathname.startsWith("/q/");
 }
 
 export function safeNextPath(pathname: string) {
