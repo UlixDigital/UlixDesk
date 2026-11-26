@@ -31,6 +31,7 @@ export const popupCopy = {
   timerRunning: "Timer running",
   projectLabel: "Project",
   projectPlaceholder: "Project",
+  clientLabel: "Client",
   todoLabel: "To-do",
   todoOptional: "Optional",
   todoSearch: "Search or type a new to-do",

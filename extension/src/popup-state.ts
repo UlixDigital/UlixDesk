@@ -20,6 +20,7 @@ export type PopupModel =
       notice: string | null;
       helper: string;
       alert: string | null;
+      clientName: string | null;
     }
   | {
       kind: "running";
@@ -88,7 +89,7 @@ export function derivePopup(input: {
     return {
       kind: "running",
       projectName: input.timer.projectName,
-      clientName: input.timer.clientName,
+      clientName: trimmedClientName(input.timer.clientName),
       startedAt: input.timer.startedAt,
       elapsedLabel: formatElapsed(input.now - Date.parse(input.timer.startedAt)),
       status: input.startedHere ? popupCopy.timerRunning : popupCopy.alreadyRunning,
@@ -101,15 +102,32 @@ export function derivePopup(input: {
   if (input.projects.length === 0) return { kind: "no-projects" };
 
   const known = input.projects.some((project) => project.id === input.projectId);
+  const projectId = known ? input.projectId : "";
   return {
     kind: "idle",
     projects: input.projects,
-    projectId: known ? input.projectId : "",
+    projectId,
     note: input.note,
     notice: input.projectNotice,
     helper: known ? popupCopy.idle : popupCopy.chooseProject,
     alert: input.alert,
+    clientName: clientNameFor(input.projects, projectId),
   };
+}
+
+function trimmedClientName(name: string | null | undefined) {
+  const trimmed = name?.trim() ?? "";
+  return trimmed || null;
+}
+
+function clientNameFor(projects: ApiProject[], projectId: string) {
+  if (!projectId) return null;
+  return trimmedClientName(projects.find((project) => project.id === projectId)?.client?.name);
+}
+
+export function clientCaption(name: string | null) {
+  if (!name) return null;
+  return `${popupCopy.clientLabel} ${name}`;
 }
 
 /** Pending until storage is read, so a signed-in popup never paints the sign-in form first. */

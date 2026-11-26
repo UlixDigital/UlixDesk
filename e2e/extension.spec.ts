@@ -20,8 +20,14 @@ test.afterAll(async () => {
 test.skip(Boolean(process.env.CI), "The unpacked extension needs a display, xdotool, and ffmpeg.");
 
 test("loads the unpacked extension and starts and stops a timer", async () => {
+  const client = await prisma.client.create({
+    data: { name: "WSI Web Enhancers" },
+  });
   const project = await prisma.project.create({
-    data: { name: "Extension E2E Project", billable: true },
+    data: { name: "Extension E2E Project", billable: true, clientId: client.id },
+  });
+  const internal = await prisma.project.create({
+    data: { name: "Extension E2E Internal", billable: true },
   });
   const owner = await prisma.user.findUniqueOrThrow({ where: { email: e2eEmail } });
   const token = `ulixdesk_${randomBytes(32).toString("base64url")}`;
@@ -67,11 +73,24 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     ).toBeVisible();
 
     await page.goto(`chrome-extension://${extensionId}/popup.html`);
-    await page.locator("#project").selectOption({ label: "Extension E2E Project" });
+    await page.locator("#project").selectOption({ label: "Extension E2E Internal" });
+    await expect(page.locator("#project option:checked")).toHaveText("Extension E2E Internal");
+    await expect(page.locator("#project-client")).toHaveCount(0);
+
+    await page.locator("#project").selectOption({ label: "Extension E2E Project · WSI Web Enhancers" });
+    await expect(page.locator("#project option:checked")).toHaveText(
+      "Extension E2E Project · WSI Web Enhancers",
+    );
+    await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
     await page.locator("#note").fill("From the extension");
     await page.getByRole("button", { name: "Start", exact: true }).click();
     await expect(page.getByText("Timer running", { exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "Extension E2E Project" })).toBeVisible();
+    await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
+
+    await page.goto(`chrome-extension://${extensionId}/popup.html`);
+    await expect(page.getByText("A timer is already running.")).toBeVisible();
+    await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
     await page.waitForTimeout(1100);
     await page.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(page.getByText("No timer running")).toBeVisible();
@@ -85,8 +104,9 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     await context.close();
     await rm(userDataDir, { recursive: true, force: true });
     await prisma.runningTimer.deleteMany();
-    await prisma.timeEntry.deleteMany({ where: { projectId: project.id } });
-    await prisma.project.delete({ where: { id: project.id } }).catch(() => undefined);
+    await prisma.timeEntry.deleteMany({ where: { projectId: { in: [project.id, internal.id] } } });
+    await prisma.project.deleteMany({ where: { id: { in: [project.id, internal.id] } } });
+    await prisma.client.delete({ where: { id: client.id } }).catch(() => undefined);
     await prisma.accessToken.deleteMany({ where: { tokenHash } });
   }
 });
@@ -122,6 +142,7 @@ test("signs in from the popup, tracks time, signs out, and drops a revoked crede
     await expect(page.getByText(e2eEmail)).toBeVisible();
 
     await page.locator("#project").selectOption({ label: "Extension Sign-in Project" });
+    await expect(page.locator("#project-client")).toHaveCount(0);
     await page.locator("#note").fill("Signed in from the popup");
     await page.getByRole("button", { name: "Start", exact: true }).click();
     await expect(page.getByText("Timer running", { exact: true })).toBeVisible();

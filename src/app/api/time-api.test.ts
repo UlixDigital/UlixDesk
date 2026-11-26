@@ -89,6 +89,29 @@ describe("extension API", () => {
     ]);
   });
 
+  it("returns the client name already stored on an active project", async () => {
+    const client = await prisma.client.create({ data: { name: "WSI Web Enhancers" } });
+    const project = await createProject({
+      name: "Website",
+      description: null,
+      clientId: client.id,
+      billable: true,
+    });
+
+    const response = await listProjects(get("http://localhost/api/projects"));
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      projects: [
+        {
+          id: project.id,
+          name: "Website",
+          billable: true,
+          client: { id: client.id, name: "WSI Web Enhancers" },
+        },
+      ],
+    });
+  });
+
   it("starts one timer, reads it back, and rejects a second start", async () => {
     const project = await createProject({
       name: "Website",

@@ -17,7 +17,14 @@ import { popupCopy } from "./copy";
 import { signOutOfExtension, type EnsureResult } from "./credentials";
 import { hostAccessRequest } from "./host-permission";
 import { extensionUpdateNotice } from "./extension-version";
-import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel, type PopupModel } from "./popup-state";
+import {
+  clientCaption,
+  derivePopup,
+  failureAfterRefresh,
+  popupChrome,
+  projectOptionLabel,
+  type PopupModel,
+} from "./popup-state";
 import { describeSignIn } from "./sign-in-state";
 import { applyServerSelection, loadBakedServerUrl } from "./default-server";
 import { readSettings, writeSettings } from "./storage";
@@ -649,6 +656,8 @@ function idleForm(model: Extract<PopupModel, { kind: "idle" }>) {
   noteField.append(noteLabel, textarea);
 
   form.append(projectField);
+  const client = clientLine(model.clientName);
+  if (client) form.append(client);
   if (model.projectId) form.append(todoField(model.projectId));
   if (model.notice) form.append(noteLine(model.notice, "notice"));
   else form.append(noteLine(model.helper, "helper"));
@@ -668,7 +677,8 @@ function runningView(model: Extract<PopupModel, { kind: "running" }>) {
   const name = el("h2", "project-name", model.projectName);
   wrap.append(status, name);
   if (model.todoTitle) wrap.append(el("p", "client-name", model.todoTitle));
-  if (model.clientName) wrap.append(el("p", "client-name", model.clientName));
+  const client = clientLine(model.clientName);
+  if (client) wrap.append(client);
   const elapsed = el("p", "elapsed", model.elapsedLabel);
   elapsed.dataset.elapsed = "true";
   const elapsedLabel = el("span", "sr-only", `${popupCopy.elapsedLabel} `);
@@ -892,6 +902,14 @@ async function onStop() {
   }
   render();
   requestBadgeRefresh();
+}
+
+function clientLine(name: string | null) {
+  const caption = clientCaption(name);
+  if (!caption) return null;
+  const line = el("p", "client-name", caption);
+  line.id = "project-client";
+  return line;
 }
 
 function statusBlock(title: string, body: string) {
