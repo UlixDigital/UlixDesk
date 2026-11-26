@@ -1,13 +1,25 @@
 import { describe, expect, it } from "vitest";
 import type { ApiProject, ApiTimer } from "./api";
 import { popupCopy } from "./copy";
-import { derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel } from "./popup-state";
+import { clientCaption, derivePopup, failureAfterRefresh, popupChrome, projectOptionLabel } from "./popup-state";
 
 const project: ApiProject = {
   id: "website",
   name: "Website",
   billable: true,
   client: { id: "acme", name: "Acme" },
+};
+const internal: ApiProject = {
+  id: "internal",
+  name: "Internal",
+  billable: false,
+  client: null,
+};
+const enhancers: ApiProject = {
+  id: "enhancers",
+  name: "Site care",
+  billable: true,
+  client: { id: "wsi", name: "WSI Web Enhancers" },
 };
 const timer: ApiTimer = {
   id: "timer-1",
@@ -105,7 +117,9 @@ describe("popup state", () => {
       note: "Call",
       helper: popupCopy.idle,
       notice: null,
+      clientName: "Acme",
     });
+    expect(clientCaption("Acme")).toBe("Client Acme");
     expect(projectOptionLabel(project)).toBe("Website · Acme");
 
     const gone = derivePopup({ ...base, projectId: "old", projectNotice: popupCopy.projectGone });
@@ -123,6 +137,58 @@ describe("popup state", () => {
       projectNotice: popupCopy.projectGone,
     });
     expect(onlyChoice.kind).toBe("no-projects");
+  });
+
+  it("shows the selected project's client and hides a project that has none", () => {
+    const selected = derivePopup({
+      ...base,
+      projects: [internal, project, enhancers],
+      projectId: "enhancers",
+    });
+    expect(selected).toMatchObject({ kind: "idle", projectId: "enhancers", clientName: "WSI Web Enhancers" });
+    expect(clientCaption("WSI Web Enhancers")).toBe(`${popupCopy.clientLabel} WSI Web Enhancers`);
+    expect(projectOptionLabel(enhancers)).toBe("Site care · WSI Web Enhancers");
+
+    const switched = derivePopup({
+      ...base,
+      projects: [internal, project, enhancers],
+      projectId: "internal",
+    });
+    expect(switched).toMatchObject({ kind: "idle", projectId: "internal", clientName: null });
+    expect(clientCaption(null)).toBeNull();
+    expect(projectOptionLabel(internal)).toBe("Internal");
+
+    const blank = derivePopup({
+      ...base,
+      projects: [{ ...project, client: { id: "acme", name: "  " } }],
+      projectId: "website",
+    });
+    expect(blank).toMatchObject({ kind: "idle", clientName: null });
+
+    const cleared = derivePopup({ ...base, projectId: "" });
+    expect(cleared).toMatchObject({ kind: "idle", projectId: "", clientName: null });
+  });
+
+  it("keeps the client on a timer that is already running when the popup opens", () => {
+    expect(derivePopup({ ...base, timer, projects: null, startedHere: false })).toMatchObject({
+      kind: "running",
+      projectName: "Website",
+      clientName: "Acme",
+      status: popupCopy.alreadyRunning,
+    });
+    expect(
+      derivePopup({
+        ...base,
+        timer: { ...timer, clientName: null },
+        startedHere: false,
+      }),
+    ).toMatchObject({ kind: "running", clientName: null });
+    expect(
+      derivePopup({
+        ...base,
+        timer: { ...timer, clientName: "  " },
+      }),
+    ).toMatchObject({ kind: "running", clientName: null });
   });
 
   it("does not show the sign-in form before the stored session is known", () => {

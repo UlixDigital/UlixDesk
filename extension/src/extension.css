@@ -89,6 +89,10 @@ body {
   font-size: 12px;
 }
 
+.client-name {
+  margin: 0;
+}
+
 h1,
 .state-title,
 .project-name {
