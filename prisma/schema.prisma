@@ -150,9 +150,9 @@ model WorkspaceSettings {
   invoiceTaxEnabled   Boolean  @default(false)
   invoiceTaxLabel     String   @default("Tax")
   invoiceTaxRateBps   Int      @default(0)
-  /// Quotation numbers are separate from invoices. `Q` and 1 print as Q-0001.
-  quotationPrefix     String   @default("Q")
-  nextQuotationNumber Int      @default(1)
+  /// Quotation numbers are separate from invoices. `ULXQ` and 2100 print as ULXQ2100.
+  quotationPrefix     String   @default("ULXQ")
+  nextQuotationNumber Int      @default(2100)
   updatedAt           DateTime @updatedAt
 }
 

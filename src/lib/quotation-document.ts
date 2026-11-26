@@ -51,6 +51,7 @@ export function toQuotationPdfInput(input: {
   return {
     number: input.number,
     heading: `${quotationCopy.documentTitle} ${input.number}`,
+    headingBoldPrefix: quotationCopy.documentTitle,
     dueLabel: `${quotationCopy.validUntil}:`,
     quantityHeader: pdfQuantityHeader(input.lines),
     companyName: input.companyName,
@@ -65,8 +66,9 @@ export function toQuotationPdfInput(input: {
     bankDetails: "",
     lines: input.lines.map((line) => ({
       title: line.title,
+      description: line.detail,
       detail: invoiceLineDetail({
-        detail: line.detail,
+        detail: "",
         rangeStart: dateKey(line.rangeStart),
         rangeEnd: dateKey(line.rangeEnd),
       }),

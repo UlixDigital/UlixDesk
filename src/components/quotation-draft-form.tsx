@@ -2,7 +2,8 @@
 
 import { useActionState, useMemo, useState } from "react";
 import { saveQuotationAction, type QuotationFormState } from "@/app/quotations/actions";
-import { quotationCopy } from "@/lib/quotation-copy";
+import { QUOTATION_VALID_MONTHS, quotationCopy } from "@/lib/quotation-copy";
+import { addCalendarMonths } from "@/lib/time-zone";
 import { lineAmountFromCount, lineAmountFromMs, parseItemQuantity, parseQuantityInput } from "@/lib/invoice-money";
 import { formatMoney, parseRateInput } from "@/lib/money";
 import { invoiceTotals } from "@/lib/invoice-money";
@@ -15,6 +16,7 @@ type LineState = {
   key: string;
   quantityKind: "hours" | "item";
   title: string;
+  detail: string;
   rangeStart: string;
   rangeEnd: string;
   quantity: string;
@@ -48,6 +50,9 @@ export function QuotationDraftForm({
   const [rows, setRows] = useState(lines);
   const [taxOn, setTaxOn] = useState(taxEnabled);
   const [rate, setRate] = useState(taxRate);
+  const [issue, setIssue] = useState(issueDate);
+  const [valid, setValid] = useState(validUntil);
+  const [validTouched, setValidTouched] = useState(false);
   const preview = useMemo(() => previewTotals(rows, currency, taxOn, rate), [rows, currency, taxOn, rate]);
 
   return (
@@ -71,7 +76,14 @@ export function QuotationDraftForm({
             id="quotation-issue-date"
             name="issueDate"
             type="date"
-            defaultValue={issueDate}
+            value={issue}
+            onChange={(event) => {
+              const next = event.target.value;
+              setIssue(next);
+              if (!validTouched && /^\d{4}-\d{2}-\d{2}$/.test(next)) {
+                setValid(addCalendarMonths(next, QUOTATION_VALID_MONTHS));
+              }
+            }}
             className={`${ui.input} mt-1.5`}
             required
           />
@@ -82,7 +94,11 @@ export function QuotationDraftForm({
             id="quotation-valid-until"
             name="validUntil"
             type="date"
-            defaultValue={validUntil}
+            value={valid}
+            onChange={(event) => {
+              setValidTouched(true);
+              setValid(event.target.value);
+            }}
             className={`${ui.input} mt-1.5`}
             required
           />
@@ -106,7 +122,6 @@ export function QuotationDraftForm({
               <tr key={row.key} className="border-t border-slate-200 align-top">
                 <td className="px-3 py-2">
                   <input type="hidden" name="lineQuantityKind" value={row.quantityKind} />
-                  <input type="hidden" name="lineDetail" value="" />
                   <label className="mb-2 block text-xs font-medium text-slate-600">
                     {quotationCopy.lineType}
                     <select
@@ -128,6 +143,18 @@ export function QuotationDraftForm({
                     onChange={(event) => update(setRows, index, { title: event.target.value })}
                     className={ui.input}
                   />
+                  <label className="mt-2 block text-xs font-medium text-slate-600">
+                    {quotationCopy.lineDescription}
+                    <textarea
+                      aria-label={`${quotationCopy.lineDescription} ${index + 1}`}
+                      name="lineDetail"
+                      value={row.detail}
+                      rows={3}
+                      onChange={(event) => update(setRows, index, { detail: event.target.value })}
+                      placeholder={quotationCopy.lineDescriptionHint}
+                      className={`${ui.input} mt-1`}
+                    />
+                  </label>
                   <details
                     className="mt-2"
                     ref={(node) => {
@@ -227,6 +254,7 @@ export function QuotationDraftForm({
               key: `new-${current.length}-${Date.now()}`,
               quantityKind: "item",
               title: "",
+              detail: "",
               rangeStart: "",
               rangeEnd: "",
               quantity: "1",

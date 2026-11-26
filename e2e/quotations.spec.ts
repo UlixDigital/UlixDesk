@@ -3,6 +3,7 @@ import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { PrismaClient } from "@prisma/client";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { addCalendarMonths } from "../src/lib/time-zone";
 import { signIn } from "./auth";
 
 function artifactDir(testInfo: TestInfo) {
@@ -36,7 +37,7 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
   });
   await prisma.workspaceSettings.upsert({
     where: { id: "workspace" },
-    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD", quotationPrefix: "Q", nextQuotationNumber: 1 },
+    update: { timeZone: "Asia/Colombo", defaultCurrency: "USD", quotationPrefix: "ULXQ", nextQuotationNumber: 2100 },
     create: { id: "workspace", timeZone: "Asia/Colombo", defaultCurrency: "USD" },
   });
   const client = await prisma.client.create({
@@ -75,21 +76,29 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
     expect(navText.indexOf("Quotations")).toBeGreaterThan(navText.indexOf("Invoices"));
     await page.locator("#quotation-client").selectOption(client.id);
     await page.getByRole("button", { name: "Create quotation" }).click();
-    await expect(page.getByRole("heading", { name: "Quotation Q-0001" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quotation ULXQ2100" })).toBeVisible();
+    const issued = await page.locator("#quotation-issue-date").inputValue();
+    await expect(page.locator("#quotation-valid-until")).toHaveValue(addCalendarMonths(issued, 3));
 
     await page.getByRole("button", { name: "Add line" }).click();
     await page.getByLabel("Type 1").selectOption("hours");
-    await page.getByLabel("Description 1").fill("Weekly quotation");
+    await page.getByLabel("Description 1", { exact: true }).fill("Weekly quotation");
+    await page.getByLabel("Line description 1", { exact: true }).fill("Homepage refresh\nand hosting");
     await page.getByLabel("Total hours (qty) 1").fill("2");
     await page.getByLabel("Unit price 1").fill("25");
     await page.locator("#quotation-tax-enabled").check();
     await page.locator("#quotation-tax-rate").fill("10");
+    await page.locator("#quotation-issue-date").fill("2026-11-30");
+    await expect(page.locator("#quotation-valid-until")).toHaveValue("2027-02-28");
+    await page.locator("#quotation-valid-until").fill("2027-06-01");
+    await page.locator("#quotation-issue-date").fill("2026-12-15");
+    await expect(page.locator("#quotation-valid-until")).toHaveValue("2027-06-01");
     await page.locator("#quotation-issue-date").fill("2020-01-02");
     await page.locator("#quotation-valid-until").fill("2020-01-02");
     await expect(page.locator("#quotation-totals")).toContainText("USD 50.00");
     await expect(page.locator("#quotation-totals")).toContainText("USD 5.00");
     await expect(page.locator("#quotation-totals")).toContainText("USD 55.00");
-    await shot(page, shots, "quotation-form");
+    await shot(page, shots, "quotation-form-v2");
 
     await page.getByRole("button", { name: "Save draft" }).click();
     await expect(page.getByRole("status").filter({ hasText: "Draft saved." })).toBeVisible();
@@ -99,20 +108,23 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
     const pdf = await page.request.get(`${quotationUrl.pathname}/pdf`);
     expect(pdf.status()).toBe(200);
     expect(pdf.headers()["content-type"]).toContain("application/pdf");
-    expect(pdf.headers()["content-disposition"]).toContain("Quotation-Q-0001");
+    expect(pdf.headers()["content-disposition"]).toContain("Quotation-ULXQ2100");
     const body = await pdf.body();
     expect(body.subarray(0, 5).toString()).toBe("%PDF-");
 
     await page.goto("/quotations");
     const row = page.getByRole("row", { name: /Quotation Northwind/ });
-    await expect(row.getByRole("link", { name: "Q-0001" })).toBeVisible();
+    await expect(row.getByRole("link", { name: "ULXQ2100" })).toBeVisible();
     await expect(row.getByRole("cell", { name: "Expired" })).toBeVisible();
     await shot(page, shots, "quotations-list");
 
     const csv = await page.request.get("/quotations/export");
     expect(csv.status()).toBe(200);
     const csvText = await csv.text();
-    expect(csvText).toContain("Q-0001");
+    expect(csvText).toContain("ULXQ2100");
+    expect(csvText).toContain("Line descriptions");
+    expect(csvText).toContain("Homepage refresh");
+    expect(csvText).toContain("and hosting");
     expect(csvText).toContain("Quotation Northwind");
     expect(csvText).toContain("Expired");
     expect(csvText).toContain("50.00");
@@ -132,7 +144,9 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
     expect(sharePath.startsWith("/q/")).toBe(true);
     const publicPage = await ownerContext.newPage();
     await publicPage.goto(sharePath);
-    await expect(publicPage.getByRole("heading", { name: "Quotation Q-0001" })).toBeVisible();
+    await expect(publicPage.getByRole("heading", { name: "Quotation ULXQ2100" })).toBeVisible();
+    await expect(publicPage.getByText("Homepage refresh")).toBeVisible();
+    await expect(publicPage.getByText("and hosting")).toBeVisible();
     await expect(publicPage.getByText("USD 55.00")).toBeVisible();
     await expect(publicPage.getByText("Amount due")).toHaveCount(0);
     await expect(publicPage.getByText("Account Number")).toHaveCount(0);
@@ -143,10 +157,11 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
     await publicPage.close();
 
     await page.getByRole("button", { name: "Duplicate" }).click();
-    await expect(page.getByRole("heading", { name: "Quotation Q-0002" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Quotation ULXQ2101" })).toBeVisible();
     await expect(page.locator("#quotation-status")).toHaveText("Draft");
     await expect(page.getByText("Quotation duplicated as a new draft.")).toBeVisible();
-    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly quotation");
+    await expect(page.getByLabel("Description 1", { exact: true })).toHaveValue("Weekly quotation");
+    await expect(page.getByLabel("Line description 1", { exact: true })).toHaveValue("Homepage refresh\nand hosting");
 
     await page.goto(quotationUrl.pathname);
     await waitForHydration(page);
@@ -155,11 +170,12 @@ test("an owner quotes, expires, shares, duplicates, and converts while a member 
     await expect(page.locator("#quotation-status")).toHaveText("Accepted");
     await page.getByRole("button", { name: "Convert to invoice" }).click();
     await expect(page.getByRole("heading", { name: /^Invoice / })).toBeVisible();
-    await expect(page.getByLabel("Description 1")).toHaveValue("Weekly quotation");
+    await expect(page.getByLabel("Description 1", { exact: true })).toHaveValue("Weekly quotation");
     await expect(page.getByText("USD 50.00").first()).toBeVisible();
     await expect(page.locator("#invoice-tax-enabled")).toBeChecked();
     await expect(page.locator("#invoice-draft-tax-rate")).toHaveValue("10");
-    await expect(page.getByRole("link", { name: "Q-0001" })).toBeVisible();
+    await expect(page.locator('input[name="lineDetail"]').first()).toHaveValue("Homepage refresh\nand hosting");
+    await expect(page.getByRole("link", { name: "ULXQ2100" })).toBeVisible();
     const invoiceNumber = await page.getByRole("heading", { level: 1 }).innerText();
     expect(invoiceNumber.startsWith("Invoice Q-")).toBe(false);
   } finally {

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   addCalendarDays,
+  addCalendarMonths,
   isRealCalendarDate,
   startOfWeekDate,
   todayInTimeZone,
@@ -64,6 +65,14 @@ describe("time zones", () => {
     const now = new Date("2026-10-10T06:30:00.000Z");
     expect(todayInTimeZone("America/Los_Angeles", now)).toBe("2026-10-09");
     expect(todayInTimeZone("UTC", now)).toBe("2026-10-10");
+  });
+
+  it("adds calendar months and clamps a missing day to the end of the month", () => {
+    expect(addCalendarMonths("2026-11-30", 3)).toBe("2027-02-28");
+    expect(addCalendarMonths("2023-11-30", 3)).toBe("2024-02-29");
+    expect(addCalendarMonths("2026-01-31", 1)).toBe("2026-02-28");
+    expect(addCalendarMonths("2026-01-31", 3)).toBe("2026-04-30");
+    expect(addCalendarMonths("2026-10-12", 3)).toBe("2027-01-12");
   });
 
   it("rejects calendar dates that do not exist", () => {

@@ -12,6 +12,7 @@ export type QuotationCsvRow = {
   taxMinor: number;
   totalMinor: number;
   status: string;
+  lineDescriptions: string;
 };
 
 export function quotationsToCsv(rows: QuotationCsvRow[]) {
@@ -25,6 +26,7 @@ export function quotationsToCsv(rows: QuotationCsvRow[]) {
     quotationCopy.tax,
     quotationCopy.total,
     quotationCopy.status,
+    quotationCopy.lineDescriptions,
   ];
   const body = rows.map((row) => [
     row.number,
@@ -36,6 +38,7 @@ export function quotationsToCsv(rows: QuotationCsvRow[]) {
     formatMoneyNumber(row.taxMinor, row.currency),
     formatMoneyNumber(row.totalMinor, row.currency),
     quotationStatusLabel(row.status),
+    row.lineDescriptions,
   ]);
   return toCsv([header, ...body]);
 }

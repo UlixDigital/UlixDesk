@@ -27,6 +27,8 @@ export const INVOICE_NOTES_LINE_GAP = 2.5;
 /** Space from the Notes label down to the first note line. */
 export const INVOICE_NOTES_BODY_GAP = 16.5;
 const TITLE_SIZE = 14;
+/** Quotation line descriptions sit under the item name, smaller than that name. */
+export const QUOTATION_LINE_DESCRIPTION_SIZE = 6.5;
 const NAME_SIZE = 10.6;
 const SMALL_SIZE = 7.2;
 const ADDRESS_SIZE = 7.8;
@@ -37,6 +39,8 @@ export const INVOICE_NOTES_WIDTH = 380;
 export type InvoicePdfLine = {
   title: string;
   detail: string;
+  /** Optional multi-line note under the item name. Invoices leave this empty. */
+  description?: string;
   quantity: string;
   unitPrice: string;
   amount: string;
@@ -56,8 +60,10 @@ export type InvoicePdfInput = {
   clientAddress: string;
   issueDate: string;
   dueDate: string;
-  /** Defaults to `Invoice ${number}`. Quotations pass `Quotation Q-0001`. */
+  /** Defaults to `Invoice ${number}`. Quotations pass `Quotation ULXQ2100`. */
   heading?: string;
+  /** Drawn in bold at the start of `heading`. Quotations pass `Quotation`. */
+  headingBoldPrefix?: string;
   /** Defaults to `Due date:`. Quotations pass `Valid until:`. */
   dueLabel?: string;
   /** Printed under Notes and before bank details. Invoices leave this empty. */
@@ -79,6 +85,7 @@ export type PdfTrace = {
   text: string;
   x: number;
   y: number;
+  font?: string;
 };
 
 type Doc = InstanceType<typeof PDFDocument>;
@@ -121,6 +128,7 @@ function cleanInput(input: InvoicePdfInput): InvoicePdfInput {
     issueDate: pdfText(input.issueDate),
     dueDate: pdfText(input.dueDate),
     heading: input.heading ? pdfText(input.heading) : undefined,
+    headingBoldPrefix: input.headingBoldPrefix ? pdfText(input.headingBoldPrefix) : undefined,
     dueLabel: input.dueLabel ? pdfText(input.dueLabel) : undefined,
     poNumber: input.poNumber ? pdfText(input.poNumber) : null,
     notes: pdfText(normalizeInvoiceText(input.notes)),
@@ -129,6 +137,7 @@ function cleanInput(input: InvoicePdfInput): InvoicePdfInput {
     lines: input.lines.map((line) => ({
       title: pdfText(line.title),
       detail: pdfText(line.detail),
+      description: line.description ? pdfText(normalizeInvoiceText(line.description)) : "",
       quantity: pdfText(line.quantity),
       unitPrice: pdfText(line.unitPrice),
       amount: pdfText(line.amount),
@@ -141,9 +150,9 @@ function cleanInput(input: InvoicePdfInput): InvoicePdfInput {
   };
 }
 
-function traceText(trace: PdfTrace[] | undefined, text: string, x: number, y: number) {
+function traceText(trace: PdfTrace[] | undefined, text: string, x: number, y: number, font?: string) {
   if (!trace || !text) return;
-  trace.push({ text, x, y });
+  trace.push(font ? { text, x, y, font } : { text, x, y });
 }
 
 function fontFile(name: string) {
@@ -159,8 +168,18 @@ function fontFile(name: string) {
 function drawInvoice(doc: Doc, input: InvoicePdfInput, trace?: PdfTrace[]) {
   doc.fillColor(INK).font(FONT).fontSize(TITLE_SIZE);
   const heading = input.heading || `Invoice ${input.number}`;
-  doc.text(heading, LEFT, 84, { lineBreak: false });
-  traceText(trace, heading, LEFT, 84);
+  const boldPrefix = input.headingBoldPrefix && heading.startsWith(input.headingBoldPrefix) ? input.headingBoldPrefix : "";
+  if (boldPrefix) {
+    doc.font(FONT_BOLD).text(boldPrefix, LEFT, 84, { lineBreak: false });
+    traceText(trace, boldPrefix, LEFT, 84, FONT_BOLD);
+    const rest = heading.slice(boldPrefix.length);
+    const restX = LEFT + doc.widthOfString(boldPrefix);
+    doc.font(FONT).text(rest, restX, 84, { lineBreak: false });
+    traceText(trace, rest, restX, 84, FONT);
+  } else {
+    doc.text(heading, LEFT, 84, { lineBreak: false });
+    traceText(trace, heading, LEFT, 84);
+  }
   doc.image(ulixLogoPng, 482, 100, { fit: [90, 28], align: "right" });
 
   let y = 115;
@@ -265,9 +284,17 @@ function drawTableHeader(
 }
 
 function measureLine(doc: Doc, line: InvoicePdfLine, columns: ReturnType<typeof columnLayout>) {
-  doc.font(FONT).fontSize(SMALL_SIZE);
-  const detail = line.detail ? doc.heightOfString(line.detail, { width: columns.description - 8 }) : 0;
-  return 14 + detail + 4;
+  const width = columns.description - 8;
+  let extra = 0;
+  if (line.description) {
+    doc.font(FONT).fontSize(QUOTATION_LINE_DESCRIPTION_SIZE);
+    extra += doc.heightOfString(line.description, { width });
+  }
+  if (line.detail) {
+    doc.font(FONT).fontSize(SMALL_SIZE);
+    extra += doc.heightOfString(line.detail, { width });
+  }
+  return 14 + extra + 4;
 }
 
 function drawLine(
@@ -284,11 +311,18 @@ function drawLine(
   });
   traceText(trace, line.title, LEFT + PAD, y);
   let next = y + 12;
+  const width = columns.description - 8;
+  if (line.description) {
+    doc.font(FONT).fontSize(QUOTATION_LINE_DESCRIPTION_SIZE).fillColor(INK);
+    doc.text(line.description, LEFT + PAD, next, { width });
+    traceText(trace, line.description, LEFT + PAD, next, FONT);
+    next += doc.heightOfString(line.description, { width });
+  }
   if (line.detail) {
     doc.font(FONT).fontSize(SMALL_SIZE).fillColor(MUTED);
-    doc.text(line.detail, LEFT + PAD, next, { width: columns.description - 8 });
+    doc.text(line.detail, LEFT + PAD, next, { width });
     traceText(trace, line.detail, LEFT + PAD, next);
-    next += doc.heightOfString(line.detail, { width: columns.description - 8 });
+    next += doc.heightOfString(line.detail, { width });
   }
   doc.font(FONT).fontSize(SMALL_SIZE).fillColor(INK);
   doc.text(line.quantity, HOURS_X, y, { lineBreak: false });
