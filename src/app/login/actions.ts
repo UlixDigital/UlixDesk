@@ -15,7 +15,7 @@ export type LoginState = {
 export async function loginAction(_previous: LoginState, formData: FormData): Promise<LoginState> {
   const email = String(formData.get("email") ?? "");
   const password = String(formData.get("password") ?? "");
-  const next = safeNextPath(String(formData.get("next") ?? "/clients"));
+  const next = safeNextPath(String(formData.get("next") ?? "/"));
   if (!(await originAllowed())) {
     return { error: authCopy.csrfRejected, email };
   }

@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BuildingIcon, ChartIcon, ClockIcon, DocumentIcon, FolderIcon, KeyIcon, UsersIcon } from "@/components/icons";
+import {
+  BuildingIcon,
+  ChartIcon,
+  ClockIcon,
+  DashboardIcon,
+  DocumentIcon,
+  FolderIcon,
+  KeyIcon,
+  UsersIcon,
+} from "@/components/icons";
 import { cn } from "@/lib/cn";
+import { dashboardCopy } from "@/lib/dashboard-copy";
 import { reportCopy } from "@/lib/report-copy";
 
 const items = [
@@ -24,6 +34,7 @@ export function AppNav({
   const pathname = usePathname();
   const links = showTeam
     ? [
+        { href: "/dashboard", label: dashboardCopy.navLabel, icon: DashboardIcon },
         ...items.slice(0, 4),
         { href: "/invoices", label: "Invoices", icon: DocumentIcon },
         { href: "/quotations", label: "Quotations", icon: DocumentIcon },

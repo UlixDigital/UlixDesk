@@ -19,13 +19,13 @@ export default async function LoginPage({
 }) {
   const read = await readSession();
   const params = await searchParams;
-  const next = safeNextPath(params.next ?? "/clients");
+  const next = safeNextPath(params.next ?? "/");
   if (read.status !== "anonymous") redirect(next);
   if (read.hadCookie) {
     const back = new URLSearchParams();
     if (params.signedOut === "1") back.set("signedOut", "1");
     if (params.password === "saved") back.set("password", "saved");
-    if (next !== "/clients") back.set("next", next);
+    if (next !== "/") back.set("next", next);
     const login = back.size > 0 ? `/login?${back.toString()}` : "/login";
     redirect(`/session/clear?next=${encodeURIComponent(login)}`);
   }

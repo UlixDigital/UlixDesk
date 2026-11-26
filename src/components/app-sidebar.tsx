@@ -12,10 +12,12 @@ export function AppSidebar({
   name,
   role,
   showTeam,
+  homeHref = "/clients",
 }: {
   name: string;
   role: string;
   showTeam: boolean;
+  homeHref?: string;
 }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
@@ -53,7 +55,7 @@ export function AppSidebar({
     <aside className="border-b border-slate-200 bg-white text-ink md:flex md:flex-col md:border-r md:border-b-0">
       <div className="flex items-center justify-between gap-3 px-4 py-4 md:block md:px-5 md:py-5">
         <Link
-          href="/clients"
+          href={homeHref}
           className="block rounded-lg focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
         >
           <UlixLogo height={44} />

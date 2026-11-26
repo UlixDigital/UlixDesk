@@ -29,6 +29,7 @@ export const apiCodes = {
   INVOICED_TIME: "INVOICED_TIME",
   TODO_UNAVAILABLE: "TODO_UNAVAILABLE",
   TODO_INVALID: "TODO_INVALID",
+  FORBIDDEN: "FORBIDDEN",
 } as const;
 
 export type ApiErrorCode = (typeof apiCodes)[keyof typeof apiCodes];

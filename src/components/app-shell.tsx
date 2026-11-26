@@ -1,11 +1,21 @@
 import type { ReactNode } from "react";
 import { AppSidebar } from "@/components/app-sidebar";
 import { TimerBar } from "@/components/timer-bar";
+import { cn } from "@/lib/cn";
 import { requireUser } from "@/lib/auth";
+import { dashboardLandingPath } from "@/lib/dashboard-format";
 import { canManageWorkspace, roleLabel } from "@/lib/users-validation";
 
-export async function AppShell({ children }: { children: ReactNode }) {
+export async function AppShell({
+  children,
+  wide = false,
+}: {
+  children: ReactNode;
+  wide?: boolean;
+}) {
   const user = await requireUser();
+  const manager = canManageWorkspace(user.role);
+  const frame = wide ? "mx-auto w-full max-w-6xl" : "mx-auto w-full max-w-5xl";
   return (
     <div className="min-h-screen bg-[#f4f6f8] text-ink">
       <a href="#main-content" className="skip-link">
@@ -15,14 +25,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
         <AppSidebar
           name={user.name}
           role={roleLabel(user.role)}
-          showTeam={canManageWorkspace(user.role)}
+          showTeam={manager}
+          homeHref={dashboardLandingPath(user.role)}
         />
         <div className="min-w-0 max-w-full">
-          <TimerBar />
-          <main
-            id="main-content"
-            className="mx-auto w-full min-w-0 max-w-5xl overflow-x-clip px-4 py-6 sm:px-6 sm:py-8"
-          >
+          <TimerBar frameClass={frame} />
+          <main id="main-content" className={cn(frame, "min-w-0 overflow-x-clip px-4 py-6 sm:px-6 sm:py-8")}>
             {children}
           </main>
         </div>

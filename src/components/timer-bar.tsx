@@ -5,9 +5,10 @@ import {
   listActiveProjectsForPicker,
 } from "@/lib/time-entries";
 import { listPickerTodos } from "@/lib/todos";
+import { cn } from "@/lib/cn";
 import { canManageWorkspace } from "@/lib/users-validation";
 
-export async function TimerBar() {
+export async function TimerBar({ frameClass = "mx-auto w-full max-w-5xl" }: { frameClass?: string }) {
   const user = await getCurrentUser();
   const [projects, timer, todos] = await Promise.all([
     listActiveProjectsForPicker(),
@@ -20,7 +21,7 @@ export async function TimerBar() {
       aria-label="Timer"
       className="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur"
     >
-      <div className="mx-auto w-full max-w-5xl px-4 py-3 sm:px-6">
+      <div className={cn(frameClass, "px-4 py-3 sm:px-6")}>
         <TimerControls
           projects={projects.map((project) => ({
             id: project.id,

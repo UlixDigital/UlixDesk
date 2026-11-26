@@ -29,7 +29,7 @@ test("sign-in, set-password, and change-password submit without JavaScript", asy
 
   await page.locator("#password").fill(e2ePassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   const token = await setupToken("noscript-member@ulix.test");
   await page.goto(`/set-password?token=${encodeURIComponent(token)}`);
