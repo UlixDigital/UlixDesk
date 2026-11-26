@@ -125,6 +125,29 @@ jobs:
           echo "----- end logs -----"
           docker inspect --format 'image_bytes={{.Size}}' ulixdesk:ci
           [ "$ok" = 1 ]
+          # Sidebar and sign-in use unoptimized next/image, so both request this
+          # file with no session cookie. /_next/image stays behind sign-in.
+          curl -sS -D /tmp/ulix-logo.headers -o /tmp/ulix-logo.body --max-redirs 0 \
+            http://127.0.0.1:3000/ulix-logo.svg
+          echo "----- /ulix-logo.svg -----"
+          cat /tmp/ulix-logo.headers
+          logo_status=$(awk 'BEGIN{c=""} /^HTTP/{c=$2} END{print c}' /tmp/ulix-logo.headers | tr -d '\r')
+          logo_type=$(awk 'BEGIN{IGNORECASE=1} /^content-type:/{print tolower($2)}' /tmp/ulix-logo.headers | tr -d '\r' | cut -d';' -f1)
+          [ "$logo_status" = "200" ]
+          case "$logo_type" in
+            image/*) ;;
+            *) echo "expected an image content-type, got ${logo_type:-<empty>}"; exit 1 ;;
+          esac
+          grep -q '<svg' /tmp/ulix-logo.body
+          optimizer_headers=$(curl -sS -D - -o /dev/null --max-redirs 0 \
+            "http://127.0.0.1:3000/_next/image?url=%2Fulix-logo.svg&w=128&q=75")
+          optimizer_status=$(printf '%s\n' "$optimizer_headers" | awk 'BEGIN{c=""} /^HTTP/{c=$2} END{print c}' | tr -d '\r')
+          optimizer_type=$(printf '%s\n' "$optimizer_headers" | awk 'BEGIN{IGNORECASE=1} /^content-type:/{print tolower($2)}' | tr -d '\r' | cut -d';' -f1)
+          echo "optimizer status=$optimizer_status type=${optimizer_type:-<empty>}"
+          [ "$optimizer_status" = "307" ]
+          case "$optimizer_type" in
+            image/*) echo "optimizer must not return an image without a session"; exit 1 ;;
+          esac
           docker logs ulixdesk-smoke 2>&1 | grep -q "Migrations applied."
           docker logs ulixdesk-smoke 2>&1 | grep -q "Connecting for migrations as ulixdesk."
           docker logs ulixdesk-smoke 2>&1 | grep -q "Starting the app as ulixdesk_app."
@@ -151,6 +174,17 @@ jobs:
           [ -n "$session_cookie" ]
           psql "postgresql://ulixdesk:ulixdesk@127.0.0.1:5432/ulixdesk" \
             -c "INSERT INTO \"Session\" (\"id\", \"userId\", \"tokenHash\", \"expiresAt\") VALUES ('smoke-extension', '$user_id', '$token_hash', NOW() + interval '1 hour');"
+          curl -sS -D /tmp/login.headers -o /tmp/login.html --max-redirs 0 \
+            http://127.0.0.1:3000/login
+          login_status=$(awk 'BEGIN{c=""} /^HTTP/{c=$2} END{print c}' /tmp/login.headers | tr -d '\r')
+          [ "$login_status" = "200" ]
+          grep -q 'src="/ulix-logo.svg"' /tmp/login.html
+          curl -sS -D /tmp/clients.headers -o /tmp/clients.html --max-redirs 0 \
+            -H "Cookie: ulixdesk_session=$session_cookie" \
+            http://127.0.0.1:3000/clients
+          clients_status=$(awk 'BEGIN{c=""} /^HTTP/{c=$2} END{print c}' /tmp/clients.headers | tr -d '\r')
+          [ "$clients_status" = "200" ]
+          grep -q 'src="/ulix-logo.svg"' /tmp/clients.html
           docker exec -e ULIXDESK_SMOKE_COOKIE="$session_cookie" ulixdesk-smoke \
             node scripts/smoke-extension-download.mjs
           docker run --rm --memory=384m --memory-swap=384m ulixdesk:ci \
