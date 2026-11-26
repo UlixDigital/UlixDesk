@@ -185,6 +185,34 @@ test("an owner lands on the dashboard and can refresh it", async ({ page }) => {
   expectNoScores(await page.locator("#main-content").innerText());
 });
 
+test("a phone-width dashboard scrolls the table, not the page", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await signIn(page.context(), prisma);
+  await page.goto("/dashboard");
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
+  await expect(page.getByRole("row", { name: /Maya Chen/ })).toBeVisible();
+
+  const dashboard = await page.evaluate(() => {
+    const box = document.querySelector("#whos-online .overflow-x-auto") as HTMLElement | null;
+    return {
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+      tableScrolls: Boolean(box && box.scrollWidth > box.clientWidth),
+    };
+  });
+  expect(dashboard.scrollWidth).toBeLessThanOrEqual(dashboard.innerWidth);
+  expect(dashboard.tableScrolls).toBe(true);
+
+  for (const path of ["/clients", "/reports"]) {
+    await page.goto(path);
+    const width = await page.evaluate(() => ({
+      scrollWidth: document.documentElement.scrollWidth,
+      innerWidth: window.innerWidth,
+    }));
+    expect(width.scrollWidth).toBeLessThanOrEqual(width.innerWidth);
+  }
+});
+
 test("an admin sees the same dashboard", async ({ page }) => {
   await signIn(page.context(), prisma, seed.adminEmail);
   await page.goto("/");

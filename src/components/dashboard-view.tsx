@@ -49,14 +49,14 @@ export function DashboardView({ initial }: { initial: DashboardPayload }) {
   }
 
   return (
-    <div id="dashboard-overview" className="space-y-6">
+    <div id="dashboard-overview" className="min-w-0 max-w-full space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight text-ink">{dashboardCopy.title}</h1>
         <p className="mt-1 text-sm text-slate-600">{dashboardCopy.intro}</p>
         <p className="mt-1 text-sm text-slate-500">{data.weekLabel}</p>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-3">
         <SummaryCard
           label={dashboardCopy.workedToday}
           value={formatClock(data.summary.workedTodayMs)}
@@ -84,7 +84,11 @@ export function DashboardView({ initial }: { initial: DashboardPayload }) {
         />
       </div>
 
-      <section id="whos-online" aria-labelledby="whos-online-heading" className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]">
+      <section
+        id="whos-online"
+        aria-labelledby="whos-online-heading"
+        className="contain-paint min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]"
+      >
         <div className="flex flex-col gap-3 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
           <h2 id="whos-online-heading" className="text-base font-semibold text-ink">
             {dashboardCopy.whoOnline}
@@ -109,7 +113,7 @@ export function DashboardView({ initial }: { initial: DashboardPayload }) {
         {data.online.length === 0 ? (
           <p className="px-4 py-8 text-sm text-slate-600 sm:px-5">{dashboardCopy.nobody}</p>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="min-w-0 max-w-full overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
                 <tr className="text-left text-xs font-medium text-slate-500">
@@ -160,7 +164,7 @@ export function DashboardView({ initial }: { initial: DashboardPayload }) {
       <section
         id="project-activity"
         aria-labelledby="project-activity-heading"
-        className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]"
+        className="min-w-0 max-w-full overflow-hidden rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(16,27,45,0.05)]"
       >
         <div className="flex items-center justify-between gap-3 border-b border-slate-200 px-4 py-3 sm:px-5">
           <h2 id="project-activity-heading" className="text-base font-semibold text-ink">
@@ -207,7 +211,7 @@ function SummaryCard({
   return (
     <article
       aria-label={label}
-      className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)]"
+      className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(16,27,45,0.05)]"
     >
       <div className="flex items-start justify-between gap-3">
         <div>
