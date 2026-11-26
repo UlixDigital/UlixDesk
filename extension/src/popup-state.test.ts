@@ -120,7 +120,7 @@ describe("popup state", () => {
       clientName: "Acme",
     });
     expect(clientCaption("Acme")).toBe("Client Acme");
-    expect(projectOptionLabel(project)).toBe("Website · Acme");
+    expect(projectOptionLabel(project)).toBe("Website");
 
     const gone = derivePopup({ ...base, projectId: "old", projectNotice: popupCopy.projectGone });
     expect(gone).toMatchObject({
@@ -147,7 +147,7 @@ describe("popup state", () => {
     });
     expect(selected).toMatchObject({ kind: "idle", projectId: "enhancers", clientName: "WSI Web Enhancers" });
     expect(clientCaption("WSI Web Enhancers")).toBe(`${popupCopy.clientLabel} WSI Web Enhancers`);
-    expect(projectOptionLabel(enhancers)).toBe("Site care · WSI Web Enhancers");
+    expect(projectOptionLabel(enhancers)).toBe("Site care");
 
     const switched = derivePopup({
       ...base,

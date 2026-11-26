@@ -140,7 +140,8 @@ test.describe("extension popup client line", () => {
 
   test("updates the client under the project dropdown and hides it when there is none", async ({ page }) => {
     await openPopup(page, origin, { lastProjectId: "website", timer: null });
-    await expect(page.locator("#project option:checked")).toHaveText("Website · WSI Web Enhancers");
+    await expect(page.locator("#project option")).toHaveText(["Project", "Internal", "Website"]);
+    await expect(page.locator("#project option:checked")).toHaveText("Website");
     await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
     await expect(page.getByText("No open to-dos yet.")).toBeVisible();
     const projectBox = await page.locator("#project").boundingBox();
@@ -151,7 +152,8 @@ test.describe("extension popup client line", () => {
     await expect(page.locator("#project option:checked")).toHaveText("Internal");
     await expect(page.locator("#project-client")).toHaveCount(0);
 
-    await page.locator("#project").selectOption({ label: "Website · WSI Web Enhancers" });
+    await page.locator("#project").selectOption({ label: "Website" });
+    await expect(page.locator("#project option:checked")).toHaveText("Website");
     await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
   });
 

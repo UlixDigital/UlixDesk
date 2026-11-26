@@ -77,10 +77,8 @@ test("loads the unpacked extension and starts and stops a timer", async () => {
     await expect(page.locator("#project option:checked")).toHaveText("Extension E2E Internal");
     await expect(page.locator("#project-client")).toHaveCount(0);
 
-    await page.locator("#project").selectOption({ label: "Extension E2E Project · WSI Web Enhancers" });
-    await expect(page.locator("#project option:checked")).toHaveText(
-      "Extension E2E Project · WSI Web Enhancers",
-    );
+    await page.locator("#project").selectOption({ label: "Extension E2E Project" });
+    await expect(page.locator("#project option:checked")).toHaveText("Extension E2E Project");
     await expect(page.locator("#project-client")).toHaveText("Client WSI Web Enhancers");
     await page.locator("#note").fill("From the extension");
     await page.getByRole("button", { name: "Start", exact: true }).click();

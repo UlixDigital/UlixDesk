@@ -136,6 +136,7 @@ export function popupChrome(input: { authResolved: boolean; signedIn: boolean })
   return input.signedIn ? ("signed-in" as const) : ("sign-in" as const);
 }
 
+/** Dropdown options show the project name. The client stays on the line under the select. */
 export function projectOptionLabel(project: ApiProject) {
-  return project.client ? `${project.name} · ${project.client.name}` : project.name;
+  return project.name;
 }
