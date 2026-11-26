@@ -77,7 +77,7 @@ test("the mobile menu opens from the keyboard and closes with Escape", async ({ 
   await page.locator("#email").fill(e2eEmail);
   await page.locator("#password").fill(e2ePassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Dashboard", exact: true })).toBeVisible();
 
   const menu = page.getByRole("button", { name: "Menu" });
   await expect(menu).toHaveAttribute("aria-expanded", "false");

@@ -95,7 +95,8 @@ export function sessionGate(input: {
   if (input.hasValidSession) return { type: "allow" };
   const next = safeNextPath(input.pathname);
   const params = new URLSearchParams();
-  if (next !== "/clients") params.set("next", next);
+  // `/` is the role home. Every other page, including Clients, is remembered.
+  if (next !== "/") params.set("next", next);
   const query = params.toString();
   return { type: "redirect", to: query ? `/login?${query}` : "/login" };
 }

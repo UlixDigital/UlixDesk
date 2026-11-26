@@ -145,9 +145,13 @@ describe("login and logout", () => {
 
 describe("protected routes and roles", () => {
   it("sends pages without a session to sign-in and leaves token routes to the handler", () => {
-    expect(sessionGate({ pathname: "/clients", hasValidSession: false, isTokenApi: false })).toEqual({
+    expect(sessionGate({ pathname: "/", hasValidSession: false, isTokenApi: false })).toEqual({
       type: "redirect",
       to: "/login",
+    });
+    expect(sessionGate({ pathname: "/clients", hasValidSession: false, isTokenApi: false })).toEqual({
+      type: "redirect",
+      to: "/login?next=%2Fclients",
     });
     expect(sessionGate({ pathname: "/settings", hasValidSession: false, isTokenApi: false })).toEqual({
       type: "redirect",

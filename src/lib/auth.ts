@@ -114,7 +114,7 @@ export async function requireUser() {
   if (read.status === "anonymous") {
     if (!read.hadCookie) redirect("/login");
     const next = await currentPath();
-    const login = next === "/clients" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
+    const login = next === "/" ? "/login" : `/login?next=${encodeURIComponent(next)}`;
     redirect(`/session/clear?next=${encodeURIComponent(login)}`);
   }
   return read.user;
