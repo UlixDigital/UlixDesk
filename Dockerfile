@@ -74,6 +74,8 @@ RUN apt-get update \
   && useradd --system --uid 1001 --gid nodejs --create-home --home-dir /home/nextjs nextjs
 COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+# Standalone output omits public/. The sidebar and sign-in load /ulix-logo.svg from here.
+COPY --from=build --chown=nextjs:nodejs /app/public ./public
 COPY --from=build --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=build --chown=nextjs:nodejs /app/scripts ./scripts
 COPY --from=build --chown=nextjs:nodejs /app/extension/ulixdesk-extension.zip ./extension/ulixdesk-extension.zip
@@ -108,7 +110,8 @@ RUN test -s /app/node_modules/.prisma/client/libquery_engine-debian-openssl-3.0.
   && test -s /app/extension/ulixdesk-extension.zip \
   && test -s /app/extension/extension-build.json \
   && test -s /app/extension/zip.mjs \
-  && test -s /app/extension/dos-date.mjs
+  && test -s /app/extension/dos-date.mjs \
+  && test -s /app/public/ulix-logo.svg
 USER nextjs
 EXPOSE 3000
 HEALTHCHECK --interval=5s --timeout=5s --start-period=60s --retries=12 \

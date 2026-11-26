@@ -9,6 +9,10 @@ test("signed-out pages load the logo and icons", async ({ page, request }) => {
     .poll(() => logo.evaluate((img: HTMLImageElement) => img.naturalWidth))
     .toBeGreaterThan(0);
 
+  const logoFile = await request.get("/ulix-logo.svg", { maxRedirects: 0 });
+  expect(logoFile.status()).toBe(200);
+  expect(logoFile.headers()["content-type"] ?? "").toContain("image/");
+
   const icon = await request.get("/icon.svg", { maxRedirects: 0 });
   expect(icon.status()).toBe(200);
   expect(icon.headers()["content-type"] ?? "").toContain("image/svg");
@@ -55,6 +59,11 @@ test("sends a signed-out visit to sign-in, then accepts the owner password", asy
   await page.locator("#password").fill(e2ePassword);
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Clients", exact: true })).toBeVisible();
+  const sidebarLogo = page.getByRole("img", { name: "Ulix" });
+  await expect(sidebarLogo).toBeVisible();
+  await expect
+    .poll(() => sidebarLogo.evaluate((img: HTMLImageElement) => img.naturalWidth))
+    .toBeGreaterThan(0);
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page.getByText("You have signed out.")).toBeVisible();
