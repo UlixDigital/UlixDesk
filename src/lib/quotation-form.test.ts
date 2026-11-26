@@ -16,7 +16,7 @@ describe("quotation totals and tax", () => {
         lines: [
           {
             title: "Weekly quotation",
-            detail: "",
+            detail: "Homepage refresh\nand hosting",
             quantity: "2",
             quantityKind: "hours",
             unitPrice: "25",
@@ -36,7 +36,12 @@ describe("quotation totals and tax", () => {
     );
     expect(parsed.ok).toBe(true);
     if (!parsed.ok) return;
-    expect(parsed.data.lines[0]).toMatchObject({ quantitySeconds: 7200, amountMinor: 5000, quantityKind: "hours" });
+    expect(parsed.data.lines[0]).toMatchObject({
+      quantitySeconds: 7200,
+      amountMinor: 5000,
+      quantityKind: "hours",
+      detail: "Homepage refresh\nand hosting",
+    });
     expect(parsed.data.lines[1]).toMatchObject({ amountMinor: 10000, quantityKind: "item" });
     expect(parsed.data.taxRateBps).toBe(1000);
     expect(

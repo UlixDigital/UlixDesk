@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { pdfTextPositions, renderInvoicePdf } from "@/lib/invoice-pdf";
+import { QUOTATION_LINE_DESCRIPTION_SIZE, pdfTextPositions, renderInvoicePdf } from "@/lib/invoice-pdf";
 import { toQuotationPdfInput } from "@/lib/quotation-document";
 
 describe("quotation pdf", () => {
@@ -8,7 +8,7 @@ describe("quotation pdf", () => {
     const input = toQuotationPdfInput({
       companyName: "Ulix Digital",
       companyAddress: "30 North Gould Street, Sheridan, WY 82801",
-      number: "Q-0001",
+      number: "ULXQ2100",
       clientName: "WSI Web Enhancers",
       clientAddress: "4801 Lang Ave NE Suite 110, Albuquerque, NM 87109",
       currency: "USD",
@@ -25,7 +25,7 @@ describe("quotation pdf", () => {
       lines: [
         {
           title: "Weekly quotation",
-          detail: "",
+          detail: "Homepage refresh\nand a second line that wraps under the item name",
           quantitySeconds: 26 * 3600 + 22 * 60 + 12,
           quantityMs: BigInt((26 * 3600 + 22 * 60 + 12) * 1000),
           quantityKind: "hours",
@@ -40,7 +40,9 @@ describe("quotation pdf", () => {
     expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
     expect(pdf.toString("latin1").includes("/Image")).toBe(true);
     const text = [...trace.map((item) => item.text), ...pdfTextPositions(pdf).map((item) => item.text)].join("\n");
-    expect(text).toContain("Quotation Q-0001");
+    expect(text).toContain("Quotation");
+    expect(text).toContain("ULXQ2100");
+    expect(text).toContain("Homepage refresh\nand a second line that wraps under the item name");
     expect(text).toContain("Valid until:");
     expect(text).toContain("Issue date:");
     expect(text).toContain("FROM");
@@ -58,8 +60,13 @@ describe("quotation pdf", () => {
     expect(text).not.toContain("Account Number");
     expect(text).not.toContain("ABA Routing");
     expect(text).not.toContain("Invoice ");
-    const title = trace.find((item) => item.text === "Quotation Q-0001");
-    expect(title).toMatchObject({ x: 28, y: 84 });
+    const title = trace.find((item) => item.text === "Quotation");
+    expect(title).toMatchObject({ x: 28, y: 84, font: "DejaVu-Bold" });
+    const number = trace.find((item) => item.text === " ULXQ2100");
+    expect(number?.y).toBe(84);
+    expect(number?.x).toBeGreaterThan(28);
+    expect(number?.font).not.toBe("DejaVu-Bold");
+    expect(QUOTATION_LINE_DESCRIPTION_SIZE).toBeLessThan(7.2);
     const valid = trace.find((item) => item.text === "Valid until:");
     expect(valid?.x).toBe(407);
   });

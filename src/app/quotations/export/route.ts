@@ -4,6 +4,7 @@ import { getInvoiceSettings } from "@/lib/invoice-settings";
 import { getCurrentUser } from "@/lib/session";
 import { todayInTimeZone } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
+import { quotationLineDescriptions } from "@/lib/quotation-lines";
 import { listQuotations, quotationDateKey } from "@/lib/quotations";
 
 export const dynamic = "force-dynamic";
@@ -41,6 +42,7 @@ export async function GET(request: Request) {
         validUntil: quotationDateKey(quotation.validUntil),
         today,
       }),
+      lineDescriptions: quotationLineDescriptions(quotation.lines),
     })),
   );
   return new Response(csv, {

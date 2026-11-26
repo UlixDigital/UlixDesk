@@ -57,6 +57,20 @@ export function addCalendarDays(date: string, days: number) {
   return formatIsoDate(shifted);
 }
 
+/**
+ * Adds calendar months and clamps to the last day of the target month.
+ * 30 Nov plus 3 months is 28 Feb, or 29 Feb in a leap year.
+ */
+export function addCalendarMonths(date: string, months: number) {
+  if (!isRealCalendarDate(date) || !Number.isInteger(months)) return date;
+  const [year, month, day] = date.split("-").map(Number);
+  const monthIndex = month - 1 + months;
+  const targetYear = year + Math.floor(monthIndex / 12);
+  const targetMonth = ((monthIndex % 12) + 12) % 12;
+  const lastDay = new Date(Date.UTC(targetYear, targetMonth + 1, 0)).getUTCDate();
+  return formatIsoNumbers(targetYear, targetMonth + 1, Math.min(day, lastDay));
+}
+
 export function startOfWeekDate(date: string) {
   const index = weekdayIndex(date);
   const delta = index === 0 ? -6 : 1 - index;

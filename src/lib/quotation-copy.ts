@@ -5,7 +5,7 @@ export const quotationCopy = {
   denied: "Only owners and admins can manage quotations.",
   new: "New quotation",
   newIntro:
-    "Start a quotation for one client. The currency comes from the client. The number comes from the quotation sequence, separate from invoices. The valid-until date is 14 days after the issue date.",
+    "Start a quotation for one client. The currency comes from the client. The number comes from the quotation sequence, separate from invoices. The valid-until date is three months after the issue date.",
   create: "Create quotation",
   creating: "Creating…",
   emptyTitle: "No quotations yet",
@@ -18,6 +18,7 @@ export const quotationCopy = {
   dates: "Dates",
   total: "Total",
   status: "Status",
+  lineDescriptions: "Line descriptions",
   allClients: "All clients",
   allStatuses: "All statuses",
   applyFilters: "Apply",
@@ -29,6 +30,8 @@ export const quotationCopy = {
   terms: "Terms",
   defaultTerms: "This quotation is valid until the date shown.",
   description: "Description",
+  lineDescription: "Line description",
+  lineDescriptionHint: "Optional. Shown under the item name.",
   hours: "Total hours (qty)",
   qty: "Qty",
   lineType: "Type",
@@ -164,7 +167,7 @@ export const quotationCopy = {
   sourceQuotation: "Created from quotation",
 } as const;
 
-export const QUOTATION_VALID_DAYS = 14;
+export const QUOTATION_VALID_MONTHS = 3;
 
 export const QUOTATION_STATUSES = ["draft", "sent", "accepted", "declined", "expired"] as const;
 

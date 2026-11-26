@@ -24,7 +24,9 @@ import {
 } from "@/lib/quotations";
 import { resetTestDatabase } from "@/lib/reset-test-db";
 import { createTestUser, signInAs } from "@/lib/test-actor";
-import { addCalendarDays, todayInTimeZone } from "@/lib/time-zone";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { addCalendarDays, addCalendarMonths, todayInTimeZone } from "@/lib/time-zone";
 import { hashViewToken } from "@/lib/invoice-view-token";
 
 beforeEach(async () => {
@@ -49,7 +51,7 @@ async function clientFor() {
 
 const hoursLine = {
   title: "Weekly quotation",
-  detail: "",
+  detail: "Homepage refresh\nand hosting",
   quantityKind: "hours" as const,
   quantitySeconds: 7200,
   quantityMs: BigInt(7_200_000),
@@ -68,7 +70,7 @@ async function draftWithLine(actor: { id: string; role: string }, clientId: stri
     id: created.id,
     draft: {
       issueDate: validUntil && validUntil < today ? validUntil : today,
-      validUntil: validUntil ?? addCalendarDays(today, 14),
+      validUntil: validUntil ?? addCalendarMonths(today, 3),
       notes: "Please review",
       terms: "Valid until the date shown",
       taxEnabled: true,
@@ -82,19 +84,19 @@ async function draftWithLine(actor: { id: string; role: string }, clientId: stri
 }
 
 describe("quotation numbering", () => {
-  it("allocates Q-0001 from its own counter and leaves invoice numbers alone", async () => {
+  it("allocates ULXQ2100 from its own counter and leaves invoice numbers alone", async () => {
     const owner = await createTestUser("owner", "quote-owner@ulix.test");
     const client = await clientFor();
     const invoiceNumber = await prisma.$transaction((tx) => allocateInvoiceNumber(tx));
     const first = await prisma.$transaction((tx) => allocateQuotationNumber(tx));
     const second = await prisma.$transaction((tx) => allocateQuotationNumber(tx));
     expect(invoiceNumber).toBe("LE1176");
-    expect(first).toBe("Q-0001");
-    expect(second).toBe("Q-0002");
+    expect(first).toBe("ULXQ2100");
+    expect(second).toBe("ULXQ2101");
     expect((await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextInvoiceNumber).toBe(1177);
-    expect((await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextQuotationNumber).toBe(3);
+    expect((await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextQuotationNumber).toBe(2102);
     const created = await createQuotation({ actor: { id: owner.id, role: owner.role }, clientId: client.id });
-    expect(created.ok && created.number).toBe("Q-0003");
+    expect(created.ok && created.number).toBe("ULXQ2102");
   });
 });
 
@@ -127,12 +129,13 @@ describe("quotation expiry, totals, duplicate, and convert", () => {
     if (!copy.ok) return;
     const duplicated = await getQuotation(owner.role, copy.id);
     expect(duplicated?.status).toBe("draft");
-    expect(duplicated?.number).toBe("Q-0002");
+    expect(duplicated?.number).toBe("ULXQ2101");
+    expect(duplicated?.lines[0]?.detail).toBe("Homepage refresh\nand hosting");
     expect(duplicated?.invoiceId).toBeNull();
     expect(duplicated?.lines).toHaveLength(1);
     expect(duplicated?.lines[0]?.title).toBe("Weekly quotation");
     expect(duplicated?.totalMinor).toBe(5500);
-    expect(quotationDateKey(duplicated!.validUntil)).toBe(addCalendarDays(today, 14));
+    expect(quotationDateKey(duplicated!.validUntil)).toBe(addCalendarMonths(today, 3));
     expect(
       quotationDisplayStatus({
         status: "draft",
@@ -172,7 +175,8 @@ describe("quotation expiry, totals, duplicate, and convert", () => {
     expect(invoice.lines).toHaveLength(1);
     expect(invoice.lines[0]).toMatchObject({
       kind: "custom",
-      title: "Weekly quotation",
+      title: "Weekly quotation\nHomepage refresh\nand hosting",
+      detail: "",
       quantityKind: "hours",
       amountMinor: 5000,
     });
@@ -297,5 +301,69 @@ describe("quotation share link and email", () => {
     expect(refused.ok).toBe(false);
     if (!refused.ok) expect(refused.error).toBe(quotationCopy.mailUnconfigured);
     expect(await prisma.quotationEmail.count()).toBe(0);
+  });
+});
+
+function renumberSql() {
+  const sql = readFileSync(
+    path.join(process.cwd(), "prisma/migrations/20261126120000_quotation_ulxq_numbers/migration.sql"),
+    "utf8",
+  );
+  const match = sql.match(/DO \$\$[\s\S]*?END \$\$;/);
+  if (!match) throw new Error("The quotation renumber migration has no DO block.");
+  return match[0];
+}
+
+describe("quotation number migration", () => {
+  it("rewrites Q- numbers in creation order and is safe to run again", async () => {
+    const owner = await createTestUser("owner", "quote-renumber@ulix.test");
+    const client = await clientFor();
+    await prisma.workspaceSettings.upsert({
+      where: { id: "workspace" },
+      update: { quotationPrefix: "Q", nextQuotationNumber: 12 },
+      create: { id: "workspace", quotationPrefix: "Q", nextQuotationNumber: 12 },
+    });
+    const quote = {
+      clientId: client.id,
+      status: "sent",
+      currency: "USD",
+      issueDate: new Date("2026-01-01T00:00:00.000Z"),
+      validUntil: new Date("2026-04-01T00:00:00.000Z"),
+      subtotalMinor: 0,
+      taxMinor: 0,
+      totalMinor: 0,
+      createdById: owner.id,
+    };
+    const first = await prisma.quotation.create({
+      data: { ...quote, number: "Q-0009", createdAt: new Date("2026-01-02T00:00:00.000Z") },
+    });
+    const second = await prisma.quotation.create({
+      data: { ...quote, number: "Q-0002", createdAt: new Date("2026-03-04T00:00:00.000Z") },
+    });
+    await prisma.quotationNumber.createMany({ data: [{ number: "Q-0009" }, { number: "Q-0002" }] });
+    await prisma.invoiceNumber.create({ data: { number: "LE1176" } });
+
+    await prisma.$executeRawUnsafe(renumberSql());
+    expect((await prisma.quotation.findUnique({ where: { id: first.id } }))?.number).toBe("ULXQ2100");
+    expect((await prisma.quotation.findUnique({ where: { id: second.id } }))?.number).toBe("ULXQ2101");
+    expect(await prisma.quotationNumber.findUnique({ where: { number: "Q-0009" } })).toBeNull();
+    expect(await prisma.quotationNumber.findUnique({ where: { number: "ULXQ2100" } })).toBeTruthy();
+    expect(await prisma.invoiceNumber.findUnique({ where: { number: "LE1176" } })).toBeTruthy();
+    const settings = await prisma.workspaceSettings.findUniqueOrThrow({ where: { id: "workspace" } });
+    expect(settings.quotationPrefix).toBe("ULXQ");
+    expect(settings.nextQuotationNumber).toBe(2102);
+
+    await prisma.$executeRawUnsafe(renumberSql());
+    expect((await prisma.quotation.findUnique({ where: { id: first.id } }))?.number).toBe("ULXQ2100");
+    expect((await prisma.quotation.findUnique({ where: { id: second.id } }))?.number).toBe("ULXQ2101");
+    expect((await prisma.workspaceSettings.findUnique({ where: { id: "workspace" } }))?.nextQuotationNumber).toBe(2102);
+
+    await prisma.quotation.update({ where: { id: first.id }, data: { number: "ULXQ2150" } });
+    const later = await prisma.quotation.create({
+      data: { ...quote, number: "Q-0044", createdAt: new Date("2026-06-01T00:00:00.000Z") },
+    });
+    await prisma.$executeRawUnsafe(renumberSql());
+    expect((await prisma.quotation.findUnique({ where: { id: later.id } }))?.number).toBe("ULXQ2151");
+    expect((await prisma.quotation.findUnique({ where: { id: first.id } }))?.number).toBe("ULXQ2150");
   });
 });

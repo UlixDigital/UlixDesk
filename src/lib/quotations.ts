@@ -5,10 +5,11 @@ import { civilDate, dateColumn } from "@/lib/invoice-form";
 import { invoiceTotals } from "@/lib/invoice-money";
 import { allocateInvoiceNumber, ensureWorkspace } from "@/lib/invoices";
 import { formatQuotationNumber } from "@/lib/quotation-number";
-import { QUOTATION_VALID_DAYS, quotationCopy } from "@/lib/quotation-copy";
+import { QUOTATION_VALID_MONTHS, quotationCopy } from "@/lib/quotation-copy";
+import { invoiceFieldsFromQuotationLine } from "@/lib/quotation-lines";
 import { quotationDateColumn, type QuotationDraftWrite } from "@/lib/quotation-form";
 import { quotationStatusWhere } from "@/lib/quotation-status";
-import { addCalendarDays, startOfWeekDate, todayInTimeZone } from "@/lib/time-zone";
+import { addCalendarDays, addCalendarMonths, startOfWeekDate, todayInTimeZone } from "@/lib/time-zone";
 import { canManageWorkspace } from "@/lib/users-validation";
 import { DEFAULT_TIME_ZONE } from "@/lib/workspace-time";
 
@@ -120,7 +121,10 @@ export async function listQuotations(
         : {}),
       ...(number ? { number: { contains: number, mode: "insensitive" } } : {}),
     },
-    include: { client: { select: { id: true, name: true } } },
+    include: {
+      client: { select: { id: true, name: true } },
+      lines: { orderBy: { position: "asc" as const }, select: { title: true, detail: true } },
+    },
     orderBy: [{ issueDate: "desc" }, { number: "desc" }],
   });
 }
@@ -172,7 +176,7 @@ export async function createQuotation(input: { actor: QuotationActor; clientId: 
       const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
       const number = await allocateQuotationNumber(tx);
       const issueDate = todayInTimeZone(timeZone);
-      const validUntil = addCalendarDays(issueDate, QUOTATION_VALID_DAYS);
+      const validUntil = addCalendarMonths(issueDate, QUOTATION_VALID_MONTHS);
       const totals = invoiceTotals({
         lineAmounts: [],
         discountKind: "none",
@@ -323,7 +327,7 @@ export async function duplicateQuotation(input: { actor: QuotationActor; id: str
     const timeZone = settings.timeZone || DEFAULT_TIME_ZONE;
     const number = await allocateQuotationNumber(tx);
     const issueDate = todayInTimeZone(timeZone);
-    const validUntil = addCalendarDays(issueDate, QUOTATION_VALID_DAYS);
+    const validUntil = addCalendarMonths(issueDate, QUOTATION_VALID_MONTHS);
     const quotation = await tx.quotation.create({
       data: {
         number,
@@ -413,19 +417,22 @@ export async function convertQuotationToInvoice(input: { actor: QuotationActor; 
           paidMinor: 0,
           createdById: input.actor.id,
           lines: {
-            create: quotation.lines.map((line) => ({
-              position: line.position,
-              kind: "custom",
-              quantityKind: line.quantityKind,
-              title: line.title,
-              detail: line.detail,
-              quantitySeconds: line.quantitySeconds,
-              quantityMs: line.quantityMs,
-              rangeStart: line.rangeStart,
-              rangeEnd: line.rangeEnd,
-              unitPriceMinor: line.unitPriceMinor,
-              amountMinor: line.amountMinor,
-            })),
+            create: quotation.lines.map((line) => {
+              const text = invoiceFieldsFromQuotationLine(line);
+              return {
+                position: line.position,
+                kind: "custom",
+                quantityKind: line.quantityKind,
+                title: text.title,
+                detail: text.detail,
+                quantitySeconds: line.quantitySeconds,
+                quantityMs: line.quantityMs,
+                rangeStart: line.rangeStart,
+                rangeEnd: line.rangeEnd,
+                unitPriceMinor: line.unitPriceMinor,
+                amountMinor: line.amountMinor,
+              };
+            }),
           },
         },
       });

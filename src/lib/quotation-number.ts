@@ -1,4 +1,6 @@
-/** `Q` and 1 print as `Q-0001`. Numbers past 9999 keep every digit. */
+/** `ULXQ` and 2100 print as `ULXQ2100`. There is no separator and no padding. */
 export function formatQuotationNumber(prefix: string, value: number) {
-  return `${prefix}-${String(value).padStart(4, "0")}`;
+  return `${prefix}${value}`;
 }
+
+export const QUOTATION_NUMBER_START = 2100;

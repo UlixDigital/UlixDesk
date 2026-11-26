@@ -15,6 +15,7 @@ import { isRealCalendarDate } from "@/lib/time-zone";
 
 const TEXT_MAX = 4000;
 const TITLE_MAX = 200;
+const LINE_DESCRIPTION_MAX = 2000;
 const LABEL_MAX = 40;
 
 export type QuotationLineWrite = {
@@ -86,7 +87,8 @@ export function parseQuotationDraft(
   for (const line of input.lines) {
     const title = line.title.trim();
     if (!title) return { ok: false, error: quotationCopy.titleRequired };
-    if (title.length > TITLE_MAX || line.detail.trim().length > TITLE_MAX) {
+    const detail = normalizeInvoiceText(line.detail).trim();
+    if (title.length > TITLE_MAX || detail.length > LINE_DESCRIPTION_MAX) {
       return { ok: false, error: quotationCopy.tooLong };
     }
     const rangeStart = line.rangeStart?.trim() ?? "";
@@ -126,7 +128,7 @@ export function parseQuotationDraft(
     }
     lines.push({
       title,
-      detail: line.detail.trim(),
+      detail,
       quantityKind,
       quantitySeconds,
       quantityMs,
@@ -170,7 +172,13 @@ export function parseQuotationFromForm(formData: FormData, currency: string) {
     rangeStart: rangeStarts[index] ?? "",
     rangeEnd: rangeEnds[index] ?? "",
   })).filter(
-    (line) => line.title.trim() || line.quantity.trim() || line.unitPrice.trim() || line.rangeStart.trim() || line.rangeEnd.trim(),
+    (line) =>
+      line.title.trim() ||
+      line.detail.trim() ||
+      line.quantity.trim() ||
+      line.unitPrice.trim() ||
+      line.rangeStart.trim() ||
+      line.rangeEnd.trim(),
   );
   return parseQuotationDraft(
     {

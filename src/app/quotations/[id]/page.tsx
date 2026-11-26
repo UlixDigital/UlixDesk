@@ -131,6 +131,7 @@ export default async function QuotationDetailPage({ params, searchParams }: Page
               key: line.id,
               quantityKind: line.quantityKind === "hours" ? "hours" : "item",
               title: line.title,
+              detail: line.detail,
               rangeStart: line.rangeStart ? utcDateKey(line.rangeStart) : "",
               rangeEnd: line.rangeEnd ? utcDateKey(line.rangeEnd) : "",
               quantity: invoiceLineQuantity(line),
@@ -206,8 +207,8 @@ function QuotationReadOnly({
           </thead>
           <tbody>
             {quotation.lines.map((line) => {
-              const detail = invoiceLineDetail({
-                detail: line.detail,
+              const range = invoiceLineDetail({
+                detail: "",
                 rangeStart: line.rangeStart ? utcDateKey(line.rangeStart) : null,
                 rangeEnd: line.rangeEnd ? utcDateKey(line.rangeEnd) : null,
               });
@@ -215,7 +216,8 @@ function QuotationReadOnly({
                 <tr key={line.id} className="border-t border-slate-200">
                   <td className="px-4 py-3">
                     <p className="font-medium text-ink">{line.title}</p>
-                    {detail ? <p className="text-slate-500">{detail}</p> : null}
+                    {line.detail ? <p className="mt-1 whitespace-pre-wrap text-xs font-normal text-slate-600">{line.detail}</p> : null}
+                    {range ? <p className="text-slate-500">{range}</p> : null}
                   </td>
                   <td className="px-4 py-3">{invoiceLineQuantity(line)}</td>
                   <td className="px-4 py-3">{formatMoney(line.unitPriceMinor, quotation.currency)}</td>
